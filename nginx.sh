@@ -75,6 +75,9 @@ LOG_WITH_TIMESTAMP="false"
 LOG_WITH_OP_TAG="${LOG_WITH_OP_TAG:-false}"
 LOG_FORMAT="${LOG_FORMAT:-plain}"
 ALLOW_UNSAFE_HOOKS="${ALLOW_UNSAFE_HOOKS:-false}"
+
+# http2 指令兼容阈值（低于此版本不支持 http2 on;）
+NGINX_HTTP2_DIRECTIVE_MIN_VERSION="${NGINX_HTTP2_DIRECTIVE_MIN_VERSION:-1.25.1}"
 SAFE_PATH_ROOTS=("/etc/nginx" "/etc/ssl" "/var/www" "/var/log" "/var/lib/nginx_ssl_manager" "/root/nginx_ssl_backups" "/etc/nginx/projects_backups" "/etc/nginx/conf_backups" "/etc/logrotate.d" "/etc/cron.d")
 HOOK_WHITELIST=("systemctl restart s-ui" "systemctl restart x-ui" "systemctl restart v2ray" "systemctl restart xray" "systemctl reload nginx" "systemctl restart nginx")
 PROJECTS_METADATA_FILE="/etc/nginx/projects.json"
@@ -350,11 +353,54 @@ _center_text() {
   fi
 }
 
+_get_nginx_version() {
+  local version=""
+  if _ensure_nginx_in_path; then
+    version=$(nginx -v 2>&1 | sed -n 's#^.*/\([^[:space:]]\+\).*$#\1#p' | head -n1)
+  fi
+  printf '%s' "${version:-}"
+}
+
+_version_ge() {
+  local left="${1:-}" right="${2:-}"
+  if [ -z "$left" ] || [ -z "$right" ]; then
+    return 1
+  fi
+  if [ "$left" = "$right" ]; then
+    return 0
+  fi
+  local sorted
+  sorted=$(printf '%s\n' "$left" "$right" | sort -V | head -n1)
+  [ "$sorted" = "$right" ]
+}
+
+_nginx_supports_http2_directive() {
+  local version="${1:-}"
+  if [ -z "$version" ]; then
+    version=$(_get_nginx_version)
+  fi
+  if [ -z "$version" ]; then
+    return 1
+  fi
+  _version_ge "$version" "$NGINX_HTTP2_DIRECTIVE_MIN_VERSION"
+}
+
+_nginx_http2_warn_line() {
+  local version="${1:-}"
+  if [ -z "$version" ] || [ "$version" = "unknown" ]; then
+    return 0
+  fi
+  if _nginx_supports_http2_directive "$version"; then
+    return 0
+  fi
+  printf '%b' "${BRIGHT_RED}⚠ 当前 Nginx 版本不支持 http2 on; 建议升级或改用 listen 443 ssl http2${NC}"
+}
+
 _draw_dashboard() {
   _generate_op_id
   local nginx_v="unknown"
   if _ensure_nginx_in_path; then
-    nginx_v=$(nginx -v 2>&1 | sed -n 's#^.*/\([^[:space:]]\+\).*$#\1#p' | head -n1)
+    nginx_v=$(_get_nginx_version)
     [ -z "$nginx_v" ] && nginx_v="unknown"
   fi
   local uptime_raw
@@ -371,6 +417,8 @@ _draw_dashboard() {
   local title="Nginx 管理面板"
   local line1="Nginx: ${nginx_v} | 运行: ${uptime_raw} | 负载: ${load}"
   local line2="HTTP : ${count} 个 | TCP : ${tcp_count} 个 | 告警 : ${warn_count}"
+  local line3=""
+  line3=$(_nginx_http2_warn_line "$nginx_v")
 
   local max_width
   max_width=$(_get_visual_width "$title")
@@ -378,8 +426,13 @@ _draw_dashboard() {
   w1=$(_get_visual_width "$line1")
   local w2
   w2=$(_get_visual_width "$line2")
+  local w3=0
+  if [ -n "$line3" ]; then
+    w3=$(_get_visual_width "$line3")
+  fi
   [ "$w1" -gt "$max_width" ] && max_width=$w1
   [ "$w2" -gt "$max_width" ] && max_width=$w2
+  [ "$w3" -gt "$max_width" ] && max_width=$w3
   [ "$max_width" -lt 50 ] && max_width=50
 
   printf '%b' "\n"
@@ -393,6 +446,10 @@ _draw_dashboard() {
   local pad2=$((max_width - w2))
   printf '%b' " ${line1}$(printf '%*s' "$pad1" "")\n"
   printf '%b' " ${line2}$(printf '%*s' "$pad2" "")\n"
+  if [ -n "$line3" ]; then
+    local pad3=$((max_width - w3))
+    printf '%b' " ${line3}$(printf '%*s' "$pad3" "")\n"
+  fi
   printf '%b' "${GREEN}$(generate_line $((max_width + 2)) "─")${NC}\n"
 }
 
