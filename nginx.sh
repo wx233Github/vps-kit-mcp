@@ -413,9 +413,9 @@ _check_dns_resolution() {
   get_vps_ip
   local resolved_ips=""
   if command -v dig >/dev/null 2>&1; then
-    resolved_ips=$(dig +short "$domain" A 2>/dev/null | grep -E '^[0-9.]+$' | tr '\n' ' ' | xargs)
+    resolved_ips=$(dig +short "$domain" A 2>/dev/null | grep -E '^[0-9.]+$' | tr '\n' ' ' | xargs || true)
   elif command -v host >/dev/null 2>&1; then
-    resolved_ips=$(host -t A "$domain" 2>/dev/null | grep "has address" | awk '{print $NF}' | tr '\n' ' ' | xargs)
+    resolved_ips=$(host -t A "$domain" 2>/dev/null | grep "has address" | awk '{print $NF}' | tr '\n' ' ' | xargs || true)
   else
     log_message WARN "未安装 dig/host 工具,跳过 DNS 预检。"
     return 0
@@ -423,8 +423,9 @@ _check_dns_resolution() {
 
   if [ -z "$resolved_ips" ]; then
     log_message ERROR "❌ DNS 解析失败: 域名 $domain 当前未解析到任何 IP 地址。"
-    printf '%b' "${RED}请先前往您的 DNS 服务商添加一条 A 记录,指向本机 IP: ${VPS_IP}${NC}\n"
-    if ! confirm_or_cancel "DNS 未生效,是否强制继续申请?"; then return 1; fi
+    printf '%b' "${RED}本机 IP : ${VPS_IP}${NC}\n"
+    printf '%b' "${RED}解析 IP : 无${NC}\n"
+    printf '%b' "${RED}请先前往您的 DNS 服务商添加 A 记录，或等待解析生效。将继续尝试申请。${NC}\n"
     return 0
   fi
   if [[ " $resolved_ips " == *" $VPS_IP "* ]]; then
@@ -433,8 +434,7 @@ _check_dns_resolution() {
     log_message WARN "⚠️  DNS 解析异常!"
     printf '%b' "${YELLOW}本机 IP : ${VPS_IP}${NC}\n"
     printf '%b' "${YELLOW}解析 IP : ${resolved_ips}${NC}\n"
-    printf '%b' "${RED}解析结果不包含本机 IP。如果您开启了 Cloudflare CDN (橙色云),这是正常的,请选择 'y' 继续。${NC}\n"
-    if ! confirm_or_cancel "解析结果不匹配,是否强制继续?"; then return 1; fi
+    printf '%b' "${RED}解析结果不包含本机 IP。若启用 Cloudflare CDN(橙色云)属正常，将继续尝试申请。${NC}\n"
   fi
 
   if [ -n "$resolved_ips" ]; then
