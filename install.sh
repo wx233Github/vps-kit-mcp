@@ -24,6 +24,7 @@ AUTO_UPDATE_LAST_HINT=""
 AUTO_UPDATE_LAST_HINT_TS=0
 AUTO_UPDATE_NOTIFIER_PID=""
 JB_FORCE_REFRESH=0
+UPDATE_BACKUP_DIR="/opt/vps_install_modules_bak"
 
 # --- 严格模式与环境设定 ---
 set -euo pipefail
@@ -71,6 +72,163 @@ _log_prefix() {
   local func="${FUNCNAME[1]:-main}"
   local line="${BASH_LINENO[0]:-0}"
   printf '[%s:%s] ' "$func" "$line"
+}
+
+_build_archive_url_from_base() {
+  local base_url="${BASE_URL:-}"
+  base_url="${base_url%/}"
+  if [ -z "$base_url" ]; then
+    log_err "BASE_URL 为空，无法解析更新地址"
+    return 1
+  fi
+  local owner repo branch
+  owner=$(printf '%s' "$base_url" | awk -F/ '{print $4}')
+  repo=$(printf '%s' "$base_url" | awk -F/ '{print $5}')
+  branch=$(printf '%s' "$base_url" | awk -F/ '{print $6}')
+  if [ -z "$owner" ] || [ -z "$repo" ] || [ -z "$branch" ]; then
+    log_err "BASE_URL 无法解析仓库信息: ${base_url}"
+    return 1
+  fi
+  printf '%s\n' "https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.tar.gz"
+}
+
+_collect_core_update_list() {
+  local new_dir="$1"
+  local -a changed=()
+  local file=""
+  local -a core_update_files=("install.sh" "utils.sh" "config.json" "nginx.sh")
+  for file in "${core_update_files[@]}"; do
+    local new_path="${new_dir}/${file}"
+    local old_path="${INSTALL_DIR}/${file}"
+    if [ ! -f "$new_path" ]; then
+      continue
+    fi
+    local new_hash
+    local old_hash="no_local_file"
+    new_hash=$(sed 's/\r$//' <"$new_path" | sha256sum | awk '{print $1}')
+    if [ -f "$old_path" ]; then
+      old_hash=$(sed 's/\r$//' <"$old_path" | sha256sum | awk '{print $1}' || echo "no_local_file")
+    fi
+    if [ "$new_hash" != "$old_hash" ]; then
+      changed+=("$file")
+    fi
+  done
+  if [ ${#changed[@]} -gt 0 ]; then
+    printf '%s\n' "${changed[@]}"
+  fi
+}
+
+_full_sync_update() {
+  check_dependencies curl tar diff patch
+  local archive_url
+  archive_url=$(_build_archive_url_from_base) || return 1
+  if [ "$DRY_RUN" = "true" ]; then
+    log_warn "[DRY-RUN] 已启用全量更新，将跳过实际下载与替换"
+    log_info "[DRY-RUN] 更新源: ${archive_url}"
+    return 0
+  fi
+
+  local update_tmp
+  update_tmp=$(mktemp -d /tmp/jb_update.XXXXXX) || return 1
+  local archive_file="${update_tmp}/repo.tar.gz"
+  if ! curl -fsSL --connect-timeout 10 --max-time 60 "${archive_url}?_=$(date +%s)" -o "$archive_file"; then
+    log_err "下载更新包失败"
+    rm -rf "$update_tmp" 2>/dev/null || true
+    return 1
+  fi
+  if ! tar -xzf "$archive_file" -C "$update_tmp"; then
+    log_err "解压更新包失败"
+    rm -rf "$update_tmp" 2>/dev/null || true
+    return 1
+  fi
+
+  local new_dir=""
+  local candidate=""
+  for candidate in "$update_tmp"/*; do
+    if [ -d "$candidate" ]; then
+      new_dir="$candidate"
+      break
+    fi
+  done
+  if [ -z "$new_dir" ]; then
+    log_err "未找到解压后的更新目录"
+    rm -rf "$update_tmp" 2>/dev/null || true
+    return 1
+  fi
+
+  local required_path=""
+  local -a required=("install.sh" "nginx.sh" "lib" "templates")
+  for required_path in "${required[@]}"; do
+    if [ ! -e "${new_dir}/${required_path}" ]; then
+      log_err "更新包缺少关键文件: ${required_path}"
+      rm -rf "$update_tmp" 2>/dev/null || true
+      return 1
+    fi
+  done
+
+  if [ -f "${INSTALL_DIR}/config.json" ] && [ -f "${new_dir}/config.json" ]; then
+    local merged_file
+    merged_file=$(create_temp_file) || {
+      rm -rf "$update_tmp" 2>/dev/null || true
+      return 1
+    }
+    if merge_config_json "${new_dir}/config.json" "${INSTALL_DIR}/config.json" "$merged_file"; then
+      mv "$merged_file" "${new_dir}/config.json"
+      log_info "已合并本地配置"
+    else
+      log_warn "配置文件合并失败，保留远端配置"
+      rm -f "$merged_file" 2>/dev/null || true
+    fi
+  fi
+
+  local patch_file="${update_tmp}/local.patch"
+  local diff_rc=0
+  : >"$patch_file"
+  local -a preserve_paths=("templates")
+  local preserve_path=""
+  for preserve_path in "${preserve_paths[@]}"; do
+    if [ -e "${new_dir}/${preserve_path}" ] || [ -e "${INSTALL_DIR}/${preserve_path}" ]; then
+      diff -ruN "${new_dir}/${preserve_path}" "${INSTALL_DIR}/${preserve_path}" >>"$patch_file" || diff_rc=$?
+      if [ "$diff_rc" -gt 1 ]; then
+        log_err "生成本地补丁失败"
+        rm -rf "$update_tmp" 2>/dev/null || true
+        return 1
+      fi
+    fi
+    diff_rc=0
+  done
+
+  local -a updated_files_list=()
+  mapfile -t updated_files_list < <(_collect_core_update_list "$new_dir")
+
+  require_safe_path_or_die "$UPDATE_BACKUP_DIR" "备份目录" || return 1
+  require_safe_path_or_die "$INSTALL_DIR" "安装目录" || return 1
+
+  if [ -d "$UPDATE_BACKUP_DIR" ]; then
+    run_destructive_with_sudo rm -rf "$UPDATE_BACKUP_DIR"
+  fi
+  run_destructive_with_sudo mv "$INSTALL_DIR" "$UPDATE_BACKUP_DIR"
+  run_destructive_with_sudo mv "$new_dir" "$INSTALL_DIR"
+  run_destructive_with_sudo chmod +x "$INSTALL_DIR/install.sh" "$INSTALL_DIR/nginx.sh" 2>/dev/null || true
+
+  if [ -s "$patch_file" ]; then
+    log_warn "检测到本地模板改动，将以本地差异覆盖上游同名文件"
+    if ! run_destructive_with_sudo patch -p1 -d "$INSTALL_DIR" <"$patch_file"; then
+      log_err "本地补丁应用失败，开始回滚"
+      run_destructive_with_sudo rm -rf "$INSTALL_DIR" || true
+      if [ -d "$UPDATE_BACKUP_DIR" ]; then
+        run_destructive_with_sudo mv "$UPDATE_BACKUP_DIR" "$INSTALL_DIR" || true
+      fi
+      rm -rf "$update_tmp" 2>/dev/null || true
+      return 1
+    fi
+  fi
+
+  rm -rf "$update_tmp" 2>/dev/null || true
+  if [ ${#updated_files_list[@]} -gt 0 ]; then
+    printf '%s\n' "${updated_files_list[@]}"
+  fi
+  return 0
 }
 
 # 启动器专用精简日志 (移除终端时间戳)
@@ -554,63 +712,7 @@ check_and_install_extra_dependencies() {
 }
 
 run_comprehensive_auto_update() {
-  local updated_files=()
-  local -A core_files
-  core_files=(["install.sh"]="$FINAL_SCRIPT_PATH" ["utils.sh"]="$UTILS_PATH" ["config.json"]="$CONFIG_PATH")
-  for file in "${!core_files[@]}"; do
-    local local_path="${core_files[$file]}"
-    local temp_file
-    temp_file=$(create_temp_file)
-    if ! curl -fsSL --connect-timeout 10 --max-time 30 "${BASE_URL}/${file}?_=$(date +%s)" -o "$temp_file"; then
-      log_err "下载 ${file} 失败，跳过。"
-      continue
-    fi
-    if [ "$file" = "config.json" ] && [ -f "$local_path" ]; then
-      local merged_file
-      merged_file=$(create_temp_file) || return 1
-      if merge_config_json "$temp_file" "$local_path" "$merged_file"; then
-        temp_file="$merged_file"
-      else
-        log_warn "配置文件合并失败，已保留本地配置"
-        rm -f "$temp_file" "$merged_file" 2>/dev/null || true
-        continue
-      fi
-    fi
-    local remote_hash
-    remote_hash=$(sed 's/\r$//' <"$temp_file" | sha256sum | awk '{print $1}')
-    local local_hash="no_local_file"
-    [ -f "$local_path" ] && local_hash=$(sed 's/\r$//' <"$local_path" | sha256sum | awk '{print $1}' || echo "no_local_file")
-    if [ "$local_hash" != "$remote_hash" ]; then
-      updated_files+=("$file")
-      run_with_sudo mv "$temp_file" "$local_path"
-      if [[ "$file" == *".sh" ]]; then run_with_sudo chmod +x "$local_path"; fi
-    else
-      rm -f "$temp_file"
-    fi
-  done
-
-  local scripts_to_update
-  scripts_to_update=$(jq -r '.menus[] | .items[]? | select(.type == "item").action' "$CONFIG_PATH" 2>/dev/null || true)
-  if [ -n "${scripts_to_update:-}" ] && [ "$scripts_to_update" != "null" ]; then
-    local download_rc=0
-    for script_name in $scripts_to_update; do
-      if download_module_to_cache "$script_name" "auto"; then
-        download_rc=0
-      else
-        download_rc=$?
-      fi
-      if [ "$download_rc" -eq 0 ]; then
-        updated_files+=("$script_name")
-      fi
-    done
-  fi
-  if ! _sync_module_sidecars "nginx.sh"; then
-    printf '\n' >&2
-    log_warn "Nginx 模块依赖同步失败（不影响使用）"
-  fi
-  if [ "${#updated_files[@]}" -gt 0 ]; then
-    printf '%s\n' "${updated_files[@]}"
-  fi
+  _full_sync_update
 }
 
 _sync_module_sidecars() {
@@ -704,6 +806,7 @@ ensure_module_sidecar_libs() {
       "lib/nginx_store.sh"
       "lib/nginx_render.sh"
       "lib/nginx_flow.sh"
+      "lib/nginx_upgrade.sh"
       "lib/template_render.sh"
       "lib/template_manifest.sh"
       "lib/template_audit.sh"
