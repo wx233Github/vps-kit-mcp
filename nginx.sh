@@ -253,6 +253,10 @@ source "${SCRIPT_DIR}/lib/nginx_render.sh"
 # shellcheck source=lib/nginx_flow.sh
 source "${SCRIPT_DIR}/lib/nginx_flow.sh"
 
+# shellcheck disable=SC1091
+# shellcheck source=lib/nginx_upgrade.sh
+source "${SCRIPT_DIR}/lib/nginx_upgrade.sh"
+
 # ==============================================================================
 # SECTION: UI 渲染函数 (兼容中文宽度)
 # ==============================================================================

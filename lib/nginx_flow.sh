@@ -123,9 +123,10 @@ main_menu() {
     printf '%b' " 9. 备份/还原与配置重建\n"
     printf '%b' "10. 设置 Telegram 机器人通知\n"
     printf '%b' "11. 配置模板中心 (Block追加/Site替换)\n"
+    printf '%b' "12. 升级 Nginx (官方源)\n"
     printf '%b' "\n"
     local c
-    if ! c=$(prompt_menu_choice "1-11" "true"); then
+    if ! c=$(prompt_menu_choice "1-12" "true"); then
       exit 10
     fi
     case "$c" in
@@ -166,6 +167,10 @@ main_menu() {
       press_enter_to_continue
       ;;
     11) _manage_nginx_template_center ;;
+    12)
+      upgrade_nginx_official_repo
+      press_enter_to_continue
+      ;;
     "") exit 10 ;;
     *) log_message ERROR "无效选择" ;;
     esac
