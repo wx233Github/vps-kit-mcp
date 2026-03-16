@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
-_get_project_json() { jq -c --arg d "${1:-}" '.[] | select(.domain == $d)' "$PROJECTS_METADATA_FILE" 2>/dev/null || printf '%s' ""; }
+_get_project_json() {
+  jq -c --arg d "${1:-}" 'map(select(.domain == $d)) | .[0] // empty' "$PROJECTS_METADATA_FILE" 2>/dev/null || printf '%s' ""
+}
 
 _mcp_token_file_for_domain() {
   local domain="${1:-}"
