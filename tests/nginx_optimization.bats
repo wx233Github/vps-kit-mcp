@@ -132,10 +132,9 @@ teardown() {
     trap "rm -rf \"$td\"" EXIT
 
     export SAFE_PATH_ROOTS=("$td")
-    export NGINX_SITES_AVAILABLE_DIR="$td/sites-available"
-    export NGINX_SITES_ENABLED_DIR="$td/sites-enabled"
+    export NGINX_HTTP_CONF_DIR="$td/conf.d"
     export NGINX_WEBROOT_DIR="$td/webroot"
-    mkdir -p "$NGINX_SITES_AVAILABLE_DIR" "$NGINX_SITES_ENABLED_DIR" "$NGINX_WEBROOT_DIR"
+    mkdir -p "$NGINX_HTTP_CONF_DIR" "$NGINX_WEBROOT_DIR"
 
     cert="$td/test.cer"
     key="$td/test.key"
@@ -156,8 +155,7 @@ teardown() {
     set -e
 
     [ "$rc" -ne 0 ]
-    [ ! -f "$NGINX_SITES_AVAILABLE_DIR/example.com.conf" ]
-    [ ! -e "$NGINX_SITES_ENABLED_DIR/example.com.conf" ]
+    [ ! -f "$NGINX_HTTP_CONF_DIR/example.com.conf" ]
     [ ! -f "$marker" ]
   ' "$SCRIPT_PATH" "$LIB_PATH"
   [ "$status" -eq 0 ]
@@ -171,10 +169,9 @@ teardown() {
     trap "rm -rf \"$td\"" EXIT
 
     export SAFE_PATH_ROOTS=("$td")
-    export NGINX_SITES_AVAILABLE_DIR="$td/sites-available"
-    export NGINX_SITES_ENABLED_DIR="$td/sites-enabled"
+    export NGINX_HTTP_CONF_DIR="$td/conf.d"
     export NGINX_WEBROOT_DIR="$td/webroot"
-    mkdir -p "$NGINX_SITES_AVAILABLE_DIR" "$NGINX_SITES_ENABLED_DIR" "$NGINX_WEBROOT_DIR"
+    mkdir -p "$NGINX_HTTP_CONF_DIR" "$NGINX_WEBROOT_DIR"
 
     cert="$td/test.cer"
     key="$td/test.key"
@@ -195,8 +192,7 @@ teardown() {
     set -e
 
     [ "$rc" -ne 0 ]
-    [ ! -f "$NGINX_SITES_AVAILABLE_DIR/example.com.conf" ]
-    [ ! -e "$NGINX_SITES_ENABLED_DIR/example.com.conf" ]
+    [ ! -f "$NGINX_HTTP_CONF_DIR/example.com.conf" ]
     [ ! -f "$marker" ]
   ' "$SCRIPT_PATH" "$LIB_PATH"
   [ "$status" -eq 0 ]
@@ -210,11 +206,10 @@ teardown() {
     trap "rm -rf \"$td\"" EXIT
 
     export SAFE_PATH_ROOTS=("$td")
-    export NGINX_SITES_AVAILABLE_DIR="$td/sites-available"
-    export NGINX_SITES_ENABLED_DIR="$td/sites-enabled"
+    export NGINX_HTTP_CONF_DIR="$td/conf.d"
     export NGINX_WEBROOT_DIR="$td/webroot"
     export CONF_BACKUP_DIR="$td/conf_backups"
-    mkdir -p "$NGINX_SITES_AVAILABLE_DIR" "$NGINX_SITES_ENABLED_DIR" "$NGINX_WEBROOT_DIR" "$CONF_BACKUP_DIR"
+    mkdir -p "$NGINX_HTTP_CONF_DIR" "$NGINX_WEBROOT_DIR" "$CONF_BACKUP_DIR"
 
     cert="$td/test.cer"
     key="$td/test.key"
@@ -238,7 +233,7 @@ teardown() {
     set -e
 
     [ "$rc" -eq "$ERR_CFG_VALIDATE" ]
-    cmp -s "$backup_conf" "$NGINX_SITES_AVAILABLE_DIR/example.com.conf"
+    cmp -s "$backup_conf" "$NGINX_HTTP_CONF_DIR/example.com.conf"
     [ -f "$td/reload" ]
   ' "$SCRIPT_PATH" "$LIB_PATH"
   [ "$status" -eq 0 ]

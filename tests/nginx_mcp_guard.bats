@@ -35,13 +35,11 @@ teardown() {
     trap "rm -rf \"$td\"" EXIT
 
     export SAFE_PATH_ROOTS=("$td")
-    export NGINX_SITES_AVAILABLE_DIR="$td/sites-available"
-    export NGINX_SITES_ENABLED_DIR="$td/sites-enabled"
+    export NGINX_HTTP_CONF_DIR="$td/conf.d"
     export NGINX_WEBROOT_DIR="$td/webroot"
-    [ "${NGINX_SITES_AVAILABLE_DIR#"$td/"}" != "$NGINX_SITES_AVAILABLE_DIR" ]
-    [ "${NGINX_SITES_ENABLED_DIR#"$td/"}" != "$NGINX_SITES_ENABLED_DIR" ]
+    [ "${NGINX_HTTP_CONF_DIR#"$td/"}" != "$NGINX_HTTP_CONF_DIR" ]
     [ "${NGINX_WEBROOT_DIR#"$td/"}" != "$NGINX_WEBROOT_DIR" ]
-    mkdir -p "$NGINX_SITES_AVAILABLE_DIR" "$NGINX_SITES_ENABLED_DIR" "$NGINX_WEBROOT_DIR"
+    mkdir -p "$NGINX_HTTP_CONF_DIR" "$NGINX_WEBROOT_DIR"
 
     cert="$td/test.cer"
     key="$td/test.key"
@@ -58,7 +56,7 @@ teardown() {
       "{resolved_port:\$p, cert_file:\$cert, key_file:\$key, mcp_protect_path:\$mp, mcp_token:\$mt}")
 
     _write_and_enable_nginx_config "example.com" "$json"
-    conf="$NGINX_SITES_AVAILABLE_DIR/example.com.conf"
+    conf="$NGINX_HTTP_CONF_DIR/example.com.conf"
     [ -f "$conf" ]
     grep -q "location = /mcp" "$conf"
     grep -q "return 403" "$conf"

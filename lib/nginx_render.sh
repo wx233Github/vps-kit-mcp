@@ -174,7 +174,7 @@ EOF
 _write_and_enable_nginx_config() {
   local domain="${1:-}"
   local json="${2:-}"
-  local conf="$NGINX_SITES_AVAILABLE_DIR/$domain.conf"
+  local conf="$NGINX_HTTP_CONF_DIR/$domain.conf"
   if ! _require_valid_domain "$domain"; then return 1; fi
   if ! _require_safe_path "$conf" "配置写入"; then return 1; fi
   if [ -z "$json" ]; then
@@ -302,7 +302,6 @@ EOF
   if [ $apply_ret -ne 0 ]; then
     return $apply_ret
   fi
-  ln -sf "$conf" "$NGINX_SITES_ENABLED_DIR/"
   chmod 640 "$conf" 2>/dev/null || true
   if ! _health_check_nginx_config "$domain"; then
     _tx_emit_marker "POST_VERIFY_FAILED" "domain=${domain}, owner=${rollback_owner}" "ERROR"
@@ -330,7 +329,6 @@ EOF
 _remove_and_disable_nginx_config() {
   local domain="${1:-}"
   if ! _require_valid_domain "$domain"; then return 1; fi
-  if ! _require_safe_path "$NGINX_SITES_AVAILABLE_DIR/${domain}.conf" "删除"; then return 1; fi
-  if ! _require_safe_path "$NGINX_SITES_ENABLED_DIR/${domain}.conf" "删除"; then return 1; fi
-  rm -f "$NGINX_SITES_AVAILABLE_DIR/${domain}.conf" "$NGINX_SITES_ENABLED_DIR/${domain}.conf"
+  if ! _require_safe_path "$NGINX_HTTP_CONF_DIR/${domain}.conf" "删除"; then return 1; fi
+  rm -f "$NGINX_HTTP_CONF_DIR/${domain}.conf"
 }

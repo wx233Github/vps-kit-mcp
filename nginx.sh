@@ -130,8 +130,7 @@ EX_CONFIG=78
 RENEW_THRESHOLD_DAYS=30
 DEPS_MARK_FILE="$HOME/.nginx_ssl_manager_deps_v3"
 
-NGINX_SITES_AVAILABLE_DIR="/etc/nginx/sites-available"
-NGINX_SITES_ENABLED_DIR="/etc/nginx/sites-enabled"
+NGINX_HTTP_CONF_DIR="${NGINX_HTTP_CONF_DIR:-/etc/nginx/conf.d}"
 NGINX_STREAM_AVAILABLE_DIR="/etc/nginx/stream-available"
 NGINX_STREAM_ENABLED_DIR="/etc/nginx/stream-enabled"
 NGINX_WEBROOT_DIR="/var/www/html"
@@ -980,7 +979,7 @@ initialize_environment() {
   acme_bin_dir=$(dirname "$ACME_BIN")
   export PATH="${acme_bin_dir}:$PATH"
 
-  mkdir -p "$NGINX_SITES_AVAILABLE_DIR" "$NGINX_SITES_ENABLED_DIR" "$NGINX_WEBROOT_DIR" "$SSL_CERTS_BASE_DIR" "$BACKUP_DIR" "$CONF_BACKUP_DIR"
+  mkdir -p "$NGINX_HTTP_CONF_DIR" "$NGINX_WEBROOT_DIR" "$SSL_CERTS_BASE_DIR" "$BACKUP_DIR" "$CONF_BACKUP_DIR"
   mkdir -p "$JSON_BACKUP_DIR" "$NGINX_STREAM_AVAILABLE_DIR" "$NGINX_STREAM_ENABLED_DIR" "$MCP_TOKEN_DIR"
   if [ -n "$TX_WAL_FILE" ] && _require_safe_path "$TX_WAL_FILE" "WAL"; then
     mkdir -p "$(dirname "$TX_WAL_FILE")"
@@ -1539,7 +1538,7 @@ _handle_backup_restore() {
       ts=$(date +%Y%m%d_%H%M%S)
       local backup_file="$BACKUP_DIR/nginx_manager_backup_$ts.tar.gz"
       log_message INFO "正在打包备份..."
-      if tar -czf "$backup_file" -C / "$PROJECTS_METADATA_FILE" "$TCP_PROJECTS_METADATA_FILE" "$NGINX_SITES_AVAILABLE_DIR" "$NGINX_STREAM_AVAILABLE_DIR" "$SSL_CERTS_BASE_DIR" 2>/dev/null; then log_message SUCCESS "备份成功: $backup_file"; else log_message ERROR "备份失败。"; fi
+      if tar -czf "$backup_file" -C / "$PROJECTS_METADATA_FILE" "$TCP_PROJECTS_METADATA_FILE" "$NGINX_HTTP_CONF_DIR" "$NGINX_STREAM_AVAILABLE_DIR" "$SSL_CERTS_BASE_DIR" 2>/dev/null; then log_message SUCCESS "备份成功: $backup_file"; else log_message ERROR "备份失败。"; fi
       ;;
     2)
       printf '%b' "\n${CYAN}可用备份列表:${NC}\n"
@@ -1858,7 +1857,7 @@ _health_check_nginx_config() {
 
 _view_nginx_config() {
   local domain="${1:-}"
-  local conf="$NGINX_SITES_AVAILABLE_DIR/$domain.conf"
+  local conf="$NGINX_HTTP_CONF_DIR/$domain.conf"
   if [ ! -f "$conf" ]; then
     log_message WARN "此项目未生成配置文件。"
     return
@@ -2176,12 +2175,11 @@ _prepare_http01_challenge() {
       return 1
     fi
     if [ "$temp_svc" = "nginx" ]; then
-      if [ ! -f "$NGINX_SITES_AVAILABLE_DIR/$domain.conf" ]; then
+      if [ ! -f "$NGINX_HTTP_CONF_DIR/$domain.conf" ]; then
         if ! _require_safe_path "$temp_conf_ref" "临时配置"; then return 1; fi
         cat >"$temp_conf_ref" <<EOF
 server { listen 80; server_name ${domain}; location /.well-known/acme-challenge/ { root $NGINX_WEBROOT_DIR; } }
 EOF
-        ln -sf "$temp_conf_ref" "$NGINX_SITES_ENABLED_DIR/"
         control_nginx reload || true
         # shellcheck disable=SC2034
         temp_conf_created_ref="true"
@@ -2240,9 +2238,6 @@ _cleanup_http01_challenge() {
 
   if [ "$temp_conf_created" = "true" ]; then
     if _require_safe_path "$temp_conf" "清理临时配置"; then rm -f "$temp_conf"; fi
-    local enabled_conf
-    enabled_conf="$NGINX_SITES_ENABLED_DIR/temp_acme_$(basename "$temp_conf" | sed 's/^temp_acme_//;s/\.conf$//').conf"
-    if _require_safe_path "$enabled_conf" "清理临时配置"; then rm -f "$enabled_conf"; fi
     control_nginx reload || true
   fi
   if [ -n "$stopped_svc" ]; then
@@ -2330,7 +2325,7 @@ _issue_and_install_certificate() {
   [ "$wildcard" = "y" ] && cmd+=("-d" "*.$domain")
 
   local temp_conf_created="false"
-  local temp_conf="$NGINX_SITES_AVAILABLE_DIR/temp_acme_${domain}.conf"
+  local temp_conf="$NGINX_HTTP_CONF_DIR/temp_acme_${domain}.conf"
   local stopped_svc=""
   if ! _require_valid_domain "$domain"; then return 1; fi
   if [ "$method" = "dns-01" ]; then
