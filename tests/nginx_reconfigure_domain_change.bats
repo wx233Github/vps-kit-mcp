@@ -44,7 +44,6 @@ teardown() {
     confirm_or_cancel() {
       case "${1:-}" in
       *证书*) return 1 ;;
-      *迁移配置*) return 0 ;;
       *) return 0 ;;
       esac
     }

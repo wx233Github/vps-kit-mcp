@@ -3118,10 +3118,6 @@ _handle_reconfigure_project() {
   new_domain=$(jq -r '.domain // ""' <<<"$new")
   if [ -n "$new_domain" ] && [ "$new_domain" != "$d" ]; then
     log_message WARN "检测到域名变更: ${d} -> ${new_domain}"
-    if ! confirm_or_cancel "是否继续迁移配置?" "y"; then
-      log_message WARN "已取消域名变更。"
-      return
-    fi
   fi
   snapshot_project_json "$d" "$old_json"
   if [ "$skip_cert" == "false" ]; then if ! _issue_and_install_certificate "$new"; then
