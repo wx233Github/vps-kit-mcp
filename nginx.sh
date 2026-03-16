@@ -2696,7 +2696,7 @@ _prompt_backend_target_for_project() {
 
   while true; do
     local target
-    if ! target=$(prompt_input "后端目标 (容器名/端口)（默认回车：当前值）" "$target_default" "" "" "false"); then
+    if ! target=$(prompt_input "后端目标 (容器名/端口)" "$target_default" "" "" "false"); then
       return 1
     fi
     type="local_port"
@@ -2748,7 +2748,7 @@ _gather_project_details() {
     domain="$fallback_domain"
   fi
   if [ "$allow_domain_change" = "true" ] || [ -z "$domain" ]; then
-    if ! domain=$(prompt_input "主域名（默认回车：当前值）" "$domain" "^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" "格式无效" "false"); then
+    if ! domain=$(prompt_input "主域名" "$domain" "^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" "格式无效" "false"); then
       exec 3>&-
       return 1
     fi
