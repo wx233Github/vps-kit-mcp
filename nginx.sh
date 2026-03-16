@@ -3095,6 +3095,11 @@ _handle_reconfigure_project() {
   local d="${1:-}"
   local cur
   cur=$(_get_project_json "$d")
+  if [ -z "$cur" ]; then
+    log_message ERROR "项目配置缺失，无法重配: ${d}"
+    press_enter_to_continue
+    return 1
+  fi
   log_message INFO "正在重配 $d ..."
   _generate_op_id
   local port
