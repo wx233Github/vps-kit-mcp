@@ -437,6 +437,10 @@ tx_begin() {
   TX_LAST_ERROR_CODE=0
   # shellcheck disable=SC2034
   TX_LAST_ERROR_MESSAGE=""
+  # shellcheck disable=SC2034
+  TX_LAST_FAIL_REASON=""
+  # shellcheck disable=SC2034
+  TX_LAST_FAIL_TARGET=""
   _tx_wal_append "BEGIN" "domain=${domain}"
   tx_transition "created" "transaction created"
 }

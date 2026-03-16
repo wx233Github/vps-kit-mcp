@@ -270,11 +270,16 @@ _apply_project_transaction() {
   local mode="${4:-standard}"
   local rc=0
   local fail_message=""
+  local target_conf="${NGINX_HTTP_CONF_DIR:-/etc/nginx/conf.d}/${domain}.conf"
   local idempotency_token=""
   local config_hash=""
   local old_token=""
   local old_hash=""
   if [ -z "$domain" ] || [ -z "$new_json" ]; then return 1; fi
+  # shellcheck disable=SC2034
+  TX_LAST_FAIL_REASON=""
+  # shellcheck disable=SC2034
+  TX_LAST_FAIL_TARGET=""
 
   config_hash=$(_json_sha256 "$new_json" 2>/dev/null || true)
   if [ -z "$config_hash" ]; then
@@ -322,12 +327,20 @@ _apply_project_transaction() {
 
   if ! acquire_project_lock; then
     fail_message="无法获取项目事务锁"
+    # shellcheck disable=SC2034
+    TX_LAST_FAIL_REASON="$fail_message"
+    # shellcheck disable=SC2034
+    TX_LAST_FAIL_TARGET="$target_conf"
     tx_fail "LOCK_HELD" "$fail_message" 1
     return 1
   fi
 
   if ! _save_project_json "$new_json"; then
     fail_message="项目元数据写入失败"
+    # shellcheck disable=SC2034
+    TX_LAST_FAIL_REASON="$fail_message"
+    # shellcheck disable=SC2034
+    TX_LAST_FAIL_TARGET="$target_conf"
     tx_fail "WRITE_JSON_FAILED" "$fail_message" 1 || true
     rc=1
   fi
@@ -337,6 +350,10 @@ _apply_project_transaction() {
     local RENDER_ROLLBACK_OWNER="transaction"
     if ! _write_and_enable_nginx_config "$domain" "$new_json"; then
       fail_message="站点配置写入失败，开始回滚"
+      # shellcheck disable=SC2034
+      TX_LAST_FAIL_REASON="$fail_message"
+      # shellcheck disable=SC2034
+      TX_LAST_FAIL_TARGET="$target_conf"
       tx_fail "WRITE_CONF_FAILED" "$fail_message" 1 || true
       _rollback_project_transaction "$domain" "$old_json" "$mode"
       rc=1
@@ -352,6 +369,10 @@ _apply_project_transaction() {
     NGINX_RELOAD_NEEDED="true"
     if ! control_nginx_reload_if_needed; then
       fail_message="Nginx 重载失败，开始回滚"
+      # shellcheck disable=SC2034
+      TX_LAST_FAIL_REASON="$fail_message"
+      # shellcheck disable=SC2034
+      TX_LAST_FAIL_TARGET="$target_conf"
       tx_fail "RELOAD_FAILED" "$fail_message" 1 || true
       _rollback_project_transaction "$domain" "$old_json" "$mode"
       rc=1
