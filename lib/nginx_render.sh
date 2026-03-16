@@ -201,6 +201,7 @@ _write_and_enable_nginx_config() {
   if ! _require_safe_path "$key" "密钥文件"; then return 1; fi
   local body_cfg=""
   local normalized_max_body=""
+  local body_from_field="false"
   if [ -n "$max_body" ] && [ "$max_body" != "null" ]; then
     normalized_max_body=$(_normalize_max_body_size "$max_body" 2>/dev/null || true)
     if [ -z "$normalized_max_body" ]; then
@@ -208,6 +209,7 @@ _write_and_enable_nginx_config() {
       return 1
     fi
     body_cfg="client_max_body_size ${normalized_max_body};"
+    body_from_field="true"
   fi
   if [ -z "$body_cfg" ]; then
     body_cfg="client_max_body_size 0;"
@@ -238,12 +240,34 @@ _write_and_enable_nginx_config() {
 $(_render_proxy_location_block "^~ ${mcp_path}/" "$port" "$mcp_token")"
   fi
   local extra_cfg=""
+  local custom_cfg_effective="$custom_cfg"
   if [ -n "$custom_cfg" ] && [ "$custom_cfg" != "null" ]; then
-    if _is_valid_custom_directive_silent "$custom_cfg"; then
-      extra_cfg="$custom_cfg"
+    if printf '%s\n' "$custom_cfg" | grep -Eq '^[[:space:]]*client_max_body_size[[:space:]]+'; then
+      if [ "$body_from_field" = "true" ]; then
+        custom_cfg_effective=$(printf '%s\n' "$custom_cfg" | awk '
+          {
+            line=$0
+            trimmed=line
+            sub(/^[ \t]+/, "", trimmed)
+            if (trimmed ~ /^client_max_body_size[ \t]+/) next
+            print line
+          }
+        ')
+        if ! printf '%s\n' "$custom_cfg_effective" | grep -q '[^[:space:]]'; then
+          custom_cfg_effective=""
+        fi
+        log_message INFO "检测到 custom_config 中的 client_max_body_size，已以字段值为准。"
+      else
+        body_cfg=""
+      fi
+    fi
+  fi
+  if [ -n "$custom_cfg_effective" ] && [ "$custom_cfg_effective" != "null" ]; then
+    if _is_valid_custom_directive_silent "$custom_cfg_effective"; then
+      extra_cfg="$custom_cfg_effective"
     else
       local custom_as_max_body=""
-      custom_as_max_body=$(_normalize_max_body_size "$custom_cfg" 2>/dev/null || true)
+      custom_as_max_body=$(_normalize_max_body_size "$custom_cfg_effective" 2>/dev/null || true)
       if [ -z "$body_cfg" ] && [ -n "$custom_as_max_body" ]; then
         body_cfg="client_max_body_size ${custom_as_max_body};"
         log_message WARN "检测到旧格式 custom_config 中的请求体大小配置，已自动迁移。"
