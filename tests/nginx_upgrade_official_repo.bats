@@ -35,5 +35,6 @@ EOF
   [ "$status" -eq 0 ]
   [[ "$output" =~ 当前系统:\ ubuntu\ jammy ]]
   [[ "$output" =~ 官方源:\ deb\ \[signed-by=/etc/apt/keyrings/nginx.gpg\]\ http://nginx.org/packages/ubuntu\ jammy\ nginx ]]
+  [[ "$output" =~ 升级日志:\ /var/log/nginx_upgrade.log ]]
   [[ "$output" =~ Nginx\ 官方源升级完成 ]]
 }

@@ -8,6 +8,25 @@ _run_cmd() {
   "$@"
 }
 
+_run_cmd_with_log() {
+  local log_file="${1:-}"
+  shift
+  if [ "$DRY_RUN" = "true" ]; then
+    log_message INFO "[DRY-RUN] $* (log: ${log_file})"
+    return 0
+  fi
+  "$@" >>"$log_file" 2>&1
+}
+
+_emit_upgrade_log_tail() {
+  local log_file="${1:-}"
+  if [ -z "$log_file" ] || [ "$DRY_RUN" = "true" ]; then return 0; fi
+  if [ -f "$log_file" ]; then
+    log_message ERROR "升级日志末尾 (50 行):"
+    tail -n 50 "$log_file" || true
+  fi
+}
+
 _fix_http2_listen_after_upgrade() {
   local conf_dir="${NGINX_HTTP_CONF_DIR:-/etc/nginx/conf.d}"
   local min_ver="${NGINX_HTTP2_DIRECTIVE_MIN_VERSION:-1.25.1}"
@@ -213,9 +232,27 @@ upgrade_nginx_official_repo() {
     return 1
   fi
 
+  local upgrade_log="${NGINX_UPGRADE_LOG_FILE:-/var/log/nginx_upgrade.log}"
+  if ! _require_safe_path "$upgrade_log" "升级日志"; then return 1; fi
+  if ! _run_cmd mkdir -p "$(dirname "$upgrade_log")"; then return 1; fi
+  if ! _run_cmd touch "$upgrade_log"; then return 1; fi
+  _run_cmd chmod 640 "$upgrade_log" || true
+  log_message INFO "升级日志: ${upgrade_log}"
+
   local -a apt_env=(env DEBIAN_FRONTEND=noninteractive APT_LISTCHANGES_FRONTEND=none NEEDRESTART_MODE=a)
-  if ! _run_cmd "${apt_env[@]}" apt-get update -qq; then return 1; fi
-  if ! _run_cmd "${apt_env[@]}" apt-get install -y nginx; then return 1; fi
+  local -a dpkg_opts=("-o" "Dpkg::Options::=--force-confdef" "-o" "Dpkg::Options::=--force-confold")
+  log_message INFO "正在更新软件源..."
+  if ! _run_cmd_with_log "$upgrade_log" "${apt_env[@]}" apt-get update -qq; then
+    log_message ERROR "软件源更新失败，请查看日志: ${upgrade_log}"
+    _emit_upgrade_log_tail "$upgrade_log"
+    return 1
+  fi
+  log_message INFO "正在升级 Nginx..."
+  if ! _run_cmd_with_log "$upgrade_log" "${apt_env[@]}" apt-get install -y "${dpkg_opts[@]}" nginx; then
+    log_message ERROR "Nginx 升级失败，请查看日志: ${upgrade_log}"
+    _emit_upgrade_log_tail "$upgrade_log"
+    return 1
+  fi
 
   if ! _run_cmd nginx -t; then
     log_message ERROR "Nginx 配置检测失败，正在回滚..."
