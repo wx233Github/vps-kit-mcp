@@ -25,6 +25,7 @@ LOG_FILE_DEFAULT="${LOG_FILE_DEFAULT:-/var/log/nginx_ssl_manager.log}"
 LOG_FILE_FALLBACK="${LOG_FILE_FALLBACK:-/tmp/nginx_ssl_manager.log}"
 # 是否隐藏终端输出中的函数名/行号（默认开启）
 LOG_HIDE_CTX_PREFIX="${LOG_HIDE_CTX_PREFIX:-true}"
+LOG_HIDE_TX_PREFIX="${LOG_HIDE_TX_PREFIX:-true}"
 
 _tty_available() {
   if [ ! -t 0 ] && [ ! -t 1 ]; then
@@ -392,7 +393,17 @@ _tx_emit_marker() {
   local level="${3:-INFO}"
   local ctx_prefix
   ctx_prefix=$(_log_prefix)
-  _log_emit "$level" "[TX:${marker}] ${msg}" "$ctx_prefix" "true"
+  local log_msg=""
+  if [ -n "$msg" ]; then
+    log_msg="[TX:${marker}] ${msg}"
+  else
+    log_msg="[TX:${marker}]"
+  fi
+  local output_msg="$log_msg"
+  if [ "${LOG_HIDE_TX_PREFIX:-true}" = "true" ]; then
+    output_msg="${msg}"
+  fi
+  _log_emit "$level" "$log_msg" "$ctx_prefix" "true" "$output_msg"
 }
 
 _tx_can_transition() {
@@ -754,11 +765,16 @@ _log_emit() {
   local level="${1:-INFO}" message="${2:-}"
   local ctx_prefix="${3:-}"
   local force_stdout="${4:-false}"
+  local output_message="${5:-}"
   local op_tag
   op_tag="${OP_ID:-NA}"
   local log_line=""
   local output_line=""
   local output_prefix="${ctx_prefix}"
+  local display_msg="${message}"
+  if [ -n "$output_message" ]; then
+    display_msg="$output_message"
+  fi
   if [ "${LOG_HIDE_CTX_PREFIX:-true}" = "true" ]; then
     output_prefix=""
   fi
@@ -767,13 +783,16 @@ _log_emit() {
     safe_msg=${message//$'\n'/ }
     safe_msg=${safe_msg//"/\\"/}
     log_line="level=${level} op=${op_tag} msg=\"${safe_msg}\""
-    output_line="$log_line"
+    local safe_output_msg
+    safe_output_msg=${display_msg//$'\n'/ }
+    safe_output_msg=${safe_output_msg//"/\\"/}
+    output_line="level=${level} op=${op_tag} msg=\"${safe_output_msg}\""
   else
     log_line="[${level}] ${message}"
-    output_line="[${level}] ${output_prefix}${message}"
+    output_line="[${level}] ${output_prefix}${display_msg}"
     if [ "${LOG_WITH_OP_TAG:-false}" = "true" ]; then
       log_line="[${level}] [op:${op_tag}] ${message}"
-      output_line="[${level}] [op:${op_tag}] ${output_prefix}${message}"
+      output_line="[${level}] [op:${op_tag}] ${output_prefix}${display_msg}"
     fi
   fi
   if ! _log_should_emit "$level"; then return 0; fi
@@ -804,8 +823,13 @@ log_success() { _log_emit "SUCCESS" "${1:-}" "stdout"; }
 
 log_message() {
   local level="${1:-INFO}" message="${2:-}"
+  local output_message="${3:-}"
   local ctx_prefix
   ctx_prefix=$(_log_prefix)
+  if [ -n "$output_message" ]; then
+    _log_emit "$level" "$message" "$ctx_prefix" "false" "$output_message"
+    return 0
+  fi
   _log_emit "$level" "$message" "$ctx_prefix"
 }
 
