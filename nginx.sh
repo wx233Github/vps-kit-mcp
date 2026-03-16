@@ -2734,13 +2734,16 @@ _gather_project_details() {
   local skip_cert="${2:-false}"
   local is_cert_only="false"
   if [ "${3:-}" == "cert_only" ]; then is_cert_only="true"; fi
+  local allow_domain_change="${4:-false}"
 
   local domain
   domain=$(jq -r '.domain // ""' <<<"$cur")
-  if [ -z "$domain" ]; then if ! domain=$(prompt_input "主域名" "" "^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" "格式无效" "false"); then
-    exec 3>&-
-    return 1
-  fi; fi
+  if [ "$allow_domain_change" = "true" ] || [ -z "$domain" ]; then
+    if ! domain=$(prompt_input "主域名" "$domain" "^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" "格式无效" "false"); then
+      exec 3>&-
+      return 1
+    fi
+  fi
   if ! _is_valid_domain "$domain"; then
     log_message ERROR "域名格式无效。"
     exec 3>&-
@@ -3101,16 +3104,53 @@ _handle_reconfigure_project() {
   local skip_cert="true"
   if confirm_or_cancel "是否连同证书也重新申请/重载?" "n"; then skip_cert="false"; fi
   local new
-  if ! new=$(_gather_project_details "$cur" "$skip_cert" "$mode"); then
+  if ! new=$(_gather_project_details "$cur" "$skip_cert" "$mode" "true"); then
     log_message WARN "取消。"
     return
   fi
   local old_json="$cur"
+  local new_domain=""
+  new_domain=$(jq -r '.domain // ""' <<<"$new")
+  if [ -n "$new_domain" ] && [ "$new_domain" != "$d" ]; then
+    log_message WARN "检测到域名变更: ${d} -> ${new_domain}"
+    if ! confirm_or_cancel "是否继续迁移配置?" "y"; then
+      log_message WARN "已取消域名变更。"
+      return
+    fi
+  fi
   snapshot_project_json "$d" "$old_json"
   if [ "$skip_cert" == "false" ]; then if ! _issue_and_install_certificate "$new"; then
     log_message ERROR "证书申请失败。"
     return 1
   fi; fi
+  if [ -n "$new_domain" ] && [ "$new_domain" != "$d" ]; then
+    if _apply_project_transaction "$new_domain" "$new" "" "$mode"; then
+      _delete_project_json "$d"
+      if [ "$mode" != "cert_only" ]; then
+        _remove_and_disable_nginx_config "$d"
+        NGINX_RELOAD_NEEDED="true"
+        if ! control_nginx_reload_if_needed; then
+          printf '%b' "旧域名配置移除失败，请手动检查: ${d}\n"
+        fi
+      fi
+      printf '%b' "重配完成: ${d} -> ${new_domain}\n"
+      if [ -n "$LAST_CERT_ELAPSED" ]; then printf '%b' "申请耗时: ${LAST_CERT_ELAPSED}\n"; fi
+      if [ -n "$LAST_CERT_CERT" ] && [ -n "$LAST_CERT_KEY" ]; then
+        printf '%b' "证书路径: ${LAST_CERT_CERT}\n"
+        printf '%b' "私钥路径: ${LAST_CERT_KEY}\n"
+      fi
+      if [ "$mode" != "cert_only" ]; then
+        printf '%b' "网站已上线: https://${new_domain}\n"
+      fi
+      printf '%b' "已重载 Nginx。\n"
+      press_enter_to_continue
+      return
+    fi
+    printf '%b' "重配失败: ${d}\n"
+    printf '%b' "已保留原配置。\n"
+    press_enter_to_continue
+    return
+  fi
   if _apply_project_transaction "$d" "$new" "$old_json" "$mode"; then
     printf '%b' "重配完成: ${d}\n"
     if [ -n "$LAST_CERT_ELAPSED" ]; then printf '%b' "申请耗时: ${LAST_CERT_ELAPSED}\n"; fi
