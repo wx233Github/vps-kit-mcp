@@ -41,10 +41,10 @@ _preflight_check_active_conf_include() {
   if [ "$active_conf" = "/etc/nginx/nginx.conf" ]; then
     return 0
   fi
-  if grep -Eq 'include[[:space:]]+/etc/nginx/sites-enabled/\*\.conf;' "$active_conf" 2>/dev/null; then
+  if grep -Eq 'include[[:space:]]+/etc/nginx/conf\.d/\*\.conf;' "$active_conf" 2>/dev/null; then
     return 0
   fi
-  log_message ERROR "preflight: active 主配置未接入 /etc/nginx/sites-enabled/*.conf: ${active_conf}"
+  log_message ERROR "preflight: active 主配置未接入 /etc/nginx/conf.d/*.conf: ${active_conf}"
   return 1
 }
 

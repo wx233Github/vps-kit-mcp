@@ -23,7 +23,7 @@ NGINX_BIN_CANDIDATES=(
 )
 NGINX_PATH_FIXED="false"
 
-# 是否跳过对自定义主配置注入 sites-enabled（默认开启，避免与 sing-box 冲突）
+# 是否跳过对自定义主配置注入 conf.d（默认开启，避免与 sing-box 冲突）
 NGINX_SKIP_INCLUDE_CONFS="${NGINX_SKIP_INCLUDE_CONFS:-true}"
 
 JB_NONINTERACTIVE="${JB_NONINTERACTIVE:-false}"
@@ -855,23 +855,23 @@ _get_active_nginx_main_conf() {
   printf '%s\n' "$conf"
 }
 
-_ensure_active_nginx_http_include_sites_enabled() {
+_ensure_active_nginx_http_include_conf_d() {
   local active_conf=""
   active_conf=$(_get_active_nginx_main_conf)
   if [ -z "$active_conf" ] || [ ! -f "$active_conf" ]; then
     return 0
   fi
   if [ "${NGINX_SKIP_INCLUDE_CONFS}" = "true" ] && [ "$active_conf" = "/etc/sing-box/nginx.conf" ]; then
-    log_message INFO "检测到 sing-box nginx 主配置，已跳过 /etc/nginx/sites-enabled 注入。"
+    log_message INFO "检测到 sing-box nginx 主配置，已跳过 /etc/nginx/conf.d 注入。"
     return 0
   fi
   if [ "$active_conf" = "/etc/nginx/nginx.conf" ]; then
     return 0
   fi
-  if grep -Eq 'include[[:space:]]+/etc/nginx/sites-enabled/\*\.conf;' "$active_conf" 2>/dev/null; then
+  if grep -Eq 'include[[:space:]]+/etc/nginx/conf\.d/\*\.conf;' "$active_conf" 2>/dev/null; then
     return 0
   fi
-  log_message WARN "检测到 Nginx 使用自定义主配置: ${active_conf}，正在自动接入 /etc/nginx/sites-enabled/*.conf"
+  log_message WARN "检测到 Nginx 使用自定义主配置: ${active_conf}，正在自动接入 /etc/nginx/conf.d/*.conf"
   local backup tmp_file
   backup="${active_conf}.bak.$(date +%Y%m%d_%H%M%S)"
   tmp_file=$(mktemp /tmp/nginx.main.include.XXXXXX)
@@ -886,8 +886,8 @@ _ensure_active_nginx_http_include_sites_enabled() {
 				opens=gsub(/\{/, "{", line)
 				closes=gsub(/\}/, "}", line)
 				if (depth==1 && closes>0 && inserted==0) {
-					print "    # Auto-injected: make /etc/nginx/sites-enabled configs effective"
-					print "    include /etc/nginx/sites-enabled/*.conf;"
+					print "    # Auto-injected: make /etc/nginx/conf.d configs effective"
+					print "    include /etc/nginx/conf.d/*.conf;"
 					inserted=1
 				}
 				depth += opens - closes
@@ -904,13 +904,13 @@ _ensure_active_nginx_http_include_sites_enabled() {
   local precheck_rc=0
   precheck_output=$(nginx -t -c "$tmp_file" 2>&1) || precheck_rc=$?
   if [ "$precheck_rc" -ne 0 ]; then
-    log_message ERROR "接入 sites-enabled 的预检失败，已取消写入: ${active_conf}"
+    log_message ERROR "接入 conf.d 的预检失败，已取消写入: ${active_conf}"
     printf '%b' "${YELLOW}失败原因: ${precheck_output}${NC}\n"
     rm -f "$tmp_file"
     return 1
   fi
   mv "$tmp_file" "$active_conf"
-  log_message SUCCESS "已将 /etc/nginx/sites-enabled/*.conf 接入 ${active_conf}"
+  log_message SUCCESS "已将 /etc/nginx/conf.d/*.conf 接入 ${active_conf}"
   return 0
 }
 
@@ -987,7 +987,7 @@ initialize_environment() {
     touch "$TX_WAL_FILE" 2>/dev/null || true
   fi
   chmod 700 "$MCP_TOKEN_DIR" 2>/dev/null || true
-  _ensure_active_nginx_http_include_sites_enabled || true
+  _ensure_active_nginx_http_include_conf_d || true
   _renew_fail_db_init
   if [ ! -f "$PROJECTS_METADATA_FILE" ] || ! jq -e . "$PROJECTS_METADATA_FILE" >/dev/null 2>&1; then
     if ! _require_safe_path "$PROJECTS_METADATA_FILE" "初始化项目配置"; then return 1; fi

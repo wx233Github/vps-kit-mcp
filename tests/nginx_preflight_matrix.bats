@@ -19,7 +19,7 @@ teardown() {
   rm -f "$LIB_PATH"
 }
 
-@test "preflight active 主配置未接入 sites-enabled 时返回 20" {
+@test "preflight active 主配置未接入 conf.d 时返回 20" {
   run bash -c '
     set -euo pipefail
     source "$1"

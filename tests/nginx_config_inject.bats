@@ -30,7 +30,7 @@ EOF
     nginx() { return 1; }
 
     before=$(sha256sum "$conf" | awk "{print \$1}")
-    _ensure_active_nginx_http_include_sites_enabled || true
+    _ensure_active_nginx_http_include_conf_d || true
     after=$(sha256sum "$conf" | awk "{print \$1}")
     [ "$before" = "$after" ]
   ' _ "$LIB_PATH"
@@ -72,11 +72,11 @@ EOF
     _get_active_nginx_main_conf() { printf "%s\n" "$conf"; }
 
     before=$(sha256sum "$conf" | awk "{print \$1}")
-    _ensure_active_nginx_http_include_sites_enabled || true
+    _ensure_active_nginx_http_include_conf_d || true
     after=$(sha256sum "$conf" | awk "{print \$1}")
 
     [ "$before" = "$after" ]
-    ! grep -q "sites-enabled" "$conf"
+    ! grep -q "conf.d" "$conf"
   ' _ "$LIB_PATH"
   [ "$status" -eq 0 ]
 }
