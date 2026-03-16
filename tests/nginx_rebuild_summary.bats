@@ -24,7 +24,8 @@ teardown() {
     cat >"$PROJECTS_METADATA_FILE" <<EOF
 [
   {"domain":"one.example.com","resolved_port":"8080"},
-  {"domain":"two.example.com","resolved_port":"9090"}
+  {"domain":"two.example.com","resolved_port":"9090"},
+  {"domain":"fail.example.com","resolved_port":"7070"}
 ]
 EOF
 
@@ -38,6 +39,13 @@ EOF
         NGINX_RELOAD_STRATEGY_CACHE_TS=$(date +%s)
         return 0
       fi
+      if [ "$1" = "fail.example.com" ]; then
+        TX_LAST_FAIL_REASON="配置写入失败"
+        TX_LAST_FAIL_TARGET="/etc/nginx/conf.d/fail.example.com.conf"
+        NGINX_RELOAD_STRATEGY_CACHE="systemctl"
+        NGINX_RELOAD_STRATEGY_CACHE_TS=$(date +%s)
+        return 1
+      fi
       NGINX_RELOAD_STRATEGY_CACHE="hup_master_pid:123"
       NGINX_RELOAD_STRATEGY_CACHE_TS=$(date +%s)
       return 0
@@ -47,7 +55,7 @@ EOF
   ' _ "$LIB_PATH"
   [ "$status" -eq 0 ]
   [[ "$output" == *"✅ 重建完成: one.example.com"* ]]
-  [[ "$output" == *"strategy=systemctl"* ]]
   [[ "$output" == *"✅ 无变化: two.example.com"* ]]
-  [[ "$output" == *"strategy=hup_master_pid:123"* ]]
+  [[ "$output" == *"❌ 重建失败: fail.example.com（原因: 配置写入失败, strategy=systemctl, target=/etc/nginx/conf.d/fail.example.com.conf）"* ]]
+  [[ "$output" != *$'\nstrategy='* ]]
 }

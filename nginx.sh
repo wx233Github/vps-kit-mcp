@@ -1886,13 +1886,15 @@ _rebuild_all_nginx_configs() {
     d=$(jq -r .domain <<<"$p")
     port=$(jq -r .resolved_port <<<"$p")
     if ! _require_valid_domain "$d"; then
-      log_message ERROR "域名无效，跳过: $d"
+      local invalid_target="${NGINX_HTTP_CONF_DIR:-/etc/nginx/conf.d}/${d}.conf"
+      log_message ERROR "❌ 重建失败: ${d}（原因: 域名无效, strategy=unknown, target=${invalid_target}）"
       fail=$((fail + 1))
       continue
     fi
     if [ "$port" == "cert_only" ]; then continue; fi
     if ! _require_valid_port "$port"; then
-      log_message ERROR "端口无效，跳过: $d"
+      local invalid_target="${NGINX_HTTP_CONF_DIR:-/etc/nginx/conf.d}/${d}.conf"
+      log_message ERROR "❌ 重建失败: ${d}（原因: 端口无效, strategy=unknown, target=${invalid_target}）"
       fail=$((fail + 1))
       continue
     fi
@@ -1909,17 +1911,14 @@ _rebuild_all_nginx_configs() {
       else
         log_message INFO "✅ 重建完成: ${d}"
       fi
-      if [ -n "${NGINX_RELOAD_STRATEGY_CACHE:-}" ]; then
-        log_message INFO "strategy=${NGINX_RELOAD_STRATEGY_CACHE}"
-      fi
       success=$((success + 1))
     else
       LOG_LEVEL="$original_log_level"
       fail=$((fail + 1))
-      log_message ERROR "❌ 重建失败: ${d}"
-      if [ -n "${NGINX_RELOAD_STRATEGY_CACHE:-}" ]; then
-        log_message INFO "strategy=${NGINX_RELOAD_STRATEGY_CACHE}"
-      fi
+      local fail_reason="${TX_LAST_FAIL_REASON:-${TX_LAST_ERROR_MESSAGE:-未知错误}}"
+      local fail_target="${TX_LAST_FAIL_TARGET:-${NGINX_HTTP_CONF_DIR:-/etc/nginx/conf.d}/${d}.conf}"
+      local fail_strategy="${NGINX_RELOAD_STRATEGY_CACHE:-unknown}"
+      log_message ERROR "❌ 重建失败: ${d}（原因: ${fail_reason}, strategy=${fail_strategy}, target=${fail_target}）"
     fi
   done <<<"$all_projects"
   LOG_LEVEL="$original_log_level"
