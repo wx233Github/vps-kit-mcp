@@ -1113,18 +1113,7 @@ _configure_schedule() {
     mode_choice=$(_prompt_for_menu_choice "1-2")
 
     if [ "$mode_choice" = "1" ] || [ "$mode_choice" = "2" ]; then
-      local confirm
-      if [ "$mode_choice" = "1" ]; then
-        confirm=$(_prompt_user_input "确认选择 [1] 间隔循环? (y/N): " "")
-      else
-        confirm=$(_prompt_user_input "确认选择 [2] 自定义 Cron? (y/N): " "")
-      fi
-
-      if echo "$confirm" | grep -qE '^[Yy]$'; then
-        valid_choice=true
-      else
-        log_info "请重新选择。"
-      fi
+      valid_choice=true
     else
       log_warn "无效选项，请输入 1 或 2。"
     fi
@@ -1180,7 +1169,7 @@ _configure_schedule() {
 }
 
 configure_exclusion_list() {
-  declare -A excluded_map
+  local -A excluded_map=()
   local initial_exclude_list="${WATCHTOWER_EXCLUDE_LIST:-}"
 
   if [ -n "$initial_exclude_list" ]; then
