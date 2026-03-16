@@ -50,3 +50,22 @@ teardown() {
   [[ "$output" == *"HIGHLIGHT"* ]]
   [[ "$output" != *"plain"* ]]
 }
+
+@test "rebuild output omits ansi in non-tty" {
+  run bash -c '
+    set -euo pipefail
+    source "$1"
+    IS_INTERACTIVE_MODE=true
+    LOG_HIDE_CTX_PREFIX=true
+    d="example.com"
+    rebuild_msg="重建配置文件: ${d} ..."
+    rebuild_output="$rebuild_msg"
+    if [ -t 1 ]; then
+      rebuild_output="${CYAN}重建配置文件:${NC} ${GREEN}${d}${NC} ..."
+    fi
+    log_message INFO "$rebuild_msg" "$rebuild_output"
+  ' _ "$LIB_PATH"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"重建配置文件: example.com ..."* ]]
+  [[ "$output" != *"\\033"* ]]
+}

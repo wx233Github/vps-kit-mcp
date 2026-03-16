@@ -1896,7 +1896,10 @@ _rebuild_all_nginx_configs() {
       continue
     fi
     local rebuild_msg="重建配置文件: ${d} ..."
-    local rebuild_output="${CYAN}重建配置文件:${NC} ${GREEN}${d}${NC} ..."
+    local rebuild_output="$rebuild_msg"
+    if [ -t 1 ]; then
+      rebuild_output="${CYAN}重建配置文件:${NC} ${GREEN}${d}${NC} ..."
+    fi
     log_message INFO "$rebuild_msg" "$rebuild_output"
     old_json=$(_get_project_json "$d")
     tx_json=$(jq --arg tok "rebuild:${OP_ID:-manual}:${d}:$(date +%s)" '.idempotency_token = $tok' <<<"$p")
