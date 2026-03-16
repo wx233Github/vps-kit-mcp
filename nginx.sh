@@ -1877,6 +1877,7 @@ _rebuild_all_nginx_configs() {
     return
   fi
   local success=0 fail=0
+  local original_log_level="${LOG_LEVEL}"
   while read -r p; do
     [ -z "$p" ] && continue
     local d port
@@ -1895,21 +1896,33 @@ _rebuild_all_nginx_configs() {
       fail=$((fail + 1))
       continue
     fi
-    local rebuild_msg="重建配置文件: ${d} ..."
-    local rebuild_output="$rebuild_msg"
-    if [ -t 1 ]; then
-      rebuild_output="${CYAN}重建配置文件:${NC} ${GREEN}${d}${NC} ..."
-    fi
-    log_message INFO "$rebuild_msg" "$rebuild_output"
     old_json=$(_get_project_json "$d")
     tx_json=$(jq --arg tok "rebuild:${OP_ID:-manual}:${d}:$(date +%s)" '.idempotency_token = $tok' <<<"$p")
+    local conf_gen_before="${NGINX_CONF_GEN}"
+    NGINX_RELOAD_STRATEGY_CACHE=""
+    NGINX_RELOAD_STRATEGY_CACHE_TS=0
+    LOG_LEVEL="WARN"
     if _apply_project_transaction "$d" "$tx_json" "$old_json" "standard"; then
+      LOG_LEVEL="$original_log_level"
+      if [ "$NGINX_CONF_GEN" -eq "$conf_gen_before" ]; then
+        log_message INFO "✅ 无变化: ${d}"
+      else
+        log_message INFO "✅ 重建完成: ${d}"
+      fi
+      if [ -n "${NGINX_RELOAD_STRATEGY_CACHE:-}" ]; then
+        log_message INFO "strategy=${NGINX_RELOAD_STRATEGY_CACHE}"
+      fi
       success=$((success + 1))
     else
+      LOG_LEVEL="$original_log_level"
       fail=$((fail + 1))
-      log_message ERROR "重建失败: $d"
+      log_message ERROR "❌ 重建失败: ${d}"
+      if [ -n "${NGINX_RELOAD_STRATEGY_CACHE:-}" ]; then
+        log_message INFO "strategy=${NGINX_RELOAD_STRATEGY_CACHE}"
+      fi
     fi
   done <<<"$all_projects"
+  LOG_LEVEL="$original_log_level"
   safe_rm "/etc/nginx/snippets/cf_allow.conf" "删除 CF Allow"
   log_message SUCCESS "重建完成。成功: $success, 失败: $fail"
 }
