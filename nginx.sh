@@ -2678,6 +2678,7 @@ _detect_reusable_wildcard_cert() {
 _prompt_backend_target_for_project() {
   local cur="${1:-{}}"
   local name="${2:-}"
+  local fallback_port="${3:-}"
   local type="local_port"
   local port=""
 
@@ -2689,6 +2690,9 @@ _prompt_backend_target_for_project() {
     target_default="$old_port"
   fi
   [ "$target_default" == "证书" ] && target_default=""
+  if [ -z "$target_default" ] && _is_valid_port "$fallback_port"; then
+    target_default="$fallback_port"
+  fi
 
   while true; do
     local target
@@ -2735,9 +2739,14 @@ _gather_project_details() {
   local is_cert_only="false"
   if [ "${3:-}" == "cert_only" ]; then is_cert_only="true"; fi
   local allow_domain_change="${4:-false}"
+  local fallback_domain="${5:-}"
+  local fallback_port="${6:-}"
 
   local domain
   domain=$(jq -r '.domain // ""' <<<"$cur")
+  if [ -z "$domain" ] && [ -n "$fallback_domain" ]; then
+    domain="$fallback_domain"
+  fi
   if [ "$allow_domain_change" = "true" ] || [ -z "$domain" ]; then
     if ! domain=$(prompt_input "主域名" "$domain" "^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" "格式无效" "false"); then
       exec 3>&-
@@ -2756,7 +2765,7 @@ _gather_project_details() {
   if [ "$is_cert_only" == "false" ]; then
     name=$(jq -r '.name // ""' <<<"$cur")
     local target_pair=""
-    if ! target_pair=$(_prompt_backend_target_for_project "$cur" "$name"); then
+    if ! target_pair=$(_prompt_backend_target_for_project "$cur" "$name" "$fallback_port"); then
       exec 3>&-
       return 1
     fi
@@ -3109,7 +3118,7 @@ _handle_reconfigure_project() {
   local skip_cert="true"
   if confirm_or_cancel "是否连同证书也重新申请/重载?" "n"; then skip_cert="false"; fi
   local new
-  if ! new=$(_gather_project_details "$cur" "$skip_cert" "$mode" "true"); then
+  if ! new=$(_gather_project_details "$cur" "$skip_cert" "$mode" "true" "$d" "${port:-}"); then
     log_message WARN "取消。"
     return
   fi
