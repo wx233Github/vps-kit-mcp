@@ -1895,7 +1895,9 @@ _rebuild_all_nginx_configs() {
       fail=$((fail + 1))
       continue
     fi
-    log_message INFO "重建配置文件: $d ..."
+    local rebuild_msg="重建配置文件: ${d} ..."
+    local rebuild_output="${CYAN}重建配置文件:${NC} ${GREEN}${d}${NC} ..."
+    log_message INFO "$rebuild_msg" "$rebuild_output"
     old_json=$(_get_project_json "$d")
     tx_json=$(jq --arg tok "rebuild:${OP_ID:-manual}:${d}:$(date +%s)" '.idempotency_token = $tok' <<<"$p")
     if _apply_project_transaction "$d" "$tx_json" "$old_json" "standard"; then
