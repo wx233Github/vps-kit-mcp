@@ -445,6 +445,82 @@ tx_begin() {
   tx_transition "created" "transaction created"
 }
 
+# systemd nginx 自愈检测
+_collect_port_occupiers() {
+  local result=""
+  local ss_output=""
+  if command -v ss >/dev/null 2>&1; then
+    ss_output=$(ss -lntp 2>/dev/null | grep -E ':(80|443)\b' || true)
+    if [ -n "$ss_output" ]; then
+      result=$(printf '%s\n' "$ss_output" | awk -F'users:' 'NF>1 {print $2}' | sed -E 's/\(\("//g; s/"\,pid\=/ /g; s/,fd=[0-9]+\)//g; s/\)\)$//g; s/\),\("/ /g' | awk '{
+        for (i=1; i<=NF; i+=2) {
+          name=$(i)
+          pid=$(i+1)
+          if (name != "" && pid != "") {
+            key=name ":" pid
+            if (!seen[key]++) {
+              if (out != "") out = out ", "
+              out = out key
+            }
+          }
+        }
+      } END { print out }')
+    fi
+  fi
+  if [ -z "$result" ] && command -v lsof >/dev/null 2>&1; then
+    result=$( (
+      lsof -iTCP:80 -sTCP:LISTEN -n -P 2>/dev/null
+      lsof -iTCP:443 -sTCP:LISTEN -n -P 2>/dev/null
+    ) | awk '$1!="COMMAND" {key=$1 ":" $2; if (!seen[key]++) { if (out!="") out=out ", "; out=out key }} END { print out }')
+  fi
+  printf '%s' "$result"
+}
+
+_collect_systemd_nginx_fail_reason() {
+  local reason=""
+  if command -v journalctl >/dev/null 2>&1; then
+    reason=$(journalctl -u nginx -n 3 --no-pager 2>/dev/null | awk 'NF{line=$0} END{print line}')
+  fi
+  if [ -z "$reason" ]; then
+    reason=$(systemctl status nginx --no-pager -l 2>/dev/null | awk 'NF{line=$0} END{print line}')
+  fi
+  if [ -z "$reason" ]; then
+    reason="systemctl enable --now nginx 失败"
+  fi
+  printf '%s' "$reason"
+}
+
+_ensure_systemd_nginx_running_or_warn() {
+  local target="nginx.service"
+  local strategy="systemctl"
+  local domain="*"
+  if ! command -v systemctl >/dev/null 2>&1; then
+    log_message WARN "❌ systemd nginx 未启动（原因: 缺少 systemctl, domain=${domain}, target=${target}, strategy=${strategy}）"
+    return 1
+  fi
+  if systemctl is-active --quiet nginx >/dev/null 2>&1; then
+    return 0
+  fi
+  local occupiers=""
+  occupiers=$(_collect_port_occupiers)
+  if [ -n "$occupiers" ]; then
+    log_message ERROR "❌ systemd nginx 未启动（原因: 80/443 被占用, domain=${domain}, target=${target}, strategy=${strategy}, pids=${occupiers}）"
+    return 1
+  fi
+  if [ "${DRY_RUN:-false}" = "true" ]; then
+    log_message INFO "[DRY-RUN] systemctl enable --now nginx"
+    return 0
+  fi
+  if systemctl enable --now nginx >/dev/null 2>&1; then
+    log_message SUCCESS "✅ systemd nginx 已自动启用并启动"
+    return 0
+  fi
+  local reason=""
+  reason=$(_collect_systemd_nginx_fail_reason)
+  log_message ERROR "❌ systemd nginx 启动失败（原因: ${reason}, domain=${domain}, target=${target}, strategy=${strategy}）"
+  return 1
+}
+
 tx_transition() {
   local to="${1:-}"
   local msg="${2:-}"

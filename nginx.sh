@@ -4648,6 +4648,8 @@ main() {
     return "${EX_USAGE:-64}"
   fi
 
+  _ensure_systemd_nginx_running_or_warn || true
+
   if ! install_acme_sh; then
     return 1
   fi
