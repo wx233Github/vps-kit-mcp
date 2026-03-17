@@ -627,7 +627,6 @@ _escape_markdown() {
   echo "$input" | sed 's/_/\\_/g; s/\*/\\*/g; s/`/\\`/g; s/\[/\\[/g'
 }
 
-# 拉取失败时提示本地镜像信息
 _get_watchtower_local_image_info() {
   local image="${1:-}"
   if [ -z "$image" ]; then return 1; fi
@@ -653,6 +652,34 @@ _log_watchtower_pull_failure() {
   fi
   log_warn "镜像拉取失败，且本地未找到可用镜像。"
   return 1
+}
+
+_select_watchtower_image() {
+  local primary="${1:-}"
+  local fallback="${2:-}"
+  local selected="$primary"
+  if [ -z "$primary" ]; then return 1; fi
+  if ! JB_SUDO_LOG_QUIET="true" run_with_sudo docker pull "$primary" >/dev/null 2>&1; then
+    log_warn "GHCR 拉取失败，尝试 Docker Hub 镜像..."
+    if [ -n "$fallback" ] && JB_SUDO_LOG_QUIET="true" run_with_sudo docker pull "$fallback" >/dev/null 2>&1; then
+      selected="$fallback"
+      log_info "已回退使用 Docker Hub 镜像: ${fallback}"
+    else
+      local primary_info=""
+      local fallback_info=""
+      primary_info=$(_get_watchtower_local_image_info "$primary" || true)
+      fallback_info=$(_get_watchtower_local_image_info "$fallback" || true)
+      if [ -n "$primary_info" ]; then
+        log_warn "镜像拉取失败，继续使用本地镜像（可能较旧）。${primary_info}"
+      elif [ -n "$fallback_info" ]; then
+        log_warn "镜像拉取失败，继续使用本地镜像（可能较旧）。${fallback_info}"
+        selected="$fallback"
+      else
+        log_warn "镜像拉取失败，且本地未找到可用镜像。"
+      fi
+    fi
+  fi
+  printf '%s' "$selected"
 }
 
 # --- 通知发送函数 ---
@@ -825,7 +852,9 @@ _start_watchtower_container_logic() {
   local wt_interval="$1"
   local mode_description="$2"
   local interactive_mode="${3:-false}"
-  local wt_image="containrrr/watchtower"
+  local wt_image_primary="ghcr.io/containrrr/watchtower:latest"
+  local wt_image_fallback="containrrr/watchtower:latest"
+  local wt_image=""
   local container_names=()
   local run_hostname="${WATCHTOWER_HOST_ALIAS:-DockerNode}"
   _generate_env_file "$ENV_FILE"
@@ -862,9 +891,7 @@ _start_watchtower_container_logic() {
     [ "$interactive_mode" = "false" ] && log_info "计算后的监控范围: ${container_names[*]}"
   else [ "$interactive_mode" = "false" ] && log_info "未发现忽略名单，将监控所有容器。"; fi
   if [ "$interactive_mode" = "false" ]; then echo "⬇️ 正在拉取 Watchtower 镜像..."; fi
-  if ! JB_SUDO_LOG_QUIET="true" run_with_sudo docker pull "$wt_image" >/dev/null 2>&1; then
-    _log_watchtower_pull_failure "$wt_image" || true
-  fi
+  wt_image=$(_select_watchtower_image "$wt_image_primary" "$wt_image_fallback")
   [ "$interactive_mode" = "false" ] && _print_header "正在启动 $mode_description"
 
   local final_command_to_run=(docker run "${docker_run_args[@]}" "$wt_image" "${wt_args[@]}" "${container_names[@]}")

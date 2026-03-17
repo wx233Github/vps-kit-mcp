@@ -19,3 +19,28 @@
   [ "$status" -eq 0 ]
   [[ "$output" == *"本地镜像: containrrr/watchtower"* ]]
 }
+
+@test "watchtower pull falls back to docker hub" {
+  run bash -c '
+    set -euo pipefail
+    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+
+    log_warn() { printf "%s\n" "$*"; }
+    log_info() { printf "%s\n" "$*"; }
+    run_with_sudo() {
+      if [ "$1" = "docker" ] && [ "$2" = "pull" ] && [ "$3" = "ghcr.io/containrrr/watchtower:latest" ]; then
+        return 1
+      fi
+      if [ "$1" = "docker" ] && [ "$2" = "pull" ] && [ "$3" = "containrrr/watchtower:latest" ]; then
+        return 0
+      fi
+      return 1
+    }
+
+    selected=$(_select_watchtower_image "ghcr.io/containrrr/watchtower:latest" "containrrr/watchtower:latest")
+    printf "%s\n" "$selected"
+  '
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"已回退使用 Docker Hub 镜像"* ]]
+  [[ "$output" == *"containrrr/watchtower:latest"* ]]
+}
