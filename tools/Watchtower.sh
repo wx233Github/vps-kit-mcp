@@ -627,6 +627,34 @@ _escape_markdown() {
   echo "$input" | sed 's/_/\\_/g; s/\*/\\*/g; s/`/\\`/g; s/\[/\\[/g'
 }
 
+# 拉取失败时提示本地镜像信息
+_get_watchtower_local_image_info() {
+  local image="${1:-}"
+  if [ -z "$image" ]; then return 1; fi
+  local info=""
+  info=$(JB_SUDO_LOG_QUIET="true" run_with_sudo docker image inspect "$image" --format '{{.Id}}|{{.Created}}' 2>/dev/null || true)
+  if [ -z "$info" ]; then return 1; fi
+  local image_id=""
+  local created=""
+  local short_id=""
+  image_id=${info%%|*}
+  created=${info#*|}
+  short_id=${image_id#sha256:}
+  short_id=${short_id:0:12}
+  printf '%s' "本地镜像: ${image} (${short_id:-unknown}, created=${created:-unknown})"
+}
+
+_log_watchtower_pull_failure() {
+  local image="${1:-}"
+  local local_info=""
+  if local_info=$(_get_watchtower_local_image_info "$image"); then
+    log_warn "镜像拉取失败，继续使用本地镜像（可能较旧）。${local_info}"
+    return 0
+  fi
+  log_warn "镜像拉取失败，且本地未找到可用镜像。"
+  return 1
+}
+
 # --- 通知发送函数 ---
 send_test_notify() {
   local message="$1"
@@ -834,7 +862,9 @@ _start_watchtower_container_logic() {
     [ "$interactive_mode" = "false" ] && log_info "计算后的监控范围: ${container_names[*]}"
   else [ "$interactive_mode" = "false" ] && log_info "未发现忽略名单，将监控所有容器。"; fi
   if [ "$interactive_mode" = "false" ]; then echo "⬇️ 正在拉取 Watchtower 镜像..."; fi
-  if ! JB_SUDO_LOG_QUIET="true" run_with_sudo docker pull "$wt_image" >/dev/null 2>&1; then log_warn "镜像拉取可能使用了缓存或遇到网络问题，继续尝试启动..."; fi
+  if ! JB_SUDO_LOG_QUIET="true" run_with_sudo docker pull "$wt_image" >/dev/null 2>&1; then
+    _log_watchtower_pull_failure "$wt_image" || true
+  fi
   [ "$interactive_mode" = "false" ] && _print_header "正在启动 $mode_description"
 
   local final_command_to_run=(docker run "${docker_run_args[@]}" "$wt_image" "${wt_args[@]}" "${container_names[@]}")
