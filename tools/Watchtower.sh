@@ -627,6 +627,29 @@ _escape_markdown() {
   echo "$input" | sed 's/_/\\_/g; s/\*/\\*/g; s/`/\\`/g; s/\[/\\[/g'
 }
 
+_get_watchtower_latest_release_tag() {
+  local url="https://github.com/containrrr/watchtower/releases/latest"
+  local effective=""
+  local tag=""
+  if ! command -v curl &>/dev/null; then
+    log_warn "未找到 curl，无法获取 Watchtower 最新版本标签，回退 latest。"
+    return 1
+  fi
+  effective=$(curl -fsSIL -H "User-Agent: vps-kit-mcp" -o /dev/null -w '%{url_effective}' "$url" 2>/dev/null || true)
+  if [ -z "$effective" ]; then
+    log_warn "获取 Watchtower 最新版本标签失败，回退 latest。"
+    return 1
+  fi
+  if [[ "$effective" =~ /tag/([^/]+)$ ]]; then
+    tag="${BASH_REMATCH[1]}"
+  fi
+  if [ -z "$tag" ]; then
+    log_warn "解析 Watchtower 最新版本标签失败，回退 latest。"
+    return 1
+  fi
+  printf '%s' "$tag"
+}
+
 _get_watchtower_local_image_info() {
   local image="${1:-}"
   if [ -z "$image" ]; then return 1; fi
@@ -852,8 +875,16 @@ _start_watchtower_container_logic() {
   local wt_interval="$1"
   local mode_description="$2"
   local interactive_mode="${3:-false}"
-  local wt_image_primary="ghcr.io/containrrr/watchtower:latest"
-  local wt_image_fallback="containrrr/watchtower:latest"
+  local wt_tag="latest"
+  local latest_tag=""
+  if latest_tag=$(_get_watchtower_latest_release_tag); then
+    wt_tag="$latest_tag"
+    log_info "已获取 Watchtower 最新版本标签: ${wt_tag}"
+  else
+    log_warn "使用默认镜像标签: latest"
+  fi
+  local wt_image_primary="ghcr.io/containrrr/watchtower:${wt_tag}"
+  local wt_image_fallback="containrrr/watchtower:${wt_tag}"
   local wt_image=""
   local container_names=()
   local run_hostname="${WATCHTOWER_HOST_ALIAS:-DockerNode}"
