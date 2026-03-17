@@ -682,27 +682,66 @@ _select_watchtower_image() {
   local fallback="${2:-}"
   local selected="$primary"
   if [ -z "$primary" ]; then return 1; fi
-  if ! JB_SUDO_LOG_QUIET="true" run_with_sudo docker pull "$primary" >/dev/null 2>&1; then
-    log_warn "GHCR 拉取失败，尝试 Docker Hub 镜像..."
-    if [ -n "$fallback" ] && JB_SUDO_LOG_QUIET="true" run_with_sudo docker pull "$fallback" >/dev/null 2>&1; then
-      selected="$fallback"
-      log_info "已回退使用 Docker Hub 镜像: ${fallback}"
-    else
-      local primary_info=""
-      local fallback_info=""
-      primary_info=$(_get_watchtower_local_image_info "$primary" || true)
-      fallback_info=$(_get_watchtower_local_image_info "$fallback" || true)
-      if [ -n "$primary_info" ]; then
-        log_warn "镜像拉取失败，继续使用本地镜像（可能较旧）。${primary_info}"
-      elif [ -n "$fallback_info" ]; then
-        log_warn "镜像拉取失败，继续使用本地镜像（可能较旧）。${fallback_info}"
-        selected="$fallback"
-      else
-        log_warn "镜像拉取失败，且本地未找到可用镜像。"
-      fi
-    fi
+  if JB_SUDO_LOG_QUIET="true" run_with_sudo docker pull "$primary" >/dev/null 2>&1; then
+    printf '%s' "$selected"
+    return 0
   fi
-  printf '%s' "$selected"
+
+  log_warn "GHCR 拉取失败，尝试 Docker Hub 镜像..."
+  if [ -n "$fallback" ] && JB_SUDO_LOG_QUIET="true" run_with_sudo docker pull "$fallback" >/dev/null 2>&1; then
+    selected="$fallback"
+    log_info "已回退使用 Docker Hub 镜像: ${fallback}"
+    printf '%s' "$selected"
+    return 0
+  fi
+
+  local primary_info=""
+  local fallback_info=""
+  primary_info=$(_get_watchtower_local_image_info "$primary" || true)
+  fallback_info=$(_get_watchtower_local_image_info "$fallback" || true)
+  if [ -n "$primary_info" ]; then
+    log_warn "镜像拉取失败，继续使用本地镜像（可能较旧）。${primary_info}"
+    printf '%s' "$selected"
+    return 0
+  fi
+  if [ -n "$fallback_info" ]; then
+    log_warn "镜像拉取失败，继续使用本地镜像（可能较旧）。${fallback_info}"
+    selected="$fallback"
+    printf '%s' "$selected"
+    return 0
+  fi
+
+  log_warn "镜像拉取失败，且本地未找到可用镜像。"
+  return 1
+}
+
+_select_watchtower_image_with_tag_fallback() {
+  local tag="${1:-}"
+  local fallback_tag="${2:-}"
+  local primary_repo="${3:-}"
+  local fallback_repo="${4:-}"
+  local selected=""
+
+  if [ -z "$tag" ] || [ -z "$primary_repo" ]; then
+    return 1
+  fi
+
+  selected=$(_select_watchtower_image "${primary_repo}:${tag}" "${fallback_repo}:${tag}" || true)
+  if [ -n "$selected" ]; then
+    printf '%s' "$selected"
+    return 0
+  fi
+
+  if [ -n "$fallback_tag" ]; then
+    log_warn "Release 标签 ${tag} 无可用镜像，尝试 ${fallback_tag}"
+    selected=$(_select_watchtower_image "${primary_repo}:${fallback_tag}" "${fallback_repo}:${fallback_tag}" || true)
+  fi
+
+  if [ -n "$selected" ]; then
+    printf '%s' "$selected"
+    return 0
+  fi
+  return 1
 }
 
 # --- 通知发送函数 ---
@@ -877,14 +916,19 @@ _start_watchtower_container_logic() {
   local interactive_mode="${3:-false}"
   local wt_tag="latest"
   local latest_tag=""
+  local fallback_tag=""
   if latest_tag=$(_get_watchtower_latest_release_tag); then
     wt_tag="$latest_tag"
     log_info "已获取 Watchtower 最新版本标签: ${wt_tag}"
   else
     log_warn "使用默认镜像标签: latest"
   fi
-  local wt_image_primary="ghcr.io/containrrr/watchtower:${wt_tag}"
-  local wt_image_fallback="containrrr/watchtower:${wt_tag}"
+  # release tag 带 v 前缀时，额外兜底尝试去掉 v 的镜像标签
+  if [[ "$wt_tag" =~ ^v[0-9] ]]; then
+    fallback_tag="${wt_tag#v}"
+  fi
+  local wt_image_primary_repo="ghcr.io/containrrr/watchtower"
+  local wt_image_fallback_repo="containrrr/watchtower"
   local wt_image=""
   local container_names=()
   local run_hostname="${WATCHTOWER_HOST_ALIAS:-DockerNode}"
@@ -922,7 +966,11 @@ _start_watchtower_container_logic() {
     [ "$interactive_mode" = "false" ] && log_info "计算后的监控范围: ${container_names[*]}"
   else [ "$interactive_mode" = "false" ] && log_info "未发现忽略名单，将监控所有容器。"; fi
   if [ "$interactive_mode" = "false" ]; then echo "⬇️ 正在拉取 Watchtower 镜像..."; fi
-  wt_image=$(_select_watchtower_image "$wt_image_primary" "$wt_image_fallback")
+  wt_image=$(_select_watchtower_image_with_tag_fallback "$wt_tag" "$fallback_tag" "$wt_image_primary_repo" "$wt_image_fallback_repo" || true)
+  if [ -z "$wt_image" ]; then
+    log_error "镜像拉取失败，且本地未找到可用镜像。"
+    return "${ERR_RUNTIME}"
+  fi
   [ "$interactive_mode" = "false" ] && _print_header "正在启动 $mode_description"
 
   local final_command_to_run=(docker run "${docker_run_args[@]}" "$wt_image" "${wt_args[@]}" "${container_names[@]}")

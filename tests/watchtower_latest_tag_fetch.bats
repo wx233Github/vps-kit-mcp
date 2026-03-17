@@ -44,3 +44,30 @@ EOF
   [[ "$output" == *"回退 latest"* ]]
   [[ "$output" == *"fallback"* ]]
 }
+
+@test "watchtower tag fallback strips leading v" {
+  run bash -c '
+    set -euo pipefail
+    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+
+    log_warn() { printf "%s\n" "$*" >&2; }
+    log_info() { printf "%s\n" "$*" >&2; }
+    run_with_sudo() {
+      if [ "$1" = "docker" ] && [ "$2" = "pull" ]; then
+        case "$3" in
+        ghcr.io/containrrr/watchtower:v1.7.1) return 1 ;;
+        containrrr/watchtower:v1.7.1) return 1 ;;
+        ghcr.io/containrrr/watchtower:1.7.1) return 0 ;;
+        *) return 1 ;;
+        esac
+      fi
+      return 1
+    }
+
+    image=$(_select_watchtower_image_with_tag_fallback "v1.7.1" "1.7.1" "ghcr.io/containrrr/watchtower" "containrrr/watchtower")
+    printf "%s\n" "$image"
+  '
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"尝试 1.7.1"* ]]
+  [[ "$output" == *"ghcr.io/containrrr/watchtower:1.7.1"* ]]
+}
