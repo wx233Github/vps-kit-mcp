@@ -29,9 +29,17 @@ readonly SCRIPT_DIR
 readonly CONFIG_FILE="$HOME/.docker-auto-update-watchtower.conf"
 readonly ENV_FILE="${SCRIPT_DIR}/watchtower.env"
 readonly ENV_FILE_LAST_RUN="${SCRIPT_DIR}/watchtower.env.last_run"
+readonly WATCHTOWER_CONTAINER_NAME="watchtower"
+readonly WATCHTOWER_DOCKER_NAMES_FORMAT='{{.Names}}'
+readonly WATCHTOWER_INSPECT_ENV_FORMAT='{{json .Config.Env}}'
+readonly WATCHTOWER_INSPECT_CMD_FORMAT='{{json .Config.Cmd}}'
+readonly WATCHTOWER_INSPECT_CREATED_FORMAT='{{.Created}}'
 
 # --- 全局会话密码变量 ---
 SESSION_ENCRYPTION_PASSWORD=""
+
+readonly WATCHTOWER_DEFAULT_INTERVAL_SECONDS="21600"
+readonly WATCHTOWER_DEFAULT_NOTIFY_ON_NO_UPDATES="true"
 
 # --- 全局临时文件管理 ---
 declare -a TEMP_FILES=()
@@ -56,7 +64,7 @@ watchtower_validate_args() {
 		echo "  --run-once                Execute a single scan and exit"
 		echo "  --systemd-start           Start the service (for systemd)"
 		echo "  --systemd-stop            Stop the service (for systemd)"
-		echo "  --generate-systemd-service  Generate and install the systemd service file"
+		echo "  --generate-systemd-service  Deprecated no-op (systemd file generation removed)"
 		echo "  --diagnose                Print runtime diagnostics"
 		echo "  --export-config           Export current config to timestamp file"
 		echo "  --import-config <file>    Import config from specified file"
@@ -64,7 +72,7 @@ watchtower_validate_args() {
 		;;
 	*)
 		log_error "未知参数: $arg"
-		echo "Usage: $0 [--run-once|--systemd-start|--systemd-stop|--generate-systemd-service|--diagnose|--export-config|--import-config <file>]" >&2
+		echo "Usage: $0 [--run-once|--systemd-start|--systemd-stop|--generate-systemd-service(deprecated)|--diagnose|--export-config|--import-config <file>]" >&2
 		exit "${ERR_USAGE}"
 		;;
 	esac
@@ -329,6 +337,7 @@ WATCHTOWER_IMAGE_FALLBACK_REPO=""
 WATCHTOWER_IMAGE_TAG=""
 WATCHTOWER_ALLOW_LOCAL_IMAGE_FALLBACK=""
 WATCHTOWER_DOCKER_API_VERSION=""
+WATCHTOWER_NOTIFY_ON_NO_UPDATES=""
 
 # --- 加密相关函数 ---
 _get_encryption_password() {
@@ -373,11 +382,239 @@ _apply_config_kv() {
 	return 1
 }
 
+_normalize_bool_value() {
+	local raw_value="${1:-}"
+	local default_value="${2:-false}"
+	case "$raw_value" in
+	true | TRUE | True | 1 | yes | YES | Yes | on | ON | On) printf '%s' "true" ;;
+	false | FALSE | False | 0 | no | NO | No | off | OFF | Off) printf '%s' "false" ;;
+	"") printf '%s' "$default_value" ;;
+	*)
+		log_warn "布尔配置值非法: ${raw_value}，已回退为 ${default_value}"
+		printf '%s' "$default_value"
+		;;
+	esac
+}
+
+_is_watchtower_bool_value() {
+	case "${1:-}" in
+	true | TRUE | True | 1 | yes | YES | Yes | on | ON | On | false | FALSE | False | 0 | no | NO | No | off | OFF | Off) return 0 ;;
+	*) return 1 ;;
+	esac
+}
+
+_validate_watchtower_identifier_value() {
+	local value="${1:-}"
+	local pattern="${2:-^[A-Za-z0-9._:-]+$}"
+	[ -z "$value" ] && return 0
+	[[ "$value" =~ $pattern ]]
+}
+
+_validate_watchtower_runtime_state() {
+	case "${WATCHTOWER_RUN_MODE:-interval}" in
+	interval | cron | aligned) ;;
+	*)
+		log_error "Watchtower 运行模式无效: ${WATCHTOWER_RUN_MODE:-}"
+		return "${ERR_CONFIG}"
+		;;
+	esac
+
+	if [[ "${WATCHTOWER_RUN_MODE:-interval}" == "interval" ]]; then
+		if ! [[ "${WATCHTOWER_CONFIG_INTERVAL:-}" =~ ^[1-9][0-9]*$ ]]; then
+			log_error "Watchtower 检测间隔无效: ${WATCHTOWER_CONFIG_INTERVAL:-}"
+			return "${ERR_CONFIG}"
+		fi
+	fi
+
+	if ! _validate_watchtower_identifier_value "${WATCHTOWER_IMAGE_PRIMARY_REPO:-}" '^[A-Za-z0-9./:_-]+$'; then
+		log_error "Watchtower 主镜像仓库配置无效: ${WATCHTOWER_IMAGE_PRIMARY_REPO:-}"
+		return "${ERR_CONFIG}"
+	fi
+	if ! _validate_watchtower_identifier_value "${WATCHTOWER_IMAGE_FALLBACK_REPO:-}" '^[A-Za-z0-9./:_-]+$'; then
+		log_error "Watchtower 回退镜像仓库配置无效: ${WATCHTOWER_IMAGE_FALLBACK_REPO:-}"
+		return "${ERR_CONFIG}"
+	fi
+	if ! _validate_watchtower_identifier_value "${WATCHTOWER_IMAGE_TAG:-}" '^[A-Za-z0-9._-]+$'; then
+		log_error "Watchtower 镜像标签配置无效: ${WATCHTOWER_IMAGE_TAG:-}"
+		return "${ERR_CONFIG}"
+	fi
+	if ! _validate_watchtower_identifier_value "${WATCHTOWER_DOCKER_API_VERSION:-}" '^[0-9]+(\.[0-9]+)?$'; then
+		log_error "Watchtower Docker API 版本配置无效: ${WATCHTOWER_DOCKER_API_VERSION:-}"
+		return "${ERR_CONFIG}"
+	fi
+	if ! _validate_watchtower_identifier_value "${WATCHTOWER_HOST_ALIAS:-}" '^[A-Za-z0-9._-]+$'; then
+		log_error "Watchtower 主机别名配置无效: ${WATCHTOWER_HOST_ALIAS:-}"
+		return "${ERR_CONFIG}"
+	fi
+	if [ -n "${WATCHTOWER_HOST_ALIAS:-}" ] && [ "${#WATCHTOWER_HOST_ALIAS}" -gt 15 ]; then
+		log_error "Watchtower 主机别名过长: ${WATCHTOWER_HOST_ALIAS}"
+		return "${ERR_CONFIG}"
+	fi
+	if ! _validate_watchtower_identifier_value "${WATCHTOWER_IPV4_INTERFACE:-}" '^[A-Za-z0-9_.:-]+$'; then
+		log_error "Watchtower IPv4 接口配置无效: ${WATCHTOWER_IPV4_INTERFACE:-}"
+		return "${ERR_CONFIG}"
+	fi
+	if ! _validate_watchtower_identifier_value "${WATCHTOWER_IPV6_INTERFACE:-}" '^[A-Za-z0-9_.:-]+$'; then
+		log_error "Watchtower IPv6 接口配置无效: ${WATCHTOWER_IPV6_INTERFACE:-}"
+		return "${ERR_CONFIG}"
+	fi
+
+	return "${ERR_OK}"
+}
+
+_repair_watchtower_loaded_config() {
+	if ! [[ "${WATCHTOWER_CONFIG_INTERVAL:-}" =~ ^[1-9][0-9]*$ ]]; then
+		log_warn "Watchtower 检测间隔非法，已回退默认值: ${WATCHTOWER_CONFIG_INTERVAL:-}"
+		WATCHTOWER_CONFIG_INTERVAL="${WATCHTOWER_CONF_DEFAULT_INTERVAL:-${WATCHTOWER_DEFAULT_INTERVAL_SECONDS}}"
+		if ! [[ "$WATCHTOWER_CONFIG_INTERVAL" =~ ^[1-9][0-9]*$ ]]; then
+			WATCHTOWER_CONFIG_INTERVAL="${WATCHTOWER_DEFAULT_INTERVAL_SECONDS}"
+		fi
+	fi
+
+	case "${WATCHTOWER_RUN_MODE:-interval}" in
+	interval | cron | aligned) ;;
+	*)
+		log_warn "Watchtower 运行模式非法，已回退为 interval: ${WATCHTOWER_RUN_MODE:-}"
+		WATCHTOWER_RUN_MODE="interval"
+		WATCHTOWER_SCHEDULE_CRON=""
+		;;
+	esac
+
+	if [[ "$WATCHTOWER_RUN_MODE" == "cron" || "$WATCHTOWER_RUN_MODE" == "aligned" ]] && [ -n "$WATCHTOWER_SCHEDULE_CRON" ]; then
+		if ! _validate_watchtower_cron_expression "$WATCHTOWER_SCHEDULE_CRON"; then
+			log_warn "Watchtower Cron 配置非法，已回退为 interval: ${WATCHTOWER_SCHEDULE_CRON}"
+			WATCHTOWER_RUN_MODE="interval"
+			WATCHTOWER_SCHEDULE_CRON=""
+		fi
+	fi
+
+	if ! _validate_watchtower_identifier_value "${WATCHTOWER_IMAGE_PRIMARY_REPO:-}" '^[A-Za-z0-9./:_-]+$'; then
+		log_warn "Watchtower 主镜像仓库非法，已回退默认值: ${WATCHTOWER_IMAGE_PRIMARY_REPO:-}"
+		WATCHTOWER_IMAGE_PRIMARY_REPO="ghcr.io/containrrr/watchtower"
+	fi
+	if ! _validate_watchtower_identifier_value "${WATCHTOWER_IMAGE_FALLBACK_REPO:-}" '^[A-Za-z0-9./:_-]+$'; then
+		log_warn "Watchtower 回退镜像仓库非法，已回退默认值: ${WATCHTOWER_IMAGE_FALLBACK_REPO:-}"
+		WATCHTOWER_IMAGE_FALLBACK_REPO="containrrr/watchtower"
+	fi
+	if ! _validate_watchtower_identifier_value "${WATCHTOWER_IMAGE_TAG:-}" '^[A-Za-z0-9._-]+$'; then
+		log_warn "Watchtower 镜像标签非法，已回退默认值: ${WATCHTOWER_IMAGE_TAG:-}"
+		WATCHTOWER_IMAGE_TAG="latest"
+	fi
+	if ! _validate_watchtower_identifier_value "${WATCHTOWER_DOCKER_API_VERSION:-}" '^[0-9]+(\.[0-9]+)?$'; then
+		log_warn "Watchtower Docker API 版本非法，已回退自动检测: ${WATCHTOWER_DOCKER_API_VERSION:-}"
+		WATCHTOWER_DOCKER_API_VERSION=""
+	fi
+	if ! _validate_watchtower_identifier_value "${WATCHTOWER_HOST_ALIAS:-}" '^[A-Za-z0-9._-]+$'; then
+		log_warn "Watchtower 主机别名非法，已回退默认值: ${WATCHTOWER_HOST_ALIAS:-}"
+		WATCHTOWER_HOST_ALIAS="DockerNode"
+	fi
+	if [ -n "${WATCHTOWER_HOST_ALIAS:-}" ] && [ "${#WATCHTOWER_HOST_ALIAS}" -gt 15 ]; then
+		log_warn "Watchtower 主机别名过长，已回退默认值: ${WATCHTOWER_HOST_ALIAS}"
+		WATCHTOWER_HOST_ALIAS="DockerNode"
+	fi
+	if ! _validate_watchtower_identifier_value "${WATCHTOWER_IPV4_INTERFACE:-}" '^[A-Za-z0-9_.:-]+$'; then
+		log_warn "Watchtower IPv4 接口非法，已清空: ${WATCHTOWER_IPV4_INTERFACE:-}"
+		WATCHTOWER_IPV4_INTERFACE=""
+	fi
+	if ! _validate_watchtower_identifier_value "${WATCHTOWER_IPV6_INTERFACE:-}" '^[A-Za-z0-9_.:-]+$'; then
+		log_warn "Watchtower IPv6 接口非法，已清空: ${WATCHTOWER_IPV6_INTERFACE:-}"
+		WATCHTOWER_IPV6_INTERFACE=""
+	fi
+}
+
+_watchtower_cron_number_in_range() {
+	local value="${1:-}"
+	local min_value="${2:-0}"
+	local max_value="${3:-0}"
+	[[ "$value" =~ ^[0-9]+$ ]] || return 1
+	[ "$value" -ge "$min_value" ] && [ "$value" -le "$max_value" ]
+}
+
+_validate_watchtower_cron_field() {
+	local field_value="${1:-}"
+	local min_value="${2:-0}"
+	local max_value="${3:-0}"
+	local old_ifs="${IFS:-}"
+	local part=""
+	local range_start=""
+	local range_end=""
+	local step_value=""
+
+	[ -n "$field_value" ] || return 1
+	IFS=','
+	read -r -a _watchtower_cron_parts <<<"$field_value"
+	IFS="$old_ifs"
+
+	for part in "${_watchtower_cron_parts[@]}"; do
+		[ -n "$part" ] || return 1
+		case "$part" in
+		\*)
+			continue
+			;;
+		\*/[0-9]*)
+			step_value="${part#*/}"
+			_watchtower_cron_number_in_range "$step_value" 1 "$max_value" || return 1
+			continue
+			;;
+		esac
+
+		if [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+			range_start="${BASH_REMATCH[1]}"
+			range_end="${BASH_REMATCH[2]}"
+			_watchtower_cron_number_in_range "$range_start" "$min_value" "$max_value" || return 1
+			_watchtower_cron_number_in_range "$range_end" "$min_value" "$max_value" || return 1
+			[ "$range_start" -le "$range_end" ] || return 1
+			continue
+		fi
+
+		_watchtower_cron_number_in_range "$part" "$min_value" "$max_value" || return 1
+	done
+
+	return 0
+}
+
+_validate_watchtower_cron_expression() {
+	local cron_expr="${1:-}"
+	local sec=""
+	local min=""
+	local hour=""
+	local day=""
+	local month=""
+	local dow=""
+	local extra=""
+	local old_ifs="${IFS:-}"
+
+	IFS=' '
+	read -r sec min hour day month dow extra <<<"$cron_expr"
+	IFS="$old_ifs"
+	if [ -n "$extra" ] || [ -z "$sec" ] || [ -z "$min" ] || [ -z "$hour" ] || [ -z "$day" ] || [ -z "$month" ] || [ -z "$dow" ]; then
+		return 1
+	fi
+
+	_validate_watchtower_cron_field "$sec" 0 59 || return 1
+	_validate_watchtower_cron_field "$min" 0 59 || return 1
+	_validate_watchtower_cron_field "$hour" 0 23 || return 1
+	_validate_watchtower_cron_field "$day" 1 31 || return 1
+	_validate_watchtower_cron_field "$month" 1 12 || return 1
+	_validate_watchtower_cron_field "$dow" 0 7 || return 1
+	return 0
+}
+
+_load_watchtower_module_defaults() {
+	local default_interval="${WATCHTOWER_CONF_DEFAULT_INTERVAL:-${WATCHTOWER_DEFAULT_INTERVAL_SECONDS}}"
+	if ! [[ "$default_interval" =~ ^[0-9]+$ ]] || [ "$default_interval" -le 0 ]; then
+		default_interval="${WATCHTOWER_DEFAULT_INTERVAL_SECONDS}"
+	fi
+
+	WATCHTOWER_EXCLUDE_LIST="${WATCHTOWER_CONF_EXCLUDE_CONTAINERS:-}"
+	WATCHTOWER_CONFIG_INTERVAL="$default_interval"
+	WATCHTOWER_NOTIFY_ON_NO_UPDATES="$(_normalize_bool_value "${WATCHTOWER_CONF_NOTIFY_ON_NO_UPDATES:-}" "${WATCHTOWER_DEFAULT_NOTIFY_ON_NO_UPDATES}")"
+}
+
 load_config() {
 	if [ ! -f "$CONFIG_FILE" ]; then
-		WATCHTOWER_EXCLUDE_LIST=""
+		_load_watchtower_module_defaults
 		WATCHTOWER_EXTRA_ARGS=""
-		WATCHTOWER_CONFIG_INTERVAL="21600"
 		WATCHTOWER_ENABLED="false"
 		WATCHTOWER_HOST_ALIAS=$(hostname | cut -d'.' -f1 | tr -d '\n')
 		[ "${#WATCHTOWER_HOST_ALIAS}" -gt 15 ] && WATCHTOWER_HOST_ALIAS="DockerNode"
@@ -426,7 +663,7 @@ load_config() {
 	WATCHTOWER_EXCLUDE_LIST="${WATCHTOWER_EXCLUDE_LIST:-}"
 	WATCHTOWER_EXTRA_ARGS="${WATCHTOWER_EXTRA_ARGS:-}"
 	WATCHTOWER_DEBUG_ENABLED="${WATCHTOWER_DEBUG_ENABLED:-false}"
-	WATCHTOWER_CONFIG_INTERVAL="${WATCHTOWER_CONFIG_INTERVAL:-21600}"
+	WATCHTOWER_CONFIG_INTERVAL="${WATCHTOWER_CONFIG_INTERVAL:-${WATCHTOWER_CONF_DEFAULT_INTERVAL:-${WATCHTOWER_DEFAULT_INTERVAL_SECONDS}}}"
 	WATCHTOWER_ENABLED="${WATCHTOWER_ENABLED:-false}"
 	[ -z "$WATCHTOWER_HOST_ALIAS" ] && WATCHTOWER_HOST_ALIAS=$(hostname | cut -d'.' -f1 | tr -d '\n')
 
@@ -443,6 +680,8 @@ load_config() {
 	WATCHTOWER_IMAGE_TAG="${WATCHTOWER_IMAGE_TAG:-latest}"
 	WATCHTOWER_ALLOW_LOCAL_IMAGE_FALLBACK="${WATCHTOWER_ALLOW_LOCAL_IMAGE_FALLBACK:-true}"
 	WATCHTOWER_DOCKER_API_VERSION="${WATCHTOWER_DOCKER_API_VERSION:-}"
+	WATCHTOWER_NOTIFY_ON_NO_UPDATES="$(_normalize_bool_value "${WATCHTOWER_NOTIFY_ON_NO_UPDATES:-${WATCHTOWER_CONF_NOTIFY_ON_NO_UPDATES:-}}" "${WATCHTOWER_DEFAULT_NOTIFY_ON_NO_UPDATES}")"
+	_repair_watchtower_loaded_config
 
 	if [ -n "${WATCHTOWER_EXCLUDE_LIST:-}" ]; then
 		local old_ifs migrated_list=""
@@ -511,6 +750,7 @@ WATCHTOWER_IMAGE_FALLBACK_REPO="${WATCHTOWER_IMAGE_FALLBACK_REPO}"
 WATCHTOWER_IMAGE_TAG="${WATCHTOWER_IMAGE_TAG}"
 WATCHTOWER_ALLOW_LOCAL_IMAGE_FALLBACK="${WATCHTOWER_ALLOW_LOCAL_IMAGE_FALLBACK}"
 WATCHTOWER_DOCKER_API_VERSION="${WATCHTOWER_DOCKER_API_VERSION}"
+WATCHTOWER_NOTIFY_ON_NO_UPDATES="${WATCHTOWER_NOTIFY_ON_NO_UPDATES}"
 EOF
 
 	chmod 600 "$temp_config"
@@ -530,14 +770,113 @@ watchtower_export_config() {
 	return "${ERR_OK}"
 }
 
+_validate_watchtower_import_candidate() {
+	local candidate_file="${1:-}"
+	local validation_env_file=""
+	[ -n "$candidate_file" ] && [ -f "$candidate_file" ] || return "${ERR_CONFIG}"
+
+	validation_env_file=$(mktemp)
+	TEMP_FILES+=("$validation_env_file")
+
+	(
+		CONFIG_ENCRYPTED="false"
+		ENCRYPTED_TG_BOT_TOKEN=""
+		TG_BOT_TOKEN=""
+		TG_CHAT_ID=""
+		_load_watchtower_module_defaults
+		WATCHTOWER_EXTRA_ARGS=""
+		WATCHTOWER_DEBUG_ENABLED="false"
+		WATCHTOWER_ENABLED="false"
+		WATCHTOWER_HOST_ALIAS="DockerNode"
+		WATCHTOWER_RUN_MODE="interval"
+		WATCHTOWER_SCHEDULE_CRON=""
+		WATCHTOWER_IPV4_INTERFACE=""
+		WATCHTOWER_IPV6_INTERFACE=""
+		WATCHTOWER_IMAGE_PRIMARY_REPO="ghcr.io/containrrr/watchtower"
+		WATCHTOWER_IMAGE_FALLBACK_REPO="containrrr/watchtower"
+		WATCHTOWER_IMAGE_TAG="latest"
+		WATCHTOWER_ALLOW_LOCAL_IMAGE_FALLBACK="true"
+		WATCHTOWER_DOCKER_API_VERSION=""
+		WATCHTOWER_NOTIFY_ON_NO_UPDATES="${WATCHTOWER_DEFAULT_NOTIFY_ON_NO_UPDATES}"
+
+		local line=""
+		local key=""
+		local raw_value=""
+		local parsed_value=""
+		while IFS= read -r line || [ -n "$line" ]; do
+			[[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+			if [[ ! "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+				log_error "导入配置格式无效: $line"
+				exit "${ERR_CONFIG}"
+			fi
+			key="${BASH_REMATCH[1]}"
+			raw_value="${BASH_REMATCH[2]}"
+			parsed_value="$(_parse_config_value "$raw_value")"
+			_apply_config_kv "$key" "$parsed_value" || true
+		done <"$candidate_file"
+
+		if ! _is_watchtower_bool_value "${WATCHTOWER_DEBUG_ENABLED:-false}"; then
+			log_error "导入配置中的调试开关无效: ${WATCHTOWER_DEBUG_ENABLED:-}"
+			exit "${ERR_CONFIG}"
+		fi
+		if ! _is_watchtower_bool_value "${WATCHTOWER_ENABLED:-false}"; then
+			log_error "导入配置中的启用开关无效: ${WATCHTOWER_ENABLED:-}"
+			exit "${ERR_CONFIG}"
+		fi
+		if ! _is_watchtower_bool_value "${WATCHTOWER_ALLOW_LOCAL_IMAGE_FALLBACK:-true}"; then
+			log_error "导入配置中的本地镜像回退开关无效: ${WATCHTOWER_ALLOW_LOCAL_IMAGE_FALLBACK:-}"
+			exit "${ERR_CONFIG}"
+		fi
+		if ! _is_watchtower_bool_value "${WATCHTOWER_NOTIFY_ON_NO_UPDATES:-${WATCHTOWER_DEFAULT_NOTIFY_ON_NO_UPDATES}}"; then
+			log_error "导入配置中的无更新通知开关无效: ${WATCHTOWER_NOTIFY_ON_NO_UPDATES:-}"
+			exit "${ERR_CONFIG}"
+		fi
+
+		WATCHTOWER_DEBUG_ENABLED="$(_normalize_bool_value "${WATCHTOWER_DEBUG_ENABLED:-}" "false")"
+		WATCHTOWER_ENABLED="$(_normalize_bool_value "${WATCHTOWER_ENABLED:-}" "false")"
+		WATCHTOWER_ALLOW_LOCAL_IMAGE_FALLBACK="$(_normalize_bool_value "${WATCHTOWER_ALLOW_LOCAL_IMAGE_FALLBACK:-}" "true")"
+		WATCHTOWER_NOTIFY_ON_NO_UPDATES="$(_normalize_bool_value "${WATCHTOWER_NOTIFY_ON_NO_UPDATES:-}" "${WATCHTOWER_DEFAULT_NOTIFY_ON_NO_UPDATES}")"
+
+		if ! _validate_watchtower_runtime_state; then
+			exit "${ERR_CONFIG}"
+		fi
+
+		if [ -n "$WATCHTOWER_EXTRA_ARGS" ]; then
+			if ! _parse_watchtower_extra_args >/dev/null; then
+				exit "${ERR_CONFIG}"
+			fi
+		fi
+
+		if [[ "$WATCHTOWER_RUN_MODE" == "cron" || "$WATCHTOWER_RUN_MODE" == "aligned" ]] && [ -n "$WATCHTOWER_SCHEDULE_CRON" ]; then
+			_validate_watchtower_cron_expression "$WATCHTOWER_SCHEDULE_CRON" || {
+				log_error "导入配置中的 Cron 表达式无效: ${WATCHTOWER_SCHEDULE_CRON}"
+				exit "${ERR_CONFIG}"
+			}
+		fi
+
+		if ! _generate_env_file "$validation_env_file" >/dev/null; then
+			exit "${ERR_CONFIG}"
+		fi
+	)
+}
+
 watchtower_import_config() {
 	local in_file="${1:-}"
+	local staged_config=""
 	if [ -z "$in_file" ] || [ ! -f "$in_file" ]; then
 		log_error "导入文件不存在: ${in_file}"
 		return "${ERR_CONFIG}"
 	fi
+	staged_config=$(mktemp)
+	TEMP_FILES+=("$staged_config")
 	mkdir -p "$(dirname "$CONFIG_FILE")"
-	cp -f "$in_file" "$CONFIG_FILE"
+	cp -f "$in_file" "$staged_config"
+	chmod 600 "$staged_config" || true
+	if ! _validate_watchtower_import_candidate "$staged_config"; then
+		log_error "导入配置校验失败，已保留当前配置。"
+		return "${ERR_CONFIG}"
+	fi
+	mv -f "$staged_config" "$CONFIG_FILE"
 	chmod 600 "$CONFIG_FILE" || true
 	log_success "配置已导入: ${CONFIG_FILE}"
 	return "${ERR_OK}"
@@ -562,7 +901,7 @@ watchtower_diagnose() {
 		effective_api_version=$(_resolve_watchtower_docker_api_version 2>/dev/null || true)
 		printf 'docker=present\n'
 		printf 'watchtower_docker_api_version_effective=%s\n' "${effective_api_version:-unresolved}"
-		if JB_SUDO_LOG_QUIET="true" run_with_sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -qFx 'watchtower'; then
+		if _watchtower_is_running 2>/dev/null; then
 			printf 'watchtower_container=running\n'
 		else
 			printf 'watchtower_container=not_running\n'
@@ -686,6 +1025,38 @@ _log_watchtower_pull_failure() {
 	fi
 	log_warn "镜像拉取失败，且本地未找到可用镜像。"
 	return 1
+}
+
+_watchtower_is_running() {
+	JB_SUDO_LOG_QUIET="true" run_with_sudo docker ps --format "${WATCHTOWER_DOCKER_NAMES_FORMAT}" | grep -qFx "${WATCHTOWER_CONTAINER_NAME}"
+}
+
+_watchtower_exists() {
+	JB_SUDO_LOG_QUIET="true" run_with_sudo docker ps -a --format "${WATCHTOWER_DOCKER_NAMES_FORMAT}" | grep -qFx "${WATCHTOWER_CONTAINER_NAME}"
+}
+
+_watchtower_inspect_env() {
+	JB_SUDO_LOG_QUIET="true" run_with_sudo docker inspect "${WATCHTOWER_CONTAINER_NAME}" --format "${WATCHTOWER_INSPECT_ENV_FORMAT}"
+}
+
+_watchtower_inspect_cmd() {
+	JB_SUDO_LOG_QUIET="true" run_with_sudo docker inspect "${WATCHTOWER_CONTAINER_NAME}" --format "${WATCHTOWER_INSPECT_CMD_FORMAT}"
+}
+
+_watchtower_inspect_created() {
+	JB_SUDO_LOG_QUIET="true" run_with_sudo docker inspect --format "${WATCHTOWER_INSPECT_CREATED_FORMAT}" "${WATCHTOWER_CONTAINER_NAME}"
+}
+
+_watchtower_logs_tail() {
+	JB_SUDO_LOG_QUIET="true" run_with_sudo docker logs --tail 500 "${WATCHTOWER_CONTAINER_NAME}"
+}
+
+_watchtower_logs_follow() {
+	JB_SUDO_LOG_QUIET="true" run_with_sudo docker logs -f --tail 100 "${WATCHTOWER_CONTAINER_NAME}"
+}
+
+_remove_watchtower_container() {
+	JB_SUDO_LOG_QUIET="true" run_with_sudo docker rm -f "${WATCHTOWER_CONTAINER_NAME}" &>/dev/null || true
 }
 
 _select_watchtower_image() {
@@ -871,6 +1242,40 @@ _prompt_for_interval() {
 	done
 }
 
+_parse_watchtower_extra_args() {
+	local raw_args="${WATCHTOWER_EXTRA_ARGS:-}"
+	[ -z "$raw_args" ] && return 0
+
+	local sanitized_args
+	sanitized_args=$(_sanitize_input_text "$raw_args")
+	if [ "$sanitized_args" != "$raw_args" ]; then
+		log_error "额外参数包含非法控制字符，请检查配置。"
+		return "${ERR_CONFIG}"
+	fi
+
+	local extra_tokens=()
+	local old_ifs="${IFS:-}"
+	IFS=' '
+	read -r -a extra_tokens <<<"$raw_args"
+	IFS="$old_ifs"
+
+	local token
+	for token in "${extra_tokens[@]}"; do
+		if [[ ! "$token" =~ ^[A-Za-z0-9_./:=,@%+-]+$ ]]; then
+			log_error "额外参数包含不受支持的 token: $token"
+			return "${ERR_CONFIG}"
+		fi
+		case "$token" in
+		--run-once | --cleanup | --debug | --interval | --interval=* | --schedule | --schedule=*)
+			log_error "额外参数禁止覆盖封装器已管理的选项: $token"
+			return "${ERR_CONFIG}"
+			;;
+		esac
+		printf '%s\n' "$token"
+	done
+	return 0
+}
+
 # --- 核心：生成环境文件 ---
 _generate_env_file() {
 	local target_file="${1:-$ENV_FILE}"
@@ -902,19 +1307,29 @@ _generate_env_file() {
 			echo "WATCHTOWER_NOTIFICATIONS=shoutrrr"
 			echo "WATCHTOWER_NOTIFICATION_URL=telegram://${TG_BOT_TOKEN}@telegram?parsemode=Markdown&preview=false&channels=${TG_CHAT_ID}"
 			echo "WATCHTOWER_NO_STARTUP_MESSAGE=true"
-			echo "WATCHTOWER_NOTIFICATION_REPORT=false"
+			echo "WATCHTOWER_NOTIFICATION_REPORT=${WATCHTOWER_NOTIFY_ON_NO_UPDATES:-${WATCHTOWER_DEFAULT_NOTIFY_ON_NO_UPDATES}}"
 
 			local br='{{ "\n" }}'
 			local template_time
 			template_time="$(date '+%Y-%m-%d %H:%M:%S %Z')"
 
-			cat <<EOF | tr -d '\n' >>"$target_file"
+			if [ "${WATCHTOWER_NOTIFY_ON_NO_UPDATES:-${WATCHTOWER_DEFAULT_NOTIFY_ON_NO_UPDATES}}" = "true" ]; then
+				cat <<EOF | tr -d '\n' >>"$target_file"
+WATCHTOWER_NOTIFICATION_TEMPLATE={{- with .Report }}✅ *容器自动更新通知*${br}${br}🖥️ *主机:* \`${alias_masked}\`${br}🌐 *IPv4:* \`${ipv4_masked}\`${br}🌐 *IPv6:* \`${ipv6_masked}\`${br}⌚ *时间:* \`${template_time}\`${br}${br}📄 *状态:* 已扫描 \`{{ len .Scanned }}\`，更新 \`{{ len .Updated }}\`，失败 \`{{ len .Failed }}\`${br}🧹 *清理状态:* {{- if gt (len .Failed) 0 }}\`需人工检查（存在更新失败）\`{{- else }}\`已执行（--cleanup）\`{{- end }}{{- if .Updated }}${br}${br}🧾 *更新详情:*${br}{{- range .Updated }}• \`{{ .Name }}\` 从 \`{{ .CurrentImageID.ShortID }}\` 更新到 \`{{ .LatestImageID.ShortID }}\`${br}{{- end }}{{- end }}{{- if .Failed }}${br}${br}❌ *失败详情:*${br}{{- range .Failed }}• \`{{ .Name }}\` : {{ .Error }}${br}{{- end }}{{- end }}{{- end }}
+EOF
+			else
+				cat <<EOF | tr -d '\n' >>"$target_file"
 WATCHTOWER_NOTIFICATION_TEMPLATE={{- with .Report }}{{- if or (gt (len .Updated) 0) (gt (len .Failed) 0) }}✅ *容器自动更新通知*${br}${br}🖥️ *主机:* \`${alias_masked}\`${br}🌐 *IPv4:* \`${ipv4_masked}\`${br}🌐 *IPv6:* \`${ipv6_masked}\`${br}⌚ *时间:* \`${template_time}\`${br}${br}📄 *状态:* 已扫描 \`{{ len .Scanned }}\`，更新 \`{{ len .Updated }}\`，失败 \`{{ len .Failed }}\`${br}🧹 *清理状态:* {{- if gt (len .Failed) 0 }}\`需人工检查（存在更新失败）\`{{- else }}\`已执行（--cleanup）\`{{- end }}${br}{{- if .Updated }}${br}🧾 *更新详情:*${br}{{- range .Updated }}• \`{{ .Name }}\` 从 \`{{ .CurrentImageID.ShortID }}\` 更新到 \`{{ .LatestImageID.ShortID }}\`${br}{{- end }}{{- end }}{{- if .Failed }}${br}❌ *失败详情:*${br}{{- range .Failed }}• \`{{ .Name }}\` : {{ .Error }}${br}{{- end }}{{- end }}{{- end }}{{- end }}
 EOF
+			fi
 			printf '\n' >>"$target_file"
 		fi
 
 		if [[ "$WATCHTOWER_RUN_MODE" == "cron" || "$WATCHTOWER_RUN_MODE" == "aligned" ]] && [ -n "$WATCHTOWER_SCHEDULE_CRON" ]; then
+			if ! _validate_watchtower_cron_expression "$WATCHTOWER_SCHEDULE_CRON"; then
+				log_error "Watchtower Cron 配置无效: $WATCHTOWER_SCHEDULE_CRON"
+				return "${ERR_CONFIG}"
+			fi
 			echo "WATCHTOWER_SCHEDULE=$WATCHTOWER_SCHEDULE_CRON"
 		fi
 	} >>"$target_file"
@@ -1000,15 +1415,40 @@ _start_watchtower_container_logic() {
 	fi
 	docker_run_args+=(-v /var/run/docker.sock:/var/run/docker.sock)
 	[ "$WATCHTOWER_DEBUG_ENABLED" = "true" ] && wt_args+=("--debug")
+	if [[ "$WATCHTOWER_RUN_MODE" == "cron" || "$WATCHTOWER_RUN_MODE" == "aligned" ]] && [ -n "$WATCHTOWER_SCHEDULE_CRON" ]; then
+		if ! _validate_watchtower_cron_expression "$WATCHTOWER_SCHEDULE_CRON"; then
+			log_error "Watchtower Cron 配置无效: $WATCHTOWER_SCHEDULE_CRON"
+			return "${ERR_CONFIG}"
+		fi
+	fi
 	if [ -n "$WATCHTOWER_EXTRA_ARGS" ]; then
-		read -r -a extra_tokens <<<"$WATCHTOWER_EXTRA_ARGS"
-		wt_args+=("${extra_tokens[@]}")
+		local parsed_extra_tokens=()
+		if ! mapfile -t parsed_extra_tokens < <(_parse_watchtower_extra_args); then
+			return "${ERR_CONFIG}"
+		fi
+		wt_args+=("${parsed_extra_tokens[@]}")
 	fi
 	local final_exclude_list="${WATCHTOWER_EXCLUDE_LIST}"
 	if [ -n "$final_exclude_list" ]; then
-		local exclude_pattern
-		exclude_pattern=${final_exclude_list//,/\|}
-		mapfile -t container_names < <(JB_SUDO_LOG_QUIET="true" run_with_sudo docker ps --format '{{.Names}}' | grep -vE "^(${exclude_pattern}|watchtower|watchtower-once)$" || true)
+		local -A excluded_map=()
+		local old_ifs="${IFS:-}"
+		local excluded_item=""
+		excluded_map["watchtower"]=1
+		excluded_map["watchtower-once"]=1
+		IFS=','
+		read -r -a _excluded_items <<<"$final_exclude_list"
+		IFS="$old_ifs"
+		while IFS= read -r excluded_item; do
+			excluded_item=$(printf '%s' "$excluded_item" | xargs)
+			[ -n "$excluded_item" ] && excluded_map["$excluded_item"]=1
+		done < <(printf '%s\n' "${_excluded_items[@]}")
+		while IFS= read -r container_name; do
+			[ -z "$container_name" ] && continue
+			if [ -n "${excluded_map[$container_name]+_}" ]; then
+				continue
+			fi
+			container_names+=("$container_name")
+		done < <(JB_SUDO_LOG_QUIET="true" run_with_sudo docker ps --format '{{.Names}}' 2>/dev/null || true)
 		if [ ${#container_names[@]} -eq 0 ] && [ "$interactive_mode" = "false" ]; then
 			log_error "忽略名单导致监控范围为空，服务无法启动。"
 			return "${ERR_CONFIG}"
@@ -1059,7 +1499,7 @@ _start_watchtower_container_logic() {
 
 _rebuild_watchtower() {
 	log_info "正在重建 Watchtower 容器..."
-	JB_SUDO_LOG_QUIET="true" run_with_sudo docker rm -f watchtower &>/dev/null || true
+	_remove_watchtower_container
 
 	local interval="${WATCHTOWER_CONFIG_INTERVAL}"
 	if ! _start_watchtower_container_logic "$interval" "Watchtower (监控模式)"; then
@@ -1080,7 +1520,7 @@ _prompt_rebuild_if_needed() {
 		return
 	fi
 
-	if ! JB_SUDO_LOG_QUIET="true" run_with_sudo docker ps --format '{{.Names}}' | grep -qFx 'watchtower'; then return; fi
+	if ! _watchtower_is_running; then return; fi
 	if [ ! -f "$ENV_FILE_LAST_RUN" ]; then return; fi
 
 	local temp_env
@@ -1102,12 +1542,13 @@ _prompt_rebuild_if_needed() {
 }
 
 run_watchtower_once() {
+	local skip_confirm="${1:-false}"
 	local before_mode before_interval before_cron
 	before_mode="${WATCHTOWER_RUN_MODE:-}"
 	before_interval="${WATCHTOWER_CONFIG_INTERVAL:-}"
 	before_cron="${WATCHTOWER_SCHEDULE_CRON:-}"
 
-	if ! confirm_action "确定要运行一次 Watchtower 来更新所有容器吗?"; then
+	if [ "$skip_confirm" != "true" ] && ! confirm_action "确定要运行一次 Watchtower 来更新所有容器吗?"; then
 		log_info "操作已取消。"
 		return "${ERR_OK}"
 	fi
@@ -1348,6 +1789,10 @@ _configure_schedule() {
 		local cron_input
 		read -r -p "Cron表达式 (留空保留原值): " cron_input
 		if [ -n "$cron_input" ]; then
+			if ! _validate_watchtower_cron_expression "$cron_input"; then
+				log_warn "Cron 表达式无效，请输入 6 段合法字段。"
+				return "${ERR_CONFIG}"
+			fi
 			WATCHTOWER_SCHEDULE_CRON="$cron_input"
 			WATCHTOWER_CONFIG_INTERVAL="0"
 			log_info "Cron 已设置为: $WATCHTOWER_SCHEDULE_CRON"
@@ -1479,7 +1924,7 @@ configure_exclusion_list() {
 }
 
 configure_watchtower() {
-	if JB_SUDO_LOG_QUIET="true" run_with_sudo docker ps --format '{{.Names}}' | grep -qFx 'watchtower'; then
+	if _watchtower_is_running; then
 		if ! confirm_action "Watchtower 正在运行。进入配置可能会覆盖当前设置，是否继续?"; then return "${ERR_OK}"; fi
 	fi
 	_configure_schedule
@@ -1543,10 +1988,10 @@ manage_tasks() {
 		choice=$(_prompt_for_menu_choice "1-2")
 		case "$choice" in
 		1)
-			if JB_SUDO_LOG_QUIET="true" run_with_sudo docker ps -a --format '{{.Names}}' | grep -qFx 'watchtower'; then
+			if _watchtower_exists; then
 				echo -e "${RED}警告: 即将停止并移除 Watchtower 容器。${NC}"
 				if confirm_action "确定要继续吗？"; then
-					JB_SUDO_LOG_QUIET="true" run_with_sudo docker rm -f watchtower &>/dev/null || true
+					_remove_watchtower_container
 					WATCHTOWER_ENABLED="false"
 					save_config
 					echo -e "${GREEN}✅ 已移除。${NC}"
@@ -1555,7 +2000,7 @@ manage_tasks() {
 			press_enter_to_continue
 			;;
 		2)
-			if JB_SUDO_LOG_QUIET="true" run_with_sudo docker ps -a --format '{{.Names}}' | grep -qFx 'watchtower'; then
+			if _watchtower_exists; then
 				if confirm_action "确定要重建 Watchtower 吗？"; then _rebuild_watchtower; else log_info "已取消。"; fi
 			else
 				echo -e "${YELLOW}ℹ️ Watchtower 未运行，将执行首次部署。${NC}"
@@ -1607,26 +2052,26 @@ _extract_schedule_from_env() {
 		return
 	fi
 	local env_json
-	env_json=$(JB_SUDO_LOG_QUIET="true" run_with_sudo docker inspect watchtower --format '{{json .Config.Env}}' 2>/dev/null || echo "[]")
+	env_json=$(_watchtower_inspect_env 2>/dev/null || echo "[]")
 	echo "$env_json" | jq -r '.[] | select(startswith("WATCHTOWER_SCHEDULE=")) | split("=")[1]' | head -n1 || true
 }
 
 get_watchtower_inspect_summary() {
-	if ! JB_SUDO_LOG_QUIET="true" run_with_sudo docker ps -a --format '{{.Names}}' | grep -qFx 'watchtower'; then
+	if ! _watchtower_exists; then
 		echo ""
 		return 2
 	fi
 	local cmd
-	cmd=$(JB_SUDO_LOG_QUIET="true" run_with_sudo docker inspect watchtower --format '{{json .Config.Cmd}}' 2>/dev/null || echo "[]")
+	cmd=$(_watchtower_inspect_cmd 2>/dev/null || echo "[]")
 	_extract_interval_from_cmd "$cmd" 2>/dev/null || true
 }
 
 get_watchtower_all_raw_logs() {
-	if ! JB_SUDO_LOG_QUIET="true" run_with_sudo docker ps -a --format '{{.Names}}' | grep -qFx 'watchtower'; then
+	if ! _watchtower_exists; then
 		echo ""
 		return 1
 	fi
-	JB_SUDO_LOG_QUIET="true" run_with_sudo docker logs --tail 500 watchtower 2>&1 || true
+	_watchtower_logs_tail 2>&1 || true
 }
 
 _calculate_next_cron() {
@@ -1747,10 +2192,10 @@ show_watchtower_details() {
 
 		case "$pick" in
 		1)
-			if JB_SUDO_LOG_QUIET="true" run_with_sudo docker ps -a --format '{{.Names}}' | grep -qFx 'watchtower'; then
+			if _watchtower_exists; then
 				echo -e "\n按 Ctrl+C 停止..."
 				trap '' INT
-				JB_SUDO_LOG_QUIET="true" run_with_sudo docker logs -f --tail 100 watchtower || true
+				_watchtower_logs_follow || true
 				trap 'echo -e "\n操作被中断。"; exit '"${ERR_RUNTIME}"'' INT
 			else echo -e "\n${RED}Watchtower 未运行。${NC}"; fi
 			press_enter_to_continue
@@ -1966,7 +2411,7 @@ main_menu() {
 
 		local STATUS_RAW="未运行"
 		if [ "${docker_ready}" -eq 1 ]; then
-			if JB_SUDO_LOG_QUIET="true" run_with_sudo docker ps --format '{{.Names}}' | grep -qFx 'watchtower'; then STATUS_RAW="已启动"; fi
+			if _watchtower_is_running; then STATUS_RAW="已启动"; fi
 		else
 			STATUS_RAW="未安装"
 		fi
@@ -1994,7 +2439,7 @@ main_menu() {
 		local config_mtime container_created warning_msg=""
 		config_mtime=$(stat -c %Y "$CONFIG_FILE" 2>/dev/null || echo 0)
 		if [ "${docker_ready}" -eq 1 ]; then
-			container_created=$(JB_SUDO_LOG_QUIET="true" run_with_sudo docker inspect --format '{{.Created}}' watchtower 2>/dev/null || echo "")
+			container_created=$(_watchtower_inspect_created 2>/dev/null || echo "")
 		else
 			container_created=""
 		fi
@@ -2046,9 +2491,9 @@ main_menu() {
 }
 
 main() {
-	self_elevate_or_die "$@"
 	init_runtime
 	watchtower_validate_args "$@"
+	self_elevate_or_die "$@"
 	log_info "配置文件路径: ${CONFIG_FILE}"
 	[ -f "$CONFIG_FILE" ] && load_config
 
@@ -2066,7 +2511,7 @@ main() {
 		exit $?
 		;;
 	--run-once)
-		run_watchtower_once
+		run_watchtower_once true
 		exit $?
 		;;
 	--systemd-start)
@@ -2076,7 +2521,7 @@ main() {
 		;;
 	--systemd-stop)
 		log_info "Stopping Watchtower via systemd..."
-		run_with_sudo docker rm -f watchtower &>/dev/null || true
+		_remove_watchtower_container
 		exit "${ERR_OK}"
 		;;
 	--generate-systemd-service)
