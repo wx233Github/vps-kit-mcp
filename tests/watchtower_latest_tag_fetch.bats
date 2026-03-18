@@ -1,73 +1,137 @@
 #!/usr/bin/env bats
 
-# 校验最新 release tag 的获取与回退逻辑
+# 校验 Watchtower 配置驱动的镜像/API 行为
 
-@test "watchtower latest tag parses redirect url" {
+@test "watchtower load_config applies image/api defaults when config missing" {
   run bash -c '
     set -euo pipefail
+    tmp_home=$(mktemp -d)
+    HOME="$tmp_home"
     source /root/aa/vps-kit-mcp/tools/Watchtower.sh
 
-    # 记录日志到输出，便于断言
-    log_warn() { printf "%s\n" "$*"; }
+    load_config
+    printf "%s|%s|%s|%s|%s\n" \
+      "$WATCHTOWER_IMAGE_PRIMARY_REPO" \
+      "$WATCHTOWER_IMAGE_FALLBACK_REPO" \
+      "$WATCHTOWER_IMAGE_TAG" \
+      "$WATCHTOWER_ALLOW_LOCAL_IMAGE_FALLBACK" \
+      "${WATCHTOWER_DOCKER_API_VERSION:-auto}"
+  '
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ghcr.io/containrrr/watchtower|containrrr/watchtower|latest|true|auto"* ]]
+}
 
-    stub_dir=$(mktemp -d /tmp/watchtower.tag.stub.XXXXXX)
-    cat >"$stub_dir/curl" <<"EOF"
+@test "watchtower save_config round-trips image/api settings" {
+  run bash -c '
+    set -euo pipefail
+    tmp_home=$(mktemp -d)
+    HOME="$tmp_home"
+    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+
+    WATCHTOWER_IMAGE_PRIMARY_REPO="example.com/custom/watchtower"
+    WATCHTOWER_IMAGE_FALLBACK_REPO="docker.io/custom/watchtower"
+    WATCHTOWER_IMAGE_TAG="stable"
+    WATCHTOWER_ALLOW_LOCAL_IMAGE_FALLBACK="false"
+    WATCHTOWER_DOCKER_API_VERSION="1.40"
+    save_config
+
+    WATCHTOWER_IMAGE_PRIMARY_REPO=""
+    WATCHTOWER_IMAGE_FALLBACK_REPO=""
+    WATCHTOWER_IMAGE_TAG=""
+    WATCHTOWER_ALLOW_LOCAL_IMAGE_FALLBACK=""
+    WATCHTOWER_DOCKER_API_VERSION=""
+
+    load_config
+    printf "%s|%s|%s|%s|%s\n" \
+      "$WATCHTOWER_IMAGE_PRIMARY_REPO" \
+      "$WATCHTOWER_IMAGE_FALLBACK_REPO" \
+      "$WATCHTOWER_IMAGE_TAG" \
+      "$WATCHTOWER_ALLOW_LOCAL_IMAGE_FALLBACK" \
+      "$WATCHTOWER_DOCKER_API_VERSION"
+  '
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"example.com/custom/watchtower|docker.io/custom/watchtower|stable|false|1.40"* ]]
+}
+
+@test "watchtower env file writes configured docker api version" {
+  run bash -c '
+    set -euo pipefail
+    tmp_home=$(mktemp -d)
+    HOME="$tmp_home"
+    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+
+    _get_ip_address() { printf "%s\n" ""; }
+    WATCHTOWER_DOCKER_API_VERSION="1.40"
+    target_file=$(mktemp)
+    _generate_env_file "$target_file"
+    grep "^DOCKER_API_VERSION=" "$target_file"
+  '
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"DOCKER_API_VERSION=1.40"* ]]
+}
+
+@test "watchtower env file auto-detects docker min api version when config empty" {
+  run bash -c '
+    set -euo pipefail
+    tmp_home=$(mktemp -d)
+    stub_dir=$(mktemp -d)
+    HOME="$tmp_home"
+    cat >"$stub_dir/docker" <<"EOF"
 #!/usr/bin/env bash
-printf "%s" "https://github.com/containrrr/watchtower/releases/tag/v1.7.1"
+exit 0
 EOF
-    chmod +x "$stub_dir/curl"
+    chmod +x "$stub_dir/docker"
+    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
     PATH="$stub_dir:$PATH"
 
-    tag=$(_get_watchtower_latest_release_tag)
-    printf "%s\n" "$tag"
-  '
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"v1.7.1"* ]]
-}
-
-@test "watchtower latest tag falls back when curl missing" {
-  run bash -c '
-    set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
-
-    # 记录日志到输出，便于断言
-    log_warn() { printf "%s\n" "$*"; }
-
-    PATH="/tmp/watchtower.no.curl"
-    if _get_watchtower_latest_release_tag; then
-      printf "%s\n" "ok"
-    else
-      printf "%s\n" "fallback"
-    fi
-  '
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"回退 latest"* ]]
-  [[ "$output" == *"fallback"* ]]
-}
-
-@test "watchtower tag fallback strips leading v" {
-  run bash -c '
-    set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
-
-    log_warn() { printf "%s\n" "$*" >&2; }
-    log_info() { printf "%s\n" "$*" >&2; }
+    _get_ip_address() { printf "%s\n" ""; }
     run_with_sudo() {
-      if [ "$1" = "docker" ] && [ "$2" = "pull" ]; then
-        case "$3" in
-        ghcr.io/containrrr/watchtower:v1.7.1) return 1 ;;
-        containrrr/watchtower:v1.7.1) return 1 ;;
-        ghcr.io/containrrr/watchtower:1.7.1) return 0 ;;
-        *) return 1 ;;
+      if [ "$1" = "docker" ] && [ "$2" = "version" ] && [ "$3" = "--format" ]; then
+        case "$4" in
+        "{{.Server.MinAPIVersion}}") printf "%s" "1.40"; return 0 ;;
+        "{{.Server.APIVersion}}") printf "%s" "1.54"; return 0 ;;
         esac
       fi
       return 1
     }
 
-    image=$(_select_watchtower_image_with_tag_fallback "v1.7.1" "1.7.1" "ghcr.io/containrrr/watchtower" "containrrr/watchtower")
-    printf "%s\n" "$image"
+    target_file=$(mktemp)
+    _generate_env_file "$target_file"
+    grep "^DOCKER_API_VERSION=" "$target_file"
   '
   [ "$status" -eq 0 ]
-  [[ "$output" == *"尝试 1.7.1"* ]]
-  [[ "$output" == *"ghcr.io/containrrr/watchtower:1.7.1"* ]]
+  [[ "$output" == *"DOCKER_API_VERSION=1.40"* ]]
+}
+
+@test "watchtower env file falls back to server api version when min api unavailable" {
+  run bash -c '
+    set -euo pipefail
+    tmp_home=$(mktemp -d)
+    stub_dir=$(mktemp -d)
+    HOME="$tmp_home"
+    cat >"$stub_dir/docker" <<"EOF"
+#!/usr/bin/env bash
+exit 0
+EOF
+    chmod +x "$stub_dir/docker"
+    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    PATH="$stub_dir:$PATH"
+
+    _get_ip_address() { printf "%s\n" ""; }
+    run_with_sudo() {
+      if [ "$1" = "docker" ] && [ "$2" = "version" ] && [ "$3" = "--format" ]; then
+        case "$4" in
+        "{{.Server.MinAPIVersion}}") printf "%s" "<no value>"; return 0 ;;
+        "{{.Server.APIVersion}}") printf "%s" "1.54"; return 0 ;;
+        esac
+      fi
+      return 1
+    }
+
+    target_file=$(mktemp)
+    _generate_env_file "$target_file"
+    grep "^DOCKER_API_VERSION=" "$target_file"
+  '
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"DOCKER_API_VERSION=1.54"* ]]
 }
