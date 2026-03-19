@@ -97,6 +97,23 @@ curl -fsSL "https://raw.githubusercontent.com/wx233Github/vps-kit-mcp/main/insta
 sudo bash -x /opt/vps_install_modules/install.sh
 ```
 
+### install.sh Headless CLI
+
+- 仅查看当前运行状态与环境摘要：
+  - `bash install.sh status`
+  - `bash install.sh status --json`
+- 执行环境自检（不修改系统）：
+  - `bash install.sh doctor`
+  - `bash install.sh doctor --json`
+- 强制全面更新所有模块和配置：
+  - `bash install.sh update`
+- 直接走安装脚本内置卸载入口：
+  - `bash install.sh uninstall`
+  - `bash install.sh --uninstall`
+  - `bash install.sh -u`
+
+其中 `--json` 仅与 `status` / `doctor` 搭配使用。
+
 ### Watchtower CLI（非交互）
 
 - 诊断当前配置、最近一次运行快照与容器状态：
@@ -108,6 +125,20 @@ sudo bash -x /opt/vps_install_modules/install.sh
 
 `tools/watchtower.env` 与 `tools/watchtower.env.last_run` 为运行期生成文件，不纳入版本控制。
 `--diagnose` 额外提供 `env_file_last_run_consistency`，用于判断最近一次成功生成的运行快照与当前配置是否一致。
+
+### cert.sh CLI（非交互）
+
+- 证书体检（检查 acme.sh 安装状态与近 30 天到期证书）：
+  - `bash cert.sh --health-check`
+- 仅记录破坏性操作，不实际执行：
+  - `bash cert.sh --dry-run`
+
+### docker.sh CLI（补充）
+
+- 仅记录破坏性操作，不实际执行：
+  - `bash docker.sh --dry-run`
+
+`cert.sh --dry-run` 与 `docker.sh --dry-run` 为 dry-run 模式开关：会进入原有流程，但不会真正执行破坏性操作。
 
 ### 重置安装目录与命令链接
 
