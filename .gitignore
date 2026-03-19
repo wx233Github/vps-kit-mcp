@@ -1,0 +1,6 @@
+.sisyphus/
+AGENTS.md
+.gitignore
+RELOAD_FAILED
+tools/watchtower.env
+tools/watchtower.env.last_run

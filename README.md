@@ -95,6 +95,18 @@ curl -fsSL "https://raw.githubusercontent.com/wx233Github/vps-kit-mcp/main/insta
 sudo bash -x /opt/vps_install_modules/install.sh
 ```
 
+### Watchtower CLI（非交互）
+
+- 诊断当前配置、最近一次运行快照与容器状态：
+  - `bash tools/Watchtower.sh --diagnose`
+- 导出当前 Watchtower 配置：
+  - `bash tools/Watchtower.sh --export-config`
+- 导入配置文件（会先校验再覆盖当前配置）：
+  - `bash tools/Watchtower.sh --import-config /abs/path/to/file`
+
+`tools/watchtower.env` 与 `tools/watchtower.env.last_run` 为运行期生成文件，不纳入版本控制。
+`--diagnose` 额外提供 `env_file_last_run_consistency`，用于判断最近一次成功生成的运行快照与当前配置是否一致。
+
 ### 重置安装目录与命令链接
 
 ```bash
