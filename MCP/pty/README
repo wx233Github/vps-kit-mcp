@@ -1,6 +1,7 @@
 # MCP PTY 本地部署说明
 
 该目录用于 `mcp` 子菜单中的 `mcp_pty` 入口与资源文件（`pty-runner.py` / `pty.md`）。
+当前仓库内的 `MCP/pty/pty-runner.py` 已与上游 `pty-mcp` 的 `server.py` 同步；安装时仍会将该文件下载并落地为本地 `~/mcp/mcp-pty/server.py`。
 `mcp_pty` 单脚本支持三种用途：本地搭建、关联 opencode、卸载相关配置。
 
 ---
@@ -31,6 +32,27 @@
 5. 设置执行权限：`chmod 755 ~/mcp/mcp-pty/server.py`
 
 默认不会修改 `~/.config/opencode/opencode.json`。
+
+---
+
+## 当前工具能力概览
+
+当前同步后的 PTY server 不再只是最小的 `spawn/read/write` 组合，而是提供了更完整的工具面，主要分为几类。
+其中会话类工具默认可用；`pty_signal` 与 admin/全局工具默认隐藏，只有在显式设置对应环境变量时才会暴露：
+
+- 会话创建与控制：`pty_spawn`、`pty_write`、`pty_resize`、`pty_close`
+- 输出读取：`pty_read`、`pty_read_until`、`pty_read_until_any`、`pty_read_quiescent`
+- 流与偏移读取：`pty_read_stdout`、`pty_read_stderr`、`pty_read_at`
+- 交互辅助：`pty_prompt`、`pty_wait`、`pty_status`、`pty_list`
+- 可选 control 工具：`pty_signal`（需 `PTY_MCP_ENABLE_CONTROL_TOOLS=1`）
+- 可选 admin/运行时工具：`pty_close_all`、`set_default_cwd`、`get_default_cwd`、`set_limits`、`get_limits`、`pty_metrics`、`pty_health`（需 `PTY_MCP_ENABLE_ADMIN_TOOLS=1`）
+- 诊断与保护：`confirm_dangerous_command`
+
+说明：
+
+- `pty_read_stdout` / `pty_read_stderr` 需要在 `pty_spawn` 时显式传入 `separate_streams=true`；开启后 stdout/stderr 会改走独立缓冲，不应再假定主 `pty_read` 仍能读到同一份输出。
+- 默认策略下，`pty_spawn` 与后续 session 工具都要求传入同一个 `owner`；如需兼容旧调用方，可显式设置 `PTY_MCP_REQUIRE_OWNER=0`。
+- 默认策略下，高风险命令必须先调用 `confirm_dangerous_command` 获取 `confirm_token`，再在 `pty_spawn` 中传入 `dangerous_confirm_token`；旧的 `dangerous_confirmed` / `dangerous_justification` 仅在显式设置 `PTY_MCP_DANGEROUS_LEGACY_MODE=1` 时才作为兼容路径保留。
 
 ---
 
@@ -90,8 +112,14 @@ bash MCP/pty/mcp_pty.sh --uninstall
 
 1. `uv --version`
 2. `opencode mcp list`（应看到 `pty-runner connected`）
-3. 对话测试：
-   - “使用 pty-runner 运行 `echo 'Hello from uv'` 并读取输出。”
+3. 对话测试：使用 `pty-runner` 运行 `pwd`，确认 PTY 会话可正常启动并返回当前工作目录。
+4. 对话测试：使用 `pty-runner` 运行 `printf 'Hello from uv'` 并读取输出。
+5. 如需验证扩展能力，可继续测试：
+    - 使用 `pty_status` 查看退出码与缓冲区元数据
+    - 使用 `pty_read_until` / `pty_read_until_any` 等待指定文本
+    - 在 `pty_spawn` 传入 `separate_streams=true` 后，分别调用 `pty_read_stdout` 与 `pty_read_stderr`
+    - 对高风险命令先调用 `confirm_dangerous_command`，再将返回的 `confirm_token` 传给 `pty_spawn`
+    - 如需使用 `pty_signal`、`set_limits` 等额外工具，需先在运行环境启用对应的 control/admin 开关
 
 ---
 
