@@ -91,3 +91,18 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"run-once-triggered"* ]]
 }
+
+@test "watchtower main_menu exits cleanly on empty choice" {
+  run bash -c '
+    set -euo pipefail
+    source "$1"
+    load_config() { return 0; }
+    should_clear_screen() { return 1; }
+    _render_menu() { return 0; }
+    _prompt_for_menu_choice() { printf "%s" ""; }
+    _get_watchtower_next_run_time() { printf "%s\n" "n/a"; }
+
+    main_menu
+  ' _ "$WATCHTOWER_LIB"
+  [ "$status" -eq 0 ]
+}
