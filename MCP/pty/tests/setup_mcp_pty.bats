@@ -1,7 +1,9 @@
 #!/usr/bin/env bats
 
 setup() {
-  export TARGET_SCRIPT="/root/jb/jaoeng/MCP/pty/mcp_pty.sh"
+  export PTY_DIR="${BATS_TEST_DIRNAME%/tests}"
+  export TARGET_SCRIPT="${PTY_DIR}/mcp_pty.sh"
+  export RUNNER_PATH="${PTY_DIR}/pty-runner.py"
 }
 
 @test "--help 可正常输出" {
@@ -18,7 +20,7 @@ setup() {
 
 @test "参数解析支持可选模式与路径覆盖" {
   run bash <<'EOF'
-source "/root/jb/jaoeng/MCP/pty/mcp_pty.sh"
+source "$TARGET_SCRIPT"
 DRY_RUN="false"
 MODE=""
 REMOTE_RAW_BASE=""
@@ -38,7 +40,7 @@ EOF
 
 @test "--uninstall 参数可切换到卸载模式" {
   run bash <<'EOF'
-source "/root/jb/jaoeng/MCP/pty/mcp_pty.sh"
+source "$TARGET_SCRIPT"
 MODE=""
 parse_args --uninstall
 [ "$MODE" = "uninstall" ]
@@ -53,7 +55,7 @@ EOF
 
   run bash <<'EOF'
 set -euo pipefail
-source "/root/jb/jaoeng/MCP/pty/mcp_pty.sh"
+source "$TARGET_SCRIPT"
 DRY_RUN="false"
 
 tmp_home="$(mktemp -d)"
@@ -84,7 +86,7 @@ EOF
 
   run bash <<'EOF'
 set -euo pipefail
-source "/root/jb/jaoeng/MCP/pty/mcp_pty.sh"
+source "$TARGET_SCRIPT"
 DRY_RUN="false"
 
 tmp_home="$(mktemp -d)"
@@ -116,7 +118,7 @@ EOF
 @test "resolve_uv_bin 支持 ~/.local/bin/uv" {
   run bash <<'EOF'
 set -euo pipefail
-source "/root/jb/jaoeng/MCP/pty/mcp_pty.sh"
+source "$TARGET_SCRIPT"
 
 tmp_home="$(mktemp -d)"
 mkdir -p "${tmp_home}/.local/bin"
@@ -134,7 +136,7 @@ EOF
 @test "resolve_opencode_bin 支持 ~/.opencode-i18n/bin/opencode" {
   run bash <<'EOF'
 set -euo pipefail
-source "/root/jb/jaoeng/MCP/pty/mcp_pty.sh"
+source "$TARGET_SCRIPT"
 
 tmp_home="$(mktemp -d)"
 mkdir -p "${tmp_home}/.opencode-i18n/bin"
@@ -152,7 +154,7 @@ EOF
 @test "JB_NONINTERACTIVE=true 时跳过交互确认" {
   run bash <<'EOF'
 set -euo pipefail
-source "/root/jb/jaoeng/MCP/pty/mcp_pty.sh"
+source "$TARGET_SCRIPT"
 
 JB_NONINTERACTIVE="true"
 confirm_run_if_needed
@@ -167,7 +169,7 @@ EOF
 
   run bash <<'EOF'
 set -euo pipefail
-source "/root/jb/jaoeng/MCP/pty/mcp_pty.sh"
+source "$TARGET_SCRIPT"
 DRY_RUN="false"
 
 tmp_home="$(mktemp -d)"
@@ -205,10 +207,11 @@ EOF
 @test "默认策略下 pty-runner 暴露核心工具并隐藏 admin/control 工具" {
   run python3 - <<'PY'
 import json
+import os
 import pathlib
 import subprocess
 
-runner = pathlib.Path('/root/aa/vps-kit-mcp/MCP/pty/pty-runner.py')
+runner = pathlib.Path(os.environ['RUNNER_PATH'])
 p = subprocess.Popen(
     ['python3', str(runner)],
     stdin=subprocess.PIPE,
@@ -283,10 +286,11 @@ PY
 @test "启用 admin/control 策略后暴露管理工具" {
   run env PTY_MCP_ENABLE_ADMIN_TOOLS=1 PTY_MCP_ENABLE_CONTROL_TOOLS=1 python3 - <<'PY'
 import json
+import os
 import pathlib
 import subprocess
 
-runner = pathlib.Path('/root/aa/vps-kit-mcp/MCP/pty/pty-runner.py')
+runner = pathlib.Path(os.environ['RUNNER_PATH'])
 p = subprocess.Popen(
     ['python3', str(runner)],
     stdin=subprocess.PIPE,
@@ -339,11 +343,12 @@ PY
 @test "危险命令 token、owner 与 scope 策略生效" {
   run python3 - <<'PY'
 import json
+import os
 import pathlib
 import subprocess
 import time
 
-runner = pathlib.Path('/root/aa/vps-kit-mcp/MCP/pty/pty-runner.py')
+runner = pathlib.Path(os.environ['RUNNER_PATH'])
 env = {
     'PTY_MCP_DANGEROUS_PATTERNS': r'printf dangerous-ok',
     'PTY_MCP_ENABLE_CONTROL_TOOLS': '1',
@@ -470,12 +475,12 @@ PY
 @test "危险命令 token 过期与绑定不匹配会被拒绝" {
   run python3 - <<'PY'
 import json
+import os
 import pathlib
 import subprocess
 import time
-import os
 
-runner = pathlib.Path('/root/aa/vps-kit-mcp/MCP/pty/pty-runner.py')
+runner = pathlib.Path(os.environ['RUNNER_PATH'])
 env = {
     'PTY_MCP_DANGEROUS_PATTERNS': r'printf dangerous-expire;printf dangerous-alt',
     'PTY_MCP_DANGEROUS_CONFIRM_TTL_SEC': '1',
@@ -556,11 +561,11 @@ PY
 @test "显式开启兼容模式后可恢复旧的危险命令确认路径" {
   run env PTY_MCP_DANGEROUS_LEGACY_MODE=1 PTY_MCP_REQUIRE_OWNER=0 python3 - <<'PY'
 import json
+import os
 import pathlib
 import subprocess
-import os
 
-runner = pathlib.Path('/root/aa/vps-kit-mcp/MCP/pty/pty-runner.py')
+runner = pathlib.Path(os.environ['RUNNER_PATH'])
 env = {
     'PTY_MCP_DANGEROUS_PATTERNS': r'printf dangerous-legacy',
 }
@@ -612,11 +617,11 @@ PY
 @test "dangerous_confirm_token 在 owner 不匹配时会被拒绝" {
   run python3 - <<'PY'
 import json
+import os
 import pathlib
 import subprocess
-import os
 
-runner = pathlib.Path('/root/aa/vps-kit-mcp/MCP/pty/pty-runner.py')
+runner = pathlib.Path(os.environ['RUNNER_PATH'])
 env = {
     'PTY_MCP_DANGEROUS_PATTERNS': r'printf dangerous-owner',
 }
@@ -678,11 +683,11 @@ PY
 @test "dangerous_confirm_token 在 scope 不匹配时会被拒绝" {
   run python3 - <<'PY'
 import json
+import os
 import pathlib
 import subprocess
-import os
 
-runner = pathlib.Path('/root/aa/vps-kit-mcp/MCP/pty/pty-runner.py')
+runner = pathlib.Path(os.environ['RUNNER_PATH'])
 env = {
     'PTY_MCP_DANGEROUS_PATTERNS': r'printf dangerous-scope',
 }
