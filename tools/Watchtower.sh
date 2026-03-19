@@ -888,6 +888,7 @@ watchtower_diagnose() {
 	local config_mtime="n/a"
 	local env_last_run_exists="no"
 	local env_last_run_mtime="n/a"
+	local env_last_run_consistency="missing"
 	local container_exists="n/a"
 	local container_created="n/a"
 	local effective_mode_hint="n/a"
@@ -899,6 +900,7 @@ watchtower_diagnose() {
 		env_last_run_exists="yes"
 		env_last_run_mtime="$(_watchtower_file_mtime "$ENV_FILE_LAST_RUN" 2>/dev/null || printf '%s' 'n/a')"
 	fi
+	env_last_run_consistency="$(_watchtower_env_last_run_consistency 2>/dev/null || printf '%s' 'unresolved')"
 
 	printf 'watchtower_script_version=%s\n' "$SCRIPT_VERSION"
 	printf 'config_file=%s\n' "$CONFIG_FILE"
@@ -906,6 +908,7 @@ watchtower_diagnose() {
 	printf 'env_file_last_run=%s\n' "$ENV_FILE_LAST_RUN"
 	printf 'env_file_last_run_exists=%s\n' "$env_last_run_exists"
 	printf 'env_file_last_run_mtime=%s\n' "$env_last_run_mtime"
+	printf 'env_file_last_run_consistency=%s\n' "$env_last_run_consistency"
 	printf 'watchtower_image_primary_repo=%s\n' "${WATCHTOWER_IMAGE_PRIMARY_REPO}"
 	printf 'watchtower_image_fallback_repo=%s\n' "${WATCHTOWER_IMAGE_FALLBACK_REPO}"
 	printf 'watchtower_image_tag=%s\n' "${WATCHTOWER_IMAGE_TAG}"
@@ -1129,6 +1132,37 @@ _stable_watchtower_env_hash() {
 	local source_file="${1:-}"
 	[ -f "$source_file" ] || return 1
 	grep -v '^WATCHTOWER_NOTIFICATION_TEMPLATE=' "$source_file" 2>/dev/null | md5sum | awk '{print $1}'
+}
+
+_watchtower_env_last_run_consistency() {
+	local temp_env=""
+	local current_hash=""
+	local new_hash=""
+
+	if [ ! -f "$ENV_FILE_LAST_RUN" ]; then
+		printf '%s' "missing"
+		return 0
+	fi
+
+	temp_env=$(mktemp)
+	TEMP_FILES+=("$temp_env")
+	if ! _generate_env_file "$temp_env" >/dev/null 2>&1; then
+		printf '%s' "unresolved"
+		return 0
+	fi
+
+	current_hash=$(_stable_watchtower_env_hash "$ENV_FILE_LAST_RUN" 2>/dev/null || true)
+	new_hash=$(_stable_watchtower_env_hash "$temp_env" 2>/dev/null || true)
+	if [ -z "$current_hash" ] || [ -z "$new_hash" ]; then
+		printf '%s' "unresolved"
+		return 0
+	fi
+
+	if [ "$current_hash" = "$new_hash" ]; then
+		printf '%s' "match"
+	else
+		printf '%s' "drift"
+	fi
 }
 
 _select_watchtower_image() {
