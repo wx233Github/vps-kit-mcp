@@ -885,13 +885,33 @@ watchtower_import_config() {
 
 watchtower_diagnose() {
 	load_config
+	local config_mtime="n/a"
+	local env_last_run_exists="no"
+	local env_last_run_mtime="n/a"
+	local container_exists="n/a"
+	local container_created="n/a"
+	local effective_mode_hint="n/a"
+
+	if [ -f "$CONFIG_FILE" ]; then
+		config_mtime="$(_watchtower_file_mtime "$CONFIG_FILE" 2>/dev/null || printf '%s' 'n/a')"
+	fi
+	if [ -f "$ENV_FILE_LAST_RUN" ]; then
+		env_last_run_exists="yes"
+		env_last_run_mtime="$(_watchtower_file_mtime "$ENV_FILE_LAST_RUN" 2>/dev/null || printf '%s' 'n/a')"
+	fi
+
 	printf 'watchtower_script_version=%s\n' "$SCRIPT_VERSION"
 	printf 'config_file=%s\n' "$CONFIG_FILE"
+	printf 'config_mtime=%s\n' "$config_mtime"
+	printf 'env_file_last_run=%s\n' "$ENV_FILE_LAST_RUN"
+	printf 'env_file_last_run_exists=%s\n' "$env_last_run_exists"
+	printf 'env_file_last_run_mtime=%s\n' "$env_last_run_mtime"
 	printf 'watchtower_image_primary_repo=%s\n' "${WATCHTOWER_IMAGE_PRIMARY_REPO}"
 	printf 'watchtower_image_fallback_repo=%s\n' "${WATCHTOWER_IMAGE_FALLBACK_REPO}"
 	printf 'watchtower_image_tag=%s\n' "${WATCHTOWER_IMAGE_TAG}"
 	printf 'watchtower_allow_local_image_fallback=%s\n' "${WATCHTOWER_ALLOW_LOCAL_IMAGE_FALLBACK}"
 	printf 'watchtower_docker_api_version_configured=%s\n' "${WATCHTOWER_DOCKER_API_VERSION:-auto}"
+	printf 'watchtower_run_mode_configured=%s\n' "${WATCHTOWER_RUN_MODE:-interval}"
 	if [ -f "$CONFIG_FILE" ]; then
 		printf 'config_exists=yes\n'
 	else
@@ -900,8 +920,18 @@ watchtower_diagnose() {
 	if command -v docker >/dev/null 2>&1; then
 		local effective_api_version=""
 		effective_api_version=$(_resolve_watchtower_docker_api_version 2>/dev/null || true)
+		effective_mode_hint=$(_watchtower_diagnose_effective_mode_hint 2>/dev/null || printf '%s' 'unknown')
 		printf 'docker=present\n'
 		printf 'watchtower_docker_api_version_effective=%s\n' "${effective_api_version:-unresolved}"
+		printf 'watchtower_run_mode_effective_hint=%s\n' "$effective_mode_hint"
+		if _watchtower_exists 2>/dev/null; then
+			container_exists="yes"
+			container_created=$(_watchtower_inspect_created 2>/dev/null || printf '%s' 'n/a')
+		else
+			container_exists="no"
+		fi
+		printf 'watchtower_container_exists=%s\n' "$container_exists"
+		printf 'watchtower_container_created=%s\n' "$container_created"
 		if _watchtower_is_running 2>/dev/null; then
 			printf 'watchtower_container=running\n'
 		else
@@ -909,6 +939,9 @@ watchtower_diagnose() {
 		fi
 	else
 		printf 'docker=missing\n'
+		printf 'watchtower_run_mode_effective_hint=n/a\n'
+		printf 'watchtower_container_exists=n/a\n'
+		printf 'watchtower_container_created=n/a\n'
 		printf 'watchtower_container=n/a\n'
 	fi
 	return "${ERR_OK}"
@@ -1157,6 +1190,32 @@ _trim_shell_whitespace() {
 	value="${value#"${value%%[![:space:]]*}"}"
 	value="${value%"${value##*[![:space:]]}"}"
 	printf '%s' "$value"
+}
+
+_watchtower_file_mtime() {
+	local file_path="${1:-}"
+	[ -n "$file_path" ] && [ -f "$file_path" ] || return 1
+	stat -c %Y "$file_path" 2>/dev/null
+}
+
+_watchtower_diagnose_effective_mode_hint() {
+	if ! _watchtower_exists 2>/dev/null; then
+		printf '%s' "n/a"
+		return 0
+	fi
+
+	local schedule_env=""
+	local interval_summary=""
+	schedule_env=$(_extract_schedule_from_env 2>/dev/null || true)
+	interval_summary=$(get_watchtower_inspect_summary 2>/dev/null || true)
+
+	if [ -n "$schedule_env" ]; then
+		printf '%s' "schedule"
+	elif [ -n "$interval_summary" ]; then
+		printf '%s' "interval"
+	else
+		printf '%s' "unknown"
+	fi
 }
 
 _detect_docker_server_api_version() {
@@ -2120,13 +2179,13 @@ _extract_interval_from_cmd() {
 }
 
 _extract_schedule_from_env() {
-	if ! command -v jq &>/dev/null; then
-		echo ""
-		return
-	fi
 	local env_json
 	env_json=$(_watchtower_inspect_env 2>/dev/null || echo "[]")
-	echo "$env_json" | jq -r '.[] | select(startswith("WATCHTOWER_SCHEDULE=")) | split("=")[1]' | head -n1 || true
+	if command -v jq &>/dev/null; then
+		echo "$env_json" | jq -r '.[] | select(startswith("WATCHTOWER_SCHEDULE=")) | split("=")[1]' | head -n1 || true
+		return
+	fi
+	printf '%s\n' "$env_json" | sed -n 's/.*WATCHTOWER_SCHEDULE=\([^\"]*\).*/\1/p' | head -n1 || true
 }
 
 get_watchtower_inspect_summary() {

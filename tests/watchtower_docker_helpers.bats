@@ -241,3 +241,124 @@
   [[ "$output" == *$'docker|rename|watchtower|watchtower-backup-rebuild-1|'* ]]
   [[ "$output" == *$'docker|rename|watchtower-backup-rebuild-1|watchtower|'* ]]
 }
+
+@test "watchtower diagnose reports snapshot visibility and effective schedule mode" {
+  run bash -c '
+    set -euo pipefail
+    tmp_home=$(mktemp -d)
+    HOME="$tmp_home"
+    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    docker() { return 0; }
+
+    backup_last_run=""
+    if [ -f "$ENV_FILE_LAST_RUN" ]; then
+      backup_last_run=$(mktemp)
+      cp -f "$ENV_FILE_LAST_RUN" "$backup_last_run"
+    fi
+    cleanup() {
+      rm -f "$ENV_FILE_LAST_RUN"
+      if [ -n "$backup_last_run" ] && [ -f "$backup_last_run" ]; then
+        cp -f "$backup_last_run" "$ENV_FILE_LAST_RUN"
+      fi
+    }
+    trap cleanup EXIT
+
+    cat >"$CONFIG_FILE" <<"EOF"
+WATCHTOWER_RUN_MODE="cron"
+EOF
+    mkdir -p "$(dirname "$ENV_FILE_LAST_RUN")"
+    printf "%s\n" "WATCHTOWER_SCHEDULE=0 0 * * * *" >"$ENV_FILE_LAST_RUN"
+
+    run_with_sudo() {
+      case "$1|$2|${3:-}|${4:-}|${5:-}" in
+      docker\|version\|--format\|{{.Server.MinAPIVersion}}\|)
+        printf "%s" "1.40"
+        return 0
+        ;;
+      docker\|ps\|--format\|{{.Names}}\|)
+        printf "%s\n" "watchtower"
+        return 0
+        ;;
+      docker\|ps\|-a\|--format\|{{.Names}})
+        printf "%s\n" "watchtower"
+        return 0
+        ;;
+      docker\|inspect\|watchtower\|--format\|{{json\ .Config.Env}})
+        printf "%s\n" "[\"WATCHTOWER_SCHEDULE=0 0 * * * *\"]"
+        return 0
+        ;;
+      docker\|inspect\|watchtower\|--format\|{{json\ .Config.Cmd}})
+        printf "%s\n" "[]"
+        return 0
+        ;;
+      docker\|inspect\|--format\|{{.Created}}\|watchtower)
+        printf "%s\n" "2026-03-19T00:00:00Z"
+        return 0
+        ;;
+      esac
+      return 1
+    }
+
+    watchtower_diagnose
+  '
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"config_exists=yes"* ]]
+  [[ "$output" == *"config_mtime="* ]]
+  [[ "$output" == *"env_file_last_run_exists=yes"* ]]
+  [[ "$output" == *"env_file_last_run_mtime="* ]]
+  [[ "$output" == *"watchtower_run_mode_configured=cron"* ]]
+  [[ "$output" == *"watchtower_run_mode_effective_hint=schedule"* ]]
+  [[ "$output" == *"watchtower_container_exists=yes"* ]]
+  [[ "$output" == *"watchtower_container_created=2026-03-19T00:00:00Z"* ]]
+}
+
+@test "watchtower diagnose keeps stable n-a fallbacks when container and snapshot are absent" {
+  run bash -c '
+    set -euo pipefail
+    tmp_home=$(mktemp -d)
+    HOME="$tmp_home"
+    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    docker() { return 0; }
+
+    backup_last_run=""
+    if [ -f "$ENV_FILE_LAST_RUN" ]; then
+      backup_last_run=$(mktemp)
+      cp -f "$ENV_FILE_LAST_RUN" "$backup_last_run"
+      rm -f "$ENV_FILE_LAST_RUN"
+    fi
+    cleanup() {
+      rm -f "$ENV_FILE_LAST_RUN"
+      if [ -n "$backup_last_run" ] && [ -f "$backup_last_run" ]; then
+        cp -f "$backup_last_run" "$ENV_FILE_LAST_RUN"
+      fi
+    }
+    trap cleanup EXIT
+
+    run_with_sudo() {
+      if [ "$1" = "docker" ] && [ "$2" = "version" ] && [ "$3" = "--format" ]; then
+        printf "%s" "1.54"
+        return 0
+      fi
+      if [ "$1" = "docker" ] && [ "$2" = "ps" ] && [ "$3" = "--format" ]; then
+        return 0
+      fi
+      if [ "$1" = "docker" ] && [ "$2" = "ps" ] && [ "$3" = "-a" ] && [ "$4" = "--format" ]; then
+        return 0
+      fi
+      return 1
+    }
+
+    watchtower_diagnose
+  '
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"config_exists=no"* ]]
+  [[ "$output" == *"config_mtime=n/a"* ]]
+  [[ "$output" == *"env_file_last_run_exists=no"* ]]
+  [[ "$output" == *"env_file_last_run_mtime=n/a"* ]]
+  [[ "$output" == *"watchtower_container=not_running"* ]]
+  [[ "$output" == *"watchtower_container_exists=no"* ]]
+  [[ "$output" == *"watchtower_container_created=n/a"* ]]
+  [[ "$output" == *"watchtower_run_mode_effective_hint=n/a"* ]]
+}
