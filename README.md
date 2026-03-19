@@ -37,6 +37,8 @@ curl -fsSL "https://raw.githubusercontent.com/wx233Github/vps-kit-mcp/main/insta
 curl -fsSL "https://raw.githubusercontent.com/wx233Github/vps-kit-mcp/main/install.sh?_=$(date +%s)" | FORCE_REFRESH=true bash -s 2>&1 | tee "jb_$(date +%Y%m%d_%H%M%S).log"
 ```
 
+如果在仓库根目录执行这条命令，会生成 `jb_*.log` 运行日志；该类文件已加入忽略规则，避免污染工作区。
+
 ---
 
 ## 交互说明（重要）
