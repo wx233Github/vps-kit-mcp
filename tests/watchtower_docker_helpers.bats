@@ -150,3 +150,60 @@
   [ "$status" -eq 5 ]
   [[ "$output" == *"额外参数包含不受支持的 token"* ]]
 }
+
+@test "watchtower rebuild restores previous container when replacement start fails" {
+  run bash -c '
+    set -euo pipefail
+    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+
+    trace_file=$(mktemp)
+    WATCHTOWER_CONFIG_INTERVAL="300"
+    _watchtower_exists() { return 0; }
+    _start_watchtower_container_logic() { return 1; }
+    prune_dangling_images() { printf "%s\n" "unexpected-prune" >>"$trace_file"; return 0; }
+    run_with_sudo() {
+      printf "%s|" "$@" >>"$trace_file"
+      printf "\n" >>"$trace_file"
+      return 0
+    }
+
+    if _rebuild_watchtower; then
+      printf "%s\n" "unexpected-success"
+      exit 1
+    fi
+    cat "$trace_file"
+  '
+
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"unexpected-success"* ]]
+  [[ "$output" != *"unexpected-prune"* ]]
+  [[ "$output" == *$'docker|rename|watchtower|watchtower-backup|'* ]]
+  [[ "$output" == *$'docker|rm|-f|watchtower|'* ]]
+  [[ "$output" == *$'docker|rename|watchtower-backup|watchtower|'* ]]
+}
+
+@test "watchtower rebuild removes backup after successful replacement" {
+  run bash -c '
+    set -euo pipefail
+    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+
+    trace_file=$(mktemp)
+    WATCHTOWER_CONFIG_INTERVAL="300"
+    _watchtower_exists() { return 0; }
+    _start_watchtower_container_logic() { return 0; }
+    prune_dangling_images() { printf "%s\n" "prune-called" >>"$trace_file"; return 0; }
+    run_with_sudo() {
+      printf "%s|" "$@" >>"$trace_file"
+      printf "\n" >>"$trace_file"
+      return 0
+    }
+
+    _rebuild_watchtower
+    cat "$trace_file"
+  '
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'docker|rename|watchtower|watchtower-backup|'* ]]
+  [[ "$output" == *$'docker|rm|-f|watchtower-backup|'* ]]
+  [[ "$output" == *"prune-called"* ]]
+}

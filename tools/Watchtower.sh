@@ -30,6 +30,7 @@ readonly CONFIG_FILE="$HOME/.docker-auto-update-watchtower.conf"
 readonly ENV_FILE="${SCRIPT_DIR}/watchtower.env"
 readonly ENV_FILE_LAST_RUN="${SCRIPT_DIR}/watchtower.env.last_run"
 readonly WATCHTOWER_CONTAINER_NAME="watchtower"
+readonly WATCHTOWER_BACKUP_CONTAINER_NAME="watchtower-backup"
 readonly WATCHTOWER_DOCKER_NAMES_FORMAT='{{.Names}}'
 readonly WATCHTOWER_INSPECT_ENV_FORMAT='{{json .Config.Env}}'
 readonly WATCHTOWER_INSPECT_CMD_FORMAT='{{json .Config.Cmd}}'
@@ -1059,6 +1060,19 @@ _remove_watchtower_container() {
 	JB_SUDO_LOG_QUIET="true" run_with_sudo docker rm -f "${WATCHTOWER_CONTAINER_NAME}" &>/dev/null || true
 }
 
+_remove_named_watchtower_container() {
+	local container_name="${1:-}"
+	[ -n "$container_name" ] || return 0
+	JB_SUDO_LOG_QUIET="true" run_with_sudo docker rm -f "$container_name" &>/dev/null || true
+}
+
+_rename_watchtower_container() {
+	local from_name="${1:-}"
+	local to_name="${2:-}"
+	[ -n "$from_name" ] && [ -n "$to_name" ] || return 1
+	JB_SUDO_LOG_QUIET="true" run_with_sudo docker rename "$from_name" "$to_name"
+}
+
 _stable_watchtower_env_hash() {
 	local source_file="${1:-}"
 	[ -f "$source_file" ] || return 1
@@ -1509,13 +1523,33 @@ _start_watchtower_container_logic() {
 _rebuild_watchtower() {
 	log_info "正在重建 Watchtower 容器..."
 	local interval="${WATCHTOWER_CONFIG_INTERVAL}"
-	_remove_watchtower_container
+	local backup_container_name="${WATCHTOWER_BACKUP_CONTAINER_NAME}"
+	local had_existing_container="false"
+
+	if _watchtower_exists; then
+		had_existing_container="true"
+		_remove_named_watchtower_container "$backup_container_name"
+		if ! _rename_watchtower_container "${WATCHTOWER_CONTAINER_NAME}" "$backup_container_name"; then
+			log_error "无法为现有 Watchtower 容器创建重建保护备份。"
+			return "${ERR_RUNTIME}"
+		fi
+	fi
 
 	if ! _start_watchtower_container_logic "$interval" "Watchtower (监控模式)"; then
 		log_error "Watchtower 重建失败！"
-		WATCHTOWER_ENABLED="false"
-		save_config
+		if [ "$had_existing_container" = "true" ]; then
+			_remove_named_watchtower_container "${WATCHTOWER_CONTAINER_NAME}"
+			if _rename_watchtower_container "$backup_container_name" "${WATCHTOWER_CONTAINER_NAME}"; then
+				log_warn "已恢复重建前的 Watchtower 容器。"
+			else
+				log_error "旧 Watchtower 容器恢复失败，请手动检查 Docker 容器状态。"
+			fi
+		fi
 		return "${ERR_RUNTIME}"
+	fi
+
+	if [ "$had_existing_container" = "true" ]; then
+		_remove_named_watchtower_container "$backup_container_name"
 	fi
 
 	prune_dangling_images || true
