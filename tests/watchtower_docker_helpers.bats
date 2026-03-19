@@ -207,3 +207,37 @@
   [[ "$output" == *$'docker|rm|-f|watchtower-backup|'* ]]
   [[ "$output" == *"prune-called"* ]]
 }
+
+@test "watchtower rebuild avoids clobbering an existing backup container name" {
+  run bash -c '
+    set -euo pipefail
+    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+
+    trace_file=$(mktemp)
+    WATCHTOWER_CONFIG_INTERVAL="300"
+    _watchtower_exists() { return 0; }
+    _start_watchtower_container_logic() { return 1; }
+    run_with_sudo() {
+      printf "%s|" "$@" >>"$trace_file"
+      printf "\n" >>"$trace_file"
+      if [ "$1" = "docker" ] && [ "$2" = "ps" ] && [ "$3" = "-a" ] && [ "$4" = "--format" ]; then
+        printf "%s\n" "watchtower"
+        printf "%s\n" "watchtower-backup"
+        return 0
+      fi
+      return 0
+    }
+
+    if _rebuild_watchtower; then
+      printf "%s\n" "unexpected-success"
+      exit 1
+    fi
+    cat "$trace_file"
+  '
+
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"unexpected-success"* ]]
+  [[ "$output" != *$'docker|rm|-f|watchtower-backup|'* ]]
+  [[ "$output" == *$'docker|rename|watchtower|watchtower-backup-rebuild-1|'* ]]
+  [[ "$output" == *$'docker|rename|watchtower-backup-rebuild-1|watchtower|'* ]]
+}

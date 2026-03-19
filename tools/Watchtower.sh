@@ -1036,6 +1036,12 @@ _watchtower_exists() {
 	JB_SUDO_LOG_QUIET="true" run_with_sudo docker ps -a --format "${WATCHTOWER_DOCKER_NAMES_FORMAT}" | grep -qFx "${WATCHTOWER_CONTAINER_NAME}"
 }
 
+_watchtower_named_container_exists() {
+	local container_name="${1:-}"
+	[ -n "$container_name" ] || return 1
+	JB_SUDO_LOG_QUIET="true" run_with_sudo docker ps -a --format "${WATCHTOWER_DOCKER_NAMES_FORMAT}" | grep -qFx "$container_name"
+}
+
 _watchtower_inspect_env() {
 	JB_SUDO_LOG_QUIET="true" run_with_sudo docker inspect "${WATCHTOWER_CONTAINER_NAME}" --format "${WATCHTOWER_INSPECT_ENV_FORMAT}"
 }
@@ -1071,6 +1077,19 @@ _rename_watchtower_container() {
 	local to_name="${2:-}"
 	[ -n "$from_name" ] && [ -n "$to_name" ] || return 1
 	JB_SUDO_LOG_QUIET="true" run_with_sudo docker rename "$from_name" "$to_name"
+}
+
+_resolve_watchtower_backup_container_name() {
+	local base_name="${WATCHTOWER_BACKUP_CONTAINER_NAME}"
+	local candidate_name="$base_name"
+	local suffix=0
+
+	while _watchtower_named_container_exists "$candidate_name"; do
+		suffix=$((suffix + 1))
+		candidate_name="${base_name}-rebuild-${suffix}"
+	done
+
+	printf '%s' "$candidate_name"
 }
 
 _stable_watchtower_env_hash() {
@@ -1523,12 +1542,16 @@ _start_watchtower_container_logic() {
 _rebuild_watchtower() {
 	log_info "正在重建 Watchtower 容器..."
 	local interval="${WATCHTOWER_CONFIG_INTERVAL}"
-	local backup_container_name="${WATCHTOWER_BACKUP_CONTAINER_NAME}"
+	local backup_container_name=""
 	local had_existing_container="false"
 
 	if _watchtower_exists; then
 		had_existing_container="true"
-		_remove_named_watchtower_container "$backup_container_name"
+		backup_container_name="$(_resolve_watchtower_backup_container_name)"
+		if [ -z "$backup_container_name" ]; then
+			log_error "无法为 Watchtower 选择可用的重建保护备份名。"
+			return "${ERR_RUNTIME}"
+		fi
 		if ! _rename_watchtower_container "${WATCHTOWER_CONTAINER_NAME}" "$backup_container_name"; then
 			log_error "无法为现有 Watchtower 容器创建重建保护备份。"
 			return "${ERR_RUNTIME}"
@@ -1548,7 +1571,7 @@ _rebuild_watchtower() {
 		return "${ERR_RUNTIME}"
 	fi
 
-	if [ "$had_existing_container" = "true" ]; then
+	if [ "$had_existing_container" = "true" ] && [ -n "$backup_container_name" ]; then
 		_remove_named_watchtower_container "$backup_container_name"
 	fi
 
