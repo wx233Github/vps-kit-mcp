@@ -112,7 +112,7 @@ sudo bash -x /opt/vps_install_modules/install.sh
 ### 重置安装目录与命令链接
 
 ```bash
-sudo sh -c "rm -rf /opt/vps_install_modules && rm -f /usr/local/bin/jb"
+sudo sh -c "rm -rf /opt/vps_install_modules && rm -f /usr/local/bin/cc"
 ```
 
 ### 仅重置配置文件

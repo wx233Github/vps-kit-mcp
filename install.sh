@@ -887,7 +887,7 @@ uninstall_script() {
   log_warn "警告: 这将从您的系统中彻底移除本脚本及其所有组件！"
   log_warn "  - 安装目录: ${INSTALL_DIR}"
   log_warn "  - 日志文件: ${GLOBAL_LOG_FILE}"
-  log_warn "  - 快捷方式: ${BIN_DIR:-/usr/local/bin}/jb, ${BIN_DIR:-/usr/local/bin}/sb"
+  log_warn "  - 快捷方式: ${BIN_DIR:-/usr/local/bin}/cc"
   local choice
   if [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then
     log_err "无法访问 /dev/tty，无法执行交互式卸载。"
@@ -900,8 +900,7 @@ uninstall_script() {
     log_info "开始卸载..."
     LOG_FILE="/tmp/vps_install_modules_uninstall.log"
     export LOG_FILE
-    run_destructive_with_sudo rm -f "${BIN_DIR:-/usr/local/bin}/jb" || true
-    run_destructive_with_sudo rm -f "${BIN_DIR:-/usr/local/bin}/sb" || true
+    run_destructive_with_sudo rm -f "${BIN_DIR:-/usr/local/bin}/cc" || true
     run_destructive_with_sudo rm -f "/etc/logrotate.d/vps_install_modules" || true
     ensure_safe_install_dir "$INSTALL_DIR"
     run_destructive_with_sudo rm -rf "$INSTALL_DIR" || true
