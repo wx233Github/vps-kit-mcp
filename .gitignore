@@ -5,3 +5,4 @@ jb_*.log
 templates/nginx/manifest.test.*.json
 tools/watchtower.env
 tools/watchtower.env.last_run
+__pycache__/
