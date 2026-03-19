@@ -1059,6 +1059,12 @@ _remove_watchtower_container() {
 	JB_SUDO_LOG_QUIET="true" run_with_sudo docker rm -f "${WATCHTOWER_CONTAINER_NAME}" &>/dev/null || true
 }
 
+_stable_watchtower_env_hash() {
+	local source_file="${1:-}"
+	[ -f "$source_file" ] || return 1
+	grep -v '^WATCHTOWER_NOTIFICATION_TEMPLATE=' "$source_file" 2>/dev/null | md5sum | awk '{print $1}'
+}
+
 _select_watchtower_image() {
 	local primary="${1:-}"
 	local fallback="${2:-}"
@@ -1297,6 +1303,9 @@ _generate_env_file() {
 
 	{
 		echo "TZ=${JB_TIMEZONE:-Asia/Shanghai}"
+		echo "JB_WATCHTOWER_HOST_ALIAS=${WATCHTOWER_HOST_ALIAS:-DockerNode}"
+		echo "JB_WATCHTOWER_IPV4_INTERFACE=${WATCHTOWER_IPV4_INTERFACE:-}"
+		echo "JB_WATCHTOWER_IPV6_INTERFACE=${WATCHTOWER_IPV6_INTERFACE:-}"
 		if [ -n "$resolved_api_version" ]; then
 			echo "DOCKER_API_VERSION=${resolved_api_version}"
 		else
@@ -1499,9 +1508,9 @@ _start_watchtower_container_logic() {
 
 _rebuild_watchtower() {
 	log_info "正在重建 Watchtower 容器..."
+	local interval="${WATCHTOWER_CONFIG_INTERVAL}"
 	_remove_watchtower_container
 
-	local interval="${WATCHTOWER_CONFIG_INTERVAL}"
 	if ! _start_watchtower_container_logic "$interval" "Watchtower (监控模式)"; then
 		log_error "Watchtower 重建失败！"
 		WATCHTOWER_ENABLED="false"
@@ -1527,11 +1536,18 @@ _prompt_rebuild_if_needed() {
 	temp_env=$(mktemp)
 	TEMP_FILES+=("$temp_env")
 
-	_generate_env_file "$temp_env" 2>/dev/null || true
+	if ! _generate_env_file "$temp_env" 2>/dev/null; then
+		log_warn "无法生成最新 Watchtower 环境快照，已跳过重建提示检查。"
+		return
+	fi
 
 	local current_hash new_hash
-	current_hash=$(md5sum "$ENV_FILE_LAST_RUN" 2>/dev/null | awk '{print $1}') || current_hash=""
-	new_hash=$(md5sum "$temp_env" 2>/dev/null | awk '{print $1}') || new_hash=""
+	current_hash=$(_stable_watchtower_env_hash "$ENV_FILE_LAST_RUN" 2>/dev/null || true)
+	new_hash=$(_stable_watchtower_env_hash "$temp_env" 2>/dev/null || true)
+	if [ -z "$current_hash" ] || [ -z "$new_hash" ]; then
+		log_warn "无法比较 Watchtower 配置快照，已跳过重建提示检查。"
+		return
+	fi
 
 	if [ "$current_hash" != "$new_hash" ]; then
 		echo -e "\n${RED}⚠️ 检测到配置已变更 (Diff Found)，建议前往'服务运维'重建服务以生效。${NC}"

@@ -187,6 +187,68 @@ EOF
   [[ "$output" == *"DOCKER_API_VERSION=1.54"* ]]
 }
 
+@test "watchtower stable env hash ignores notification template drift" {
+  run bash -c '
+    set -euo pipefail
+    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+
+    env_a=$(mktemp)
+    env_b=$(mktemp)
+    cat >"$env_a" <<"EOF"
+TZ=Asia/Shanghai
+JB_WATCHTOWER_HOST_ALIAS=node-a
+JB_WATCHTOWER_IPV4_INTERFACE=eth0
+WATCHTOWER_NOTIFICATION_REPORT=true
+WATCHTOWER_NOTIFICATION_TEMPLATE=first-template
+EOF
+    cat >"$env_b" <<"EOF"
+TZ=Asia/Shanghai
+JB_WATCHTOWER_HOST_ALIAS=node-a
+JB_WATCHTOWER_IPV4_INTERFACE=eth0
+WATCHTOWER_NOTIFICATION_REPORT=true
+WATCHTOWER_NOTIFICATION_TEMPLATE=second-template
+EOF
+
+    printf "%s|%s\n" "$(_stable_watchtower_env_hash "$env_a")" "$(_stable_watchtower_env_hash "$env_b")"
+  '
+  [ "$status" -eq 0 ]
+  hash_pair="$(printf "%s" "$output" | tail -n1)"
+  left_hash="${hash_pair%%|*}"
+  right_hash="${hash_pair##*|}"
+  [ -n "$left_hash" ]
+  [ "$left_hash" = "$right_hash" ]
+}
+
+@test "watchtower stable env hash still detects meaningful drift" {
+  run bash -c '
+    set -euo pipefail
+    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+
+    env_a=$(mktemp)
+    env_b=$(mktemp)
+    cat >"$env_a" <<"EOF"
+TZ=Asia/Shanghai
+JB_WATCHTOWER_HOST_ALIAS=node-a
+DOCKER_API_VERSION=1.40
+WATCHTOWER_NOTIFICATION_TEMPLATE=first-template
+EOF
+    cat >"$env_b" <<"EOF"
+TZ=Asia/Shanghai
+JB_WATCHTOWER_HOST_ALIAS=node-a
+DOCKER_API_VERSION=1.54
+WATCHTOWER_NOTIFICATION_TEMPLATE=second-template
+EOF
+
+    printf "%s|%s\n" "$(_stable_watchtower_env_hash "$env_a")" "$(_stable_watchtower_env_hash "$env_b")"
+  '
+  [ "$status" -eq 0 ]
+  hash_pair="$(printf "%s" "$output" | tail -n1)"
+  left_hash="${hash_pair%%|*}"
+  right_hash="${hash_pair##*|}"
+  [ -n "$left_hash" ]
+  [ "$left_hash" != "$right_hash" ]
+}
+
 @test "watchtower cron validator accepts valid six-field expression" {
   run bash -c '
     set -euo pipefail
