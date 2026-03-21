@@ -1,5 +1,7 @@
 # PTY-runner usage policy (opencode MCP)
 
+The `pty-runner` MCP server is provided by the PyPI package `pty-mcp`. By default, the integration resolves `pty-mcp` via `uvx --from pty-mcp pty-mcp`; deployments may pin a specific spec when needed.
+
 When a task requires interactive terminal UI or TTY-only behavior, use the MCP server `pty-runner` rather than guessing outputs.
 
 ## When to use pty-runner

@@ -1,7 +1,7 @@
 # MCP PTY 本地部署说明
 
-该目录用于 `mcp` 子菜单中的 `mcp_pty` 入口与资源文件（`pty-runner.py` / `pty.md`）。
-当前仓库内的 `MCP/pty/pty-runner.py` 已与上游 `pty-mcp` 的 `server.py` 同步；安装时仍会将该文件下载并落地为本地 `~/mcp/mcp-pty/server.py`。
+该目录用于 `mcp` 子菜单中的 `mcp_pty` 入口与资源文件（`mcp_pty.sh` / `pty.md`）。
+当前仓库不再内嵌 `pty-runner.py` 副本；MCP PTY 服务直接由 PyPI 上的 `pty-mcp` 提供，默认通过 `uvx --from pty-mcp pty-mcp` 运行。
 `mcp_pty` 单脚本支持三种用途：本地搭建、关联 opencode、卸载相关配置。
 
 ---
@@ -27,11 +27,16 @@
 
 1. 检测并安装 `uv`（若未安装）
 2. 立即加载 `~/.cargo/env`（若存在）
-3. 准备本地目录：`~/mcp/mcp-pty`
-4. 从远端下载 `MCP/pty/pty-runner.py` 到本地：`~/mcp/mcp-pty/server.py`
-5. 设置执行权限：`chmod 755 ~/mcp/mcp-pty/server.py`
+3. 校验 `uvx` 可用
+4. 准备默认 PTY 包规格：`pty-mcp`
 
 默认不会修改 `~/.config/opencode/opencode.json`。
+
+说明：
+
+- `install` 模式不会在本地落地 `server.py`，只负责准备运行 `pty-mcp` 所需的 `uv/uvx` 环境。
+- 默认会按 `uvx` 的解析/缓存策略使用 PyPI 上的 `pty-mcp`。
+- 如需固定版本或改用其他来源，可显式传入 `--pty-mcp-spec`，或设置环境变量 `PTY_MCP_SPEC`。
 
 ---
 
@@ -70,9 +75,15 @@ bash MCP/pty/mcp_pty.sh --mode opencode
 1. 从远端下载 `MCP/pty/pty.md` 到本地：
    `~/.config/opencode/instructions/pty.md`
 2. 原子更新 `~/.config/opencode/opencode.json`：
-   - 写入 `mcp["pty-runner"]` 为 `uv run --script {env:HOME}/mcp/mcp-pty/server.py`
+   - 写入 `mcp["pty-runner"]` 为 `uvx --from pty-mcp pty-mcp`
    - `PATH` 使用 `{env:HOME}/.local/bin:{env:HOME}/.cargo/bin` 前缀，并附加 `LANG/LC_ALL`
    - 追加并去重 `instructions` 路径（目标为 `{env:HOME}/.config/opencode/instructions/pty.md`）
+
+默认会跟随 `pty-mcp` 的最新可解析版本；如需锁定版本，可使用：
+
+```bash
+bash MCP/pty/mcp_pty.sh --with-opencode --pty-mcp-spec "pty-mcp==0.2.0"
+```
 
 ---
 
@@ -82,9 +93,10 @@ bash MCP/pty/mcp_pty.sh --mode opencode
 - `--with-opencode`：启用 opencode 配置写入
 - `--uninstall`：卸载 mcp_pty 相关内容（不卸载 uv）
 - `--remote-raw-base <url>`：覆盖远端 raw 基址
-- `--local-dir <path>`：覆盖本地安装目录
+- `--local-dir <path>`：覆盖历史本地目录（仅用于兼容旧版清理）
 - `--opencode-config <path>`：覆盖 opencode.json 路径
 - `--opencode-instruction-path <path>`：覆盖 pty.md 本地路径
+- `--pty-mcp-spec <spec>`：覆盖 `pty-mcp` 包规格（默认 `pty-mcp`）
 - `--dry-run`：仅打印动作，不实际写入
 
 ---
@@ -99,7 +111,7 @@ bash MCP/pty/mcp_pty.sh --uninstall
 
 卸载会清理：
 
-1. `~/mcp/mcp-pty/server.py`
+1. 旧版遗留的 `~/mcp/mcp-pty/server.py`（若存在）
 2. `~/.config/opencode/instructions/pty.md`
 3. `~/.config/opencode/opencode.json` 中的 `mcp["pty-runner"]`
 4. `instructions` 中 `pty.md` 的关联路径（含 `{env:HOME}` / `${HOME}` / 绝对路径变体）
@@ -111,10 +123,11 @@ bash MCP/pty/mcp_pty.sh --uninstall
 ## 验证建议
 
 1. `uv --version`
-2. `opencode mcp list`（应看到 `pty-runner connected`）
-3. 对话测试：使用 `pty-runner` 运行 `pwd`，确认 PTY 会话可正常启动并返回当前工作目录。
-4. 对话测试：使用 `pty-runner` 运行 `printf 'Hello from uv'` 并读取输出。
-5. 如需验证扩展能力，可继续测试：
+2. `uvx --from pty-mcp pty-mcp --help`
+3. `opencode mcp list`（应看到 `pty-runner connected`）
+4. 对话测试：使用 `pty-runner` 运行 `pwd`，确认 PTY 会话可正常启动并返回当前工作目录。
+5. 对话测试：使用 `pty-runner` 运行 `printf 'Hello from uv'` 并读取输出。
+6. 如需验证扩展能力，可继续测试：
     - 使用 `pty_status` 查看退出码与缓冲区元数据
     - 使用 `pty_read_until` / `pty_read_until_any` 等待指定文本
     - 在 `pty_spawn` 传入 `separate_streams=true` 后，分别调用 `pty_read_stdout` 与 `pty_read_stderr`

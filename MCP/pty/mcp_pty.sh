@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# VERSION: 1.3.1
-# DESCRIPTION: MCP PTY 本地部署脚本（可选关联 opencode 配置）
+# VERSION: 1.4.0
+# DESCRIPTION: MCP PTY 本地部署脚本（通过 PyPI pty-mcp 接入，可选关联 opencode 配置）
 # DEPENDENCIES: bash curl cp mktemp mv chmod mkdir dirname flock date（jq: --with-opencode 时必需）
 
 set -euo pipefail
 IFS=$'\n\t'
 export PATH='/usr/local/bin:/usr/bin:/bin'
 
-readonly VERSION="1.3.1"
-readonly DESCRIPTION="MCP PTY 本地部署脚本（可选关联 opencode 配置）"
+readonly VERSION="1.4.0"
+readonly DESCRIPTION="MCP PTY 本地部署脚本（通过 PyPI pty-mcp 接入，可选关联 opencode 配置）"
 readonly DEPENDENCIES="bash curl cp mktemp mv chmod mkdir dirname flock date (jq optional)"
 
 readonly EX_USAGE=64
@@ -22,6 +22,7 @@ readonly EX_IOERR=74
 readonly UV_INSTALL_SCRIPT_URL="https://astral.sh/uv/install.sh"
 readonly DEFAULT_REMOTE_RAW_BASE="https://raw.githubusercontent.com/wx233Github/vps-kit-mcp/main/MCP/pty"
 readonly DEFAULT_LOCK_FILE="/tmp/mcp_pty_setup.lock"
+readonly DEFAULT_PTY_MCP_SPEC="pty-mcp"
 
 WITH_OPENCODE="false"
 DRY_RUN="false"
@@ -31,8 +32,10 @@ LOCAL_BASE_DIR="${HOME:-/root}/mcp/mcp-pty"
 LOCK_FILE="${DEFAULT_LOCK_FILE}"
 OPENCODE_CONFIG_PATH="${HOME:-/root}/.config/opencode/opencode.json"
 OPENCODE_INSTRUCTIONS_PATH="${HOME:-/root}/.config/opencode/instructions/pty.md"
+PTY_MCP_SPEC="${PTY_MCP_SPEC:-${DEFAULT_PTY_MCP_SPEC}}"
 SERVER_LOCAL_PATH=""
 UV_BIN=""
+UVX_BIN=""
 OPENCODE_BIN=""
 declare -a TEMP_FILES=()
 
@@ -81,17 +84,19 @@ usage() {
                                   指定运行模式
   --with-opencode                 启用 opencode 配置与 instructions 关联
   --uninstall                     卸载模式（仅清理 mcp_pty 相关内容，不卸载 uv）
-  --remote-raw-base <url>         远端 raw 基地址 (默认: GitHub MCP/pty)
-  --local-dir <path>              本地目录 (默认: ~/mcp/mcp-pty)
+  --remote-raw-base <url>         远端 raw 基地址 (用于下载 pty.md)
+  --local-dir <path>              历史本地目录（仅用于兼容旧版卸载清理）
   --opencode-config <path>        opencode.json 路径 (默认: ~/.config/opencode/opencode.json)
   --opencode-instruction-path <path>
-                                  pty.md 本地路径 (默认: ~/.config/opencode/instructions/pty.md)
+                                   pty.md 本地路径 (默认: ~/.config/opencode/instructions/pty.md)
+  --pty-mcp-spec <spec>           指定 pty-mcp 包规格 (默认: pty-mcp)
   --dry-run                       干跑模式，仅打印将执行动作
   -h, --help                      显示帮助
 
 示例:
   mcp_pty.sh
   mcp_pty.sh --mode opencode
+  mcp_pty.sh --pty-mcp-spec "pty-mcp==0.2.0" --with-opencode
   mcp_pty.sh --mode uninstall
   mcp_pty.sh --with-opencode
   mcp_pty.sh --uninstall --dry-run
@@ -314,6 +319,22 @@ resolve_uv_bin() {
 	return 1
 }
 
+resolve_uvx_bin() {
+	if command -v uvx >/dev/null 2>&1; then
+		UVX_BIN="$(command -v uvx)"
+		return 0
+	fi
+	if [ -x "${HOME:-/root}/.local/bin/uvx" ]; then
+		UVX_BIN="${HOME:-/root}/.local/bin/uvx"
+		return 0
+	fi
+	if [ -x "${HOME:-/root}/.cargo/bin/uvx" ]; then
+		UVX_BIN="${HOME:-/root}/.cargo/bin/uvx"
+		return 0
+	fi
+	return 1
+}
+
 resolve_opencode_bin() {
 	if command -v opencode >/dev/null 2>&1; then
 		OPENCODE_BIN="$(command -v opencode)"
@@ -387,25 +408,19 @@ verify_uv_or_die() {
 		die "uv 版本校验失败" "$EX_SOFTWARE"
 	fi
 
+	if ! resolve_uvx_bin; then
+		die "未找到 uvx，请检查 uv 安装是否完整" "$EX_UNAVAILABLE"
+	fi
+
 	log_info "uv 校验通过: $(${UV_BIN} --version)"
-}
-
-prepare_local_workspace() {
-	local server_url=""
-	LOCAL_BASE_DIR="$(expand_home_path "$LOCAL_BASE_DIR")"
-	SERVER_LOCAL_PATH="${LOCAL_BASE_DIR%/}/server.py"
-
-	run_mutating mkdir -p "$LOCAL_BASE_DIR"
-	server_url="$(build_raw_url "pty-runner.py")"
-	download_to_file "$server_url" "$SERVER_LOCAL_PATH" "755"
+	log_info "uvx 校验通过: ${UVX_BIN}"
 }
 
 update_opencode_config() {
 	local config_path="$1"
-	local server_path="$2"
+	local package_spec="$2"
 	local instruction_path="$3"
 	local env_path="{env:HOME}/.local/bin:{env:HOME}/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-	local server_path_cfg=""
 	local instruction_path_cfg=""
 	local instruction_path_shell_expr=""
 	local base_tmp=""
@@ -418,7 +433,6 @@ update_opencode_config() {
 
 	ensure_parent_dir "$config_path"
 
-	server_path_cfg="$(to_opencode_home_var_path "$server_path")"
 	instruction_path_cfg="$(to_opencode_home_var_path "$instruction_path")"
 	instruction_path_shell_expr="$(to_shell_home_expr_path "$instruction_path")"
 
@@ -436,11 +450,11 @@ update_opencode_config() {
 		printf '{}\n' >"$base_tmp" || die "初始化 opencode 配置失败" "$EX_CANTCREAT"
 	fi
 
-	if ! jq --arg server_path "$server_path_cfg" --arg env_path "$env_path" --arg instruction_path "$instruction_path_cfg" --arg instruction_path_abs "$instruction_path" --arg instruction_path_shell_expr "$instruction_path_shell_expr" '
+	if ! jq --arg package_spec "$package_spec" --arg env_path "$env_path" --arg instruction_path "$instruction_path_cfg" --arg instruction_path_abs "$instruction_path" --arg instruction_path_shell_expr "$instruction_path_shell_expr" '
     .mcp = (.mcp // {})
     | .mcp["pty-runner"] = {
         type: "local",
-        command: ["uv", "run", "--script", $server_path],
+        command: ["uvx", "--from", $package_spec, "pty-mcp"],
         environment: {
           PATH: $env_path,
           LANG: "C.UTF-8",
@@ -481,7 +495,7 @@ configure_opencode_optional() {
 
 	pty_md_url="$(build_raw_url "pty.md")"
 	download_to_file "$pty_md_url" "$OPENCODE_INSTRUCTIONS_PATH" "644"
-	update_opencode_config "$OPENCODE_CONFIG_PATH" "$SERVER_LOCAL_PATH" "$OPENCODE_INSTRUCTIONS_PATH"
+	update_opencode_config "$OPENCODE_CONFIG_PATH" "$PTY_MCP_SPEC" "$OPENCODE_INSTRUCTIONS_PATH"
 }
 
 print_next_steps() {
@@ -490,10 +504,11 @@ print_next_steps() {
 	printf '%s\n' "版本: ${VERSION}"
 	printf '%s\n' "描述: ${DESCRIPTION}"
 	printf '%s\n' "依赖: ${DEPENDENCIES}"
-	printf '%s\n' "本地目录: ${LOCAL_BASE_DIR}"
-	printf '%s\n' "入口脚本: ${SERVER_LOCAL_PATH}"
-	printf '%s\n' "远端基址: ${REMOTE_RAW_BASE}"
+	printf '%s\n' "PTY 包规格: ${PTY_MCP_SPEC}"
+	printf '%s\n' "运行命令: uvx --from ${PTY_MCP_SPEC} pty-mcp"
+	printf '%s\n' "历史本地目录(仅兼容旧版清理): ${LOCAL_BASE_DIR}"
 	if [ "$WITH_OPENCODE" = "true" ]; then
+		printf '%s\n' "远端基址: ${REMOTE_RAW_BASE}"
 		printf '%s\n' "opencode 配置: ${OPENCODE_CONFIG_PATH}"
 		printf '%s\n' "instructions: ${OPENCODE_INSTRUCTIONS_PATH}"
 	else
@@ -503,13 +518,13 @@ print_next_steps() {
 	printf '\n'
 	printf '%s\n' "建议验证："
 	printf '%s\n' "1) uv --version"
+	printf '%s\n' "2) uvx --from ${PTY_MCP_SPEC} pty-mcp --help"
 	if [ "$WITH_OPENCODE" = "true" ]; then
-		printf '%s\n' "2) opencode mcp list"
-		printf '%s\n' "3) 对话测试：使用 pty-runner 运行 pwd，确认 PTY 会话与工作目录正常"
-		printf '%s\n' "4) 对话测试：使用 pty-runner 运行 printf 'Hello from uv' 并读取输出"
-		printf '%s\n' "5) 进阶验证：测试 pty_status / pty_read_until；如需分离输出流，请在 pty_spawn 中启用 separate_streams=true"
+		printf '%s\n' "3) opencode mcp list"
+		printf '%s\n' "4) 对话测试：使用 pty-runner 运行 pwd，确认 PTY 会话与工作目录正常"
+		printf '%s\n' "5) 对话测试：使用 pty-runner 运行 printf 'Hello from uv' 并读取输出"
+		printf '%s\n' "6) 进阶验证：测试 pty_status / pty_read_until；如需分离输出流，请在 pty_spawn 中启用 separate_streams=true"
 	else
-		printf '%s\n' "2) 本地检查：确认入口脚本存在且可执行 -> ${SERVER_LOCAL_PATH}"
 		printf '%s\n' "3) 如需在 opencode 中直接调用 pty-runner，请重新执行并增加 --with-opencode"
 	fi
 }
@@ -518,11 +533,12 @@ print_uninstall_next_steps() {
 	printf '\n'
 	printf '%s\n' "=== MCP PTY 卸载完成 ==="
 	printf '%s\n' "版本: ${VERSION}"
-	printf '%s\n' "本地目录: ${LOCAL_BASE_DIR}"
-	printf '%s\n' "入口脚本: ${SERVER_LOCAL_PATH}"
+	printf '%s\n' "PTY 包规格: ${PTY_MCP_SPEC}"
+	printf '%s\n' "历史本地目录: ${LOCAL_BASE_DIR}"
+	printf '%s\n' "历史入口脚本: ${SERVER_LOCAL_PATH}"
 	printf '%s\n' "opencode 配置: ${OPENCODE_CONFIG_PATH}"
 	printf '%s\n' "instructions: ${OPENCODE_INSTRUCTIONS_PATH}"
-	printf '%s\n' "说明: 仅清理 mcp_pty 相关内容，不会卸载 uv。"
+	printf '%s\n' "说明: 仅清理 mcp_pty 相关内容，不会卸载 uv 或 pty-mcp 缓存。"
 }
 
 parse_args() {
@@ -562,6 +578,11 @@ parse_args() {
 			OPENCODE_INSTRUCTIONS_PATH="$2"
 			shift 2
 			;;
+		--pty-mcp-spec)
+			[ "$#" -ge 2 ] || die "参数 --pty-mcp-spec 缺少值" "$EX_USAGE"
+			PTY_MCP_SPEC="$2"
+			shift 2
+			;;
 		--dry-run)
 			DRY_RUN="true"
 			shift
@@ -593,6 +614,9 @@ validate_inputs() {
 	fi
 	if [ -z "$OPENCODE_INSTRUCTIONS_PATH" ]; then
 		die "--opencode-instruction-path 不能为空" "$EX_USAGE"
+	fi
+	if [ -z "$PTY_MCP_SPEC" ]; then
+		die "--pty-mcp-spec / PTY_MCP_SPEC 不能为空" "$EX_USAGE"
 	fi
 }
 
@@ -777,8 +801,6 @@ main() {
 	install_uv_if_needed
 	load_uv_env_if_present
 	verify_uv_or_die
-
-	prepare_local_workspace
 
 	if [ "$WITH_OPENCODE" = "true" ]; then
 		configure_opencode_optional
