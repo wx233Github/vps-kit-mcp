@@ -31,9 +31,9 @@
     WATCHTOWER_NOTIFY_ON_NO_UPDATES="false"
     target_file=$(mktemp)
     _generate_env_file "$target_file"
-    grep "^WATCHTOWER_NOTIFICATION_REPORT=false" "$target_file"
+    grep "^WATCHTOWER_NOTIFICATION_REPORT=true" "$target_file"
     grep "if or (gt (len .Updated) 0) (gt (len .Failed) 0)" "$target_file"
   '
   [ "$status" -eq 0 ]
-  [[ "$output" == *"WATCHTOWER_NOTIFICATION_REPORT=false"* ]]
+  [[ "$output" == *"WATCHTOWER_NOTIFICATION_REPORT=true"* ]]
 }

@@ -1442,7 +1442,7 @@ _generate_env_file() {
 			echo "WATCHTOWER_NOTIFICATIONS=shoutrrr"
 			echo "WATCHTOWER_NOTIFICATION_URL=telegram://${TG_BOT_TOKEN}@telegram?parsemode=Markdown&preview=false&channels=${TG_CHAT_ID}"
 			echo "WATCHTOWER_NO_STARTUP_MESSAGE=true"
-			echo "WATCHTOWER_NOTIFICATION_REPORT=${WATCHTOWER_NOTIFY_ON_NO_UPDATES:-${WATCHTOWER_DEFAULT_NOTIFY_ON_NO_UPDATES}}"
+			echo "WATCHTOWER_NOTIFICATION_REPORT=true"
 
 			local br='{{ "\n" }}'
 			local template_time
