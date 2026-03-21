@@ -464,14 +464,6 @@ _validate_watchtower_runtime_state() {
 }
 
 _repair_watchtower_loaded_config() {
-	if ! [[ "${WATCHTOWER_CONFIG_INTERVAL:-}" =~ ^[1-9][0-9]*$ ]]; then
-		log_warn "Watchtower 检测间隔非法，已回退默认值: ${WATCHTOWER_CONFIG_INTERVAL:-}"
-		WATCHTOWER_CONFIG_INTERVAL="${WATCHTOWER_CONF_DEFAULT_INTERVAL:-${WATCHTOWER_DEFAULT_INTERVAL_SECONDS}}"
-		if ! [[ "$WATCHTOWER_CONFIG_INTERVAL" =~ ^[1-9][0-9]*$ ]]; then
-			WATCHTOWER_CONFIG_INTERVAL="${WATCHTOWER_DEFAULT_INTERVAL_SECONDS}"
-		fi
-	fi
-
 	case "${WATCHTOWER_RUN_MODE:-interval}" in
 	interval | cron | aligned) ;;
 	*)
@@ -480,6 +472,18 @@ _repair_watchtower_loaded_config() {
 		WATCHTOWER_SCHEDULE_CRON=""
 		;;
 	esac
+
+	if [[ "${WATCHTOWER_RUN_MODE:-interval}" == "interval" ]]; then
+		if ! [[ "${WATCHTOWER_CONFIG_INTERVAL:-}" =~ ^[1-9][0-9]*$ ]]; then
+			log_warn "Watchtower 检测间隔非法，已回退默认值: ${WATCHTOWER_CONFIG_INTERVAL:-}"
+			WATCHTOWER_CONFIG_INTERVAL="${WATCHTOWER_CONF_DEFAULT_INTERVAL:-${WATCHTOWER_DEFAULT_INTERVAL_SECONDS}}"
+			if ! [[ "$WATCHTOWER_CONFIG_INTERVAL" =~ ^[1-9][0-9]*$ ]]; then
+				WATCHTOWER_CONFIG_INTERVAL="${WATCHTOWER_DEFAULT_INTERVAL_SECONDS}"
+			fi
+		fi
+	elif ! [[ "${WATCHTOWER_CONFIG_INTERVAL:-}" =~ ^[0-9]+$ ]]; then
+		WATCHTOWER_CONFIG_INTERVAL="0"
+	fi
 
 	if [[ "$WATCHTOWER_RUN_MODE" == "cron" || "$WATCHTOWER_RUN_MODE" == "aligned" ]] && [ -n "$WATCHTOWER_SCHEDULE_CRON" ]; then
 		if ! _validate_watchtower_cron_expression "$WATCHTOWER_SCHEDULE_CRON"; then
