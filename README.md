@@ -8,7 +8,7 @@
 
 - `install.sh`：主入口脚本（菜单调度、更新检查、模块执行）
 - `docker.sh`：Docker / Docker Compose 安装与管理
-- `nginx.sh`：Nginx 反代、证书、TCP 代理、备份恢复
+- `nginx.sh`：Nginx 反代、证书、TCP 代理、备份恢复（支持为特殊上游覆盖 Host 请求头，例如 Playwright MCP）
 - `cert.sh`：acme.sh 证书申请与管理
 - `tools/Watchtower.sh`：容器自动更新（Watchtower）管理
 - `tools/bbr_ace.sh`：BBR ACE 网络调优

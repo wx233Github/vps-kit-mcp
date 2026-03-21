@@ -27,6 +27,23 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
+@test "Host 头覆盖校验：仅允许安全主机名与合法端口" {
+  run bash -c 'source "$1"; _is_valid_proxy_host_override "localhost:8931"' "$SCRIPT_PATH" "$LIB_PATH"
+  [ "$status" -eq 0 ]
+
+  run bash -c 'source "$1"; _is_valid_proxy_host_override "playwright.internal"' "$SCRIPT_PATH" "$LIB_PATH"
+  [ "$status" -eq 0 ]
+
+  run bash -c 'source "$1"; _is_valid_proxy_host_override "localhost:99999"' "$SCRIPT_PATH" "$LIB_PATH"
+  [ "$status" -ne 0 ]
+
+  run bash -c 'source "$1"; _is_valid_proxy_host_override "localhost :8931"' "$SCRIPT_PATH" "$LIB_PATH"
+  [ "$status" -ne 0 ]
+
+  run bash -c 'source "$1"; _is_valid_proxy_host_override "[::1]:8931"' "$SCRIPT_PATH" "$LIB_PATH"
+  [ "$status" -ne 0 ]
+}
+
 @test "生成站点配置时包含 MCP Token 防护规则" {
   run bash -c '
     set -euo pipefail
@@ -60,6 +77,38 @@ teardown() {
     [ -f "$conf" ]
     grep -q "location = /mcp" "$conf"
     grep -q "return 403" "$conf"
+  ' "$SCRIPT_PATH" "$LIB_PATH"
+  [ "$status" -eq 0 ]
+}
+
+@test "生成站点配置时可覆盖上游 Host 请求头" {
+  run bash -c '
+    set -euo pipefail
+    source "$1"
+    td="$(mktemp -d /tmp/nginx.mcp.host.XXXXXX)"
+    trap "rm -rf \"$td\"" EXIT
+
+    export SAFE_PATH_ROOTS=("$td")
+    export NGINX_HTTP_CONF_DIR="$td/conf.d"
+    export NGINX_WEBROOT_DIR="$td/webroot"
+    mkdir -p "$NGINX_HTTP_CONF_DIR" "$NGINX_WEBROOT_DIR"
+
+    cert="$td/test.cer"
+    key="$td/test.key"
+    : >"$cert"
+    : >"$key"
+
+    get_vps_ip() { VPS_IPV6=""; }
+    _apply_nginx_conf_with_validation() { cp "$1" "$2"; return 0; }
+    _health_check_nginx_config() { return 0; }
+
+    json=$(jq -n --arg p "8080" --arg cert "$cert" --arg key "$key" --arg pho "localhost:8931" \
+      "{resolved_port:\$p, cert_file:\$cert, key_file:\$key, proxy_host_override:\$pho}")
+
+    _write_and_enable_nginx_config "example.com" "$json"
+    conf="$NGINX_HTTP_CONF_DIR/example.com.conf"
+    [ -f "$conf" ]
+    grep -q "proxy_set_header Host localhost:8931;" "$conf"
   ' "$SCRIPT_PATH" "$LIB_PATH"
   [ "$status" -eq 0 ]
 }
@@ -103,8 +152,8 @@ teardown() {
   run bash -c '
     set -euo pipefail
     source "$1"
-    out=$(_build_project_payload_json "example.com" "local_port" "demo" "8080" "http-01" "" "n" "https://acme-v02.api.letsencrypt.org/directory" "letsencrypt" "/etc/ssl/example.com.cer" "/etc/ssl/example.com.key" "20m" "" "y" "" "/mcp" "0123456789abcdef")
-    jq -e ".domain == \"example.com\" and .resolved_port == \"8080\" and .mcp_protect_path == \"/mcp\" and .mcp_token == \"0123456789abcdef\" and .cf_strict_mode == \"y\"" <<<"$out" >/dev/null
+    out=$(_build_project_payload_json "example.com" "local_port" "demo" "8080" "http-01" "" "n" "https://acme-v02.api.letsencrypt.org/directory" "letsencrypt" "/etc/ssl/example.com.cer" "/etc/ssl/example.com.key" "20m" "" "y" "" "/mcp" "0123456789abcdef" "localhost:8931")
+    jq -e ".domain == \"example.com\" and .resolved_port == \"8080\" and .mcp_protect_path == \"/mcp\" and .mcp_token == \"0123456789abcdef\" and .cf_strict_mode == \"y\" and .proxy_host_override == \"localhost:8931\"" <<<"$out" >/dev/null
   ' "$SCRIPT_PATH" "$LIB_PATH"
   [ "$status" -eq 0 ]
 }
