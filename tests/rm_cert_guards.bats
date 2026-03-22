@@ -182,6 +182,144 @@ teardown() {
   [[ "$output" != *"✅ 已备份"* ]]
 }
 
+@test "rm cert backup=ask chooses backup when tty answer is y" {
+  run bash -c '
+    set -euo pipefail
+    command -v script >/dev/null 2>&1 || exit 80
+    td="$(mktemp -d /tmp/rm.cert.backup.ask.y.XXXXXX)"
+    trap "/bin/rm -rf \"$td\"" EXIT
+    runner="$td/runner.sh"
+    cat >"$runner" <<'"'"'EOF'"'"'
+#!/usr/bin/env bash
+set -euo pipefail
+source "$1"
+td="$2"
+BACKUP_ROOT="$td/backup"
+DOMAIN=" example.com "
+DOMAINS=("")
+DOMAINS[0]="$DOMAIN"
+CERT_DIR="$td/etc/ssl/example.com"
+mkdir -p "$CERT_DIR"
+: > "$CERT_DIR/fullchain.cer"
+events="$td/events.log"
+mkdir() { printf "mkdir:%s\n" "$*" >>"$td/events.log"; command mkdir "$@"; }
+cp() { printf "cp:%s\n" "$*" >>"$td/events.log"; command cp "$@"; }
+run_destructive_cmd() { printf "rm:%s\n" "$*" >>"$td/events.log"; }
+ensure_safe_path() { return 0; }
+mkdir -p "$td/backup"
+local_backup_choice="ask"
+if [ "${local_backup_choice}" = "ask" ] && [ "${JB_NONINTERACTIVE}" != "true" ]; then
+  read -r -p "是否统一备份所有域名证书到 $td/backup ? [y/N]: " BACKUP_ALL </dev/tty
+  if [[ "${BACKUP_ALL}" =~ ^[Yy]$ ]]; then
+    local_backup_choice="always"
+  else
+    local_backup_choice="never"
+  fi
+fi
+for DOMAIN in "${DOMAINS[@]}"; do
+  DOMAIN="$(printf '%s' "$DOMAIN" | xargs)"
+  [ -z "$DOMAIN" ] && continue
+  CERT_DIR="$td/etc/ssl/$DOMAIN"
+  if [ -d "$CERT_DIR" ]; then
+    if [ "${local_backup_choice}" = "always" ]; then
+      DEST="$td/backup/$DOMAIN"
+      mkdir -p "$DEST"
+      cp -r "$CERT_DIR"/* "$DEST"/
+      log_info "✅ 已备份 $DOMAIN 证书到 $DEST"
+    fi
+    log_info "🔹 删除证书目录 $CERT_DIR ..."
+    ensure_safe_path "$CERT_DIR"
+    run_destructive_cmd rm -rf "$CERT_DIR"
+  fi
+done
+cat "$td/events.log"
+EOF
+    chmod +x "$runner"
+    out="$td/typescript.out"
+    printf "y\n" | script -q "$out" -c "$runner $1 $td"
+    python3 - "$out" "$td" <<'"'"'PY'"'"'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text()
+td = sys.argv[2]
+assert f"✅ 已备份 example.com 证书到 {td}/backup/example.com" in text, text
+assert "cp:-r" in text, text
+assert "rm:rm" in text, text
+PY
+   ' _ "$LIB_PATH"
+  if [ "$status" -eq 80 ]; then
+    skip "script command unavailable"
+  fi
+  [ "$status" -eq 0 ]
+}
+
+@test "rm cert backup=ask skips backup when tty answer is n" {
+  run bash -c '
+    set -euo pipefail
+    command -v script >/dev/null 2>&1 || exit 80
+    td="$(mktemp -d /tmp/rm.cert.backup.ask.n.XXXXXX)"
+    trap "/bin/rm -rf \"$td\"" EXIT
+    runner="$td/runner.sh"
+    cat >"$runner" <<'"'"'EOF'"'"'
+#!/usr/bin/env bash
+set -euo pipefail
+source "$1"
+td="$2"
+BACKUP_ROOT="$td/backup"
+DOMAIN="example.com"
+DOMAINS=("$DOMAIN")
+CERT_DIR="$td/etc/ssl/$DOMAIN"
+mkdir -p "$CERT_DIR"
+: > "$CERT_DIR/fullchain.cer"
+events="$td/events.log"
+: > "$td/events.log"
+cp() { printf "cp-called\n" >>"$td/events.log"; return 88; }
+run_destructive_cmd() { printf "rm:%s\n" "$*" >>"$td/events.log"; }
+ensure_safe_path() { return 0; }
+local_backup_choice="ask"
+if [ "${local_backup_choice}" = "ask" ] && [ "${JB_NONINTERACTIVE}" != "true" ]; then
+  read -r -p "是否统一备份所有域名证书到 $td/backup ? [y/N]: " BACKUP_ALL </dev/tty
+  if [[ "${BACKUP_ALL}" =~ ^[Yy]$ ]]; then
+    local_backup_choice="always"
+  else
+    local_backup_choice="never"
+  fi
+fi
+for DOMAIN in "${DOMAINS[@]}"; do
+  DOMAIN="$(printf '%s' "$DOMAIN" | xargs)"
+  [ -z "$DOMAIN" ] && continue
+  CERT_DIR="$td/etc/ssl/$DOMAIN"
+  if [ -d "$CERT_DIR" ]; then
+    if [ "${local_backup_choice}" = "always" ]; then
+      cp -r "$CERT_DIR"/* "$td/backup/$DOMAIN"/
+    fi
+    log_info "🔹 删除证书目录 $CERT_DIR ..."
+    ensure_safe_path "$CERT_DIR"
+    run_destructive_cmd rm -rf "$CERT_DIR"
+  fi
+done
+cat "$td/events.log"
+EOF
+    chmod +x "$runner"
+    out="$td/typescript.out"
+    printf "n\n" | script -q "$out" -c "$runner $1 $td"
+    python3 - "$out" <<'"'"'PY'"'"'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text()
+assert "rm:rm" in text, text
+assert "cp-called" not in text, text
+assert "✅ 已备份" not in text, text
+PY
+   ' _ "$LIB_PATH"
+  if [ "$status" -eq 80 ]; then
+    skip "script command unavailable"
+  fi
+  [ "$status" -eq 0 ]
+}
+
 @test "rm cert removes crontab when only acme jobs remain" {
   run bash -c '
     set -euo pipefail
