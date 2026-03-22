@@ -40,7 +40,7 @@ readonly WATCHTOWER_INSPECT_CREATED_FORMAT='{{.Created}}'
 SESSION_ENCRYPTION_PASSWORD=""
 
 readonly WATCHTOWER_DEFAULT_INTERVAL_SECONDS="21600"
-readonly WATCHTOWER_DEFAULT_NOTIFY_ON_NO_UPDATES="true"
+readonly WATCHTOWER_DEFAULT_NOTIFY_ON_NO_UPDATES="false"
 
 # --- 全局临时文件管理 ---
 declare -a TEMP_FILES=()
@@ -1832,6 +1832,29 @@ _configure_alias() {
 	_prompt_rebuild_if_needed
 }
 
+_configure_notify_on_no_updates() {
+	local current_value="${WATCHTOWER_NOTIFY_ON_NO_UPDATES:-${WATCHTOWER_DEFAULT_NOTIFY_ON_NO_UPDATES}}"
+	local default_hint="${WATCHTOWER_DEFAULT_NOTIFY_ON_NO_UPDATES}"
+	local answer=""
+
+	echo -e "当前状态: ${GREEN}${current_value}${NC}"
+	echo -e "${CYAN}说明:${NC} 开启后，即使本轮没有容器更新或失败，也会发送 Watchtower 汇总通知。"
+	echo -e "${YELLOW}默认值:${NC} ${default_hint}"
+
+	answer=$(_prompt_user_input "是否在无更新时也发送通知? (y/N, 当前: ${current_value}): " "")
+	if echo "$answer" | grep -qE '^[Yy]$'; then
+		WATCHTOWER_NOTIFY_ON_NO_UPDATES="true"
+	elif [[ "$answer" =~ ^[[:space:]]+$ ]]; then
+		WATCHTOWER_NOTIFY_ON_NO_UPDATES="${WATCHTOWER_DEFAULT_NOTIFY_ON_NO_UPDATES}"
+	else
+		WATCHTOWER_NOTIFY_ON_NO_UPDATES="false"
+	fi
+
+	save_config
+	log_info "无更新通知已设置为: ${WATCHTOWER_NOTIFY_ON_NO_UPDATES}"
+	_prompt_rebuild_if_needed
+}
+
 notification_menu() {
 	while true; do
 		if should_clear_screen "watchtower:notification_menu"; then clear; fi
@@ -1843,19 +1866,22 @@ notification_menu() {
 
 		local alias_status="${CYAN}${WATCHTOWER_HOST_ALIAS:-默认}${NC}"
 		local crypto_status="${RED}禁用${NC}"
+		local notify_empty_status="${CYAN}关闭${NC}"
 		[ "$CONFIG_ENCRYPTED" = "true" ] && crypto_status="${GREEN}启用${NC}"
+		[ "${WATCHTOWER_NOTIFY_ON_NO_UPDATES:-${WATCHTOWER_DEFAULT_NOTIFY_ON_NO_UPDATES}}" = "true" ] && notify_empty_status="${GREEN}开启${NC}"
 
 		local -a content_array=(
 			"1. 配置 Telegram (状态: $tg_status)"
 			"2. 设置服务器别名 (当前: $alias_status)"
 			"3. 启用/禁用配置加密 (当前: $crypto_status)"
-			"4. 发送手动测试通知"
-			"5. 清空所有通知配置"
+			"4. 无更新时也发送通知 (当前: $notify_empty_status)"
+			"5. 发送手动测试通知"
+			"6. 清空所有通知配置"
 		)
 		_render_menu "⚙️ 通知配置 ⚙️" "${content_array[@]}"
 
 		local choice
-		choice=$(_prompt_for_menu_choice "1-5")
+		choice=$(_prompt_for_menu_choice "1-6")
 		case "$choice" in
 		1)
 			_configure_telegram
@@ -1870,17 +1896,21 @@ notification_menu() {
 			press_enter_to_continue
 			;;
 		4)
+			_configure_notify_on_no_updates
+			press_enter_to_continue
+			;;
+		5)
 			if [ -z "$TG_BOT_TOKEN" ]; then
 				log_warn "请先配置 Telegram。"
 			else
 				log_info "正在发送测试通知..."
 				send_test_notify "*🔔 手动测试消息*
-来自 Docker 助手 \`$(_escape_markdown "$SCRIPT_VERSION")\` 的测试。
-*状态:* ✅ 成功连接"
+			来自 Docker 助手 \`$(_escape_markdown "$SCRIPT_VERSION")\` 的测试。
+			*状态:* ✅ 成功连接"
 			fi
 			press_enter_to_continue
 			;;
-		5)
+		6)
 			if confirm_action "确定要清空所有通知配置吗?"; then
 				TG_BOT_TOKEN=""
 				TG_CHAT_ID=""
