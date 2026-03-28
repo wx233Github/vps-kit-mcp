@@ -353,6 +353,11 @@ tm_print_usage() {
 用法:
   nginx.sh [选项]
 
+交互模式后端目标说明（HTTP 反代）:
+  - 本机：直接填端口，例如 8080
+  - Docker：直接填容器名，例如 my-app
+  - 异机：填 host:port 或 http(s)://host:port，例如 10.0.0.8:8080 / https://svc.internal:8443
+
 常用选项:
 	  --cron, --non-interactive      非交互执行续期流程
 	  --cf-ip-update                 仅更新 Cloudflare 防御 IP 库

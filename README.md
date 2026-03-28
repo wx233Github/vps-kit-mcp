@@ -8,7 +8,7 @@
 
 - `install.sh`：主入口脚本（菜单调度、更新检查、模块执行）
 - `docker.sh`：Docker / Docker Compose 安装与管理
-- `nginx.sh`：Nginx 反代、证书、TCP 代理、备份恢复（支持为特殊上游覆盖 Host 请求头，例如 Playwright MCP）
+- `nginx.sh`：Nginx 反代、证书、TCP 代理、备份恢复（HTTP 反代支持本机端口、Docker 容器与异机 `host:port` / `http(s)://host:port`，并支持为特殊上游覆盖 Host 请求头，例如 Playwright MCP）
 - `cert.sh`：acme.sh 证书申请与管理
 - `tools/Watchtower.sh`：容器自动更新（Watchtower）管理
 - `tools/bbr_ace.sh`：BBR ACE 网络调优
@@ -46,6 +46,7 @@ curl -fsSL "https://raw.githubusercontent.com/wx233Github/vps-kit-mcp/main/insta
 - 在**子模块主菜单**中直接按回车（Enter），会退出当前脚本链路（不再返回父菜单）。
 - 菜单内的具体操作页通常仍可按提示返回上一级菜单。
 - 各模块支持**独立运行**，在非 root 场景下会自动尝试 sudo 提权。
+- `nginx.sh` 交互模式下配置 HTTP 反代时，后端目标支持三类输入：本机端口（如 `8080`）、Docker 容器名（如 `my-app`）、异机地址（如 `10.0.0.8:8080` 或 `https://svc.internal:8443`）。
 
 ### 清屏策略
 

@@ -44,6 +44,17 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
+@test "HTTP 后端目标校验：允许远端 host:port 与 http(s)://host:port" {
+  run bash -c 'source "$1"; _is_valid_http_backend_target "10.0.0.8:8080"' "$SCRIPT_PATH" "$LIB_PATH"
+  [ "$status" -eq 0 ]
+
+  run bash -c 'source "$1"; _is_valid_http_backend_target "https://svc.internal:8443"' "$SCRIPT_PATH" "$LIB_PATH"
+  [ "$status" -eq 0 ]
+
+  run bash -c 'source "$1"; _is_valid_http_backend_target "https://svc.internal"' "$SCRIPT_PATH" "$LIB_PATH"
+  [ "$status" -ne 0 ]
+}
+
 @test "生成站点配置时包含 MCP Token 防护规则" {
   run bash -c '
     set -euo pipefail
@@ -109,6 +120,71 @@ teardown() {
     conf="$NGINX_HTTP_CONF_DIR/example.com.conf"
     [ -f "$conf" ]
     grep -q "proxy_set_header Host localhost:8931;" "$conf"
+  ' "$SCRIPT_PATH" "$LIB_PATH"
+  [ "$status" -eq 0 ]
+}
+
+@test "生成站点配置时支持远端 HTTP 上游" {
+  run bash -c '
+    set -euo pipefail
+    source "$1"
+    td="$(mktemp -d /tmp/nginx.remote.http.XXXXXX)"
+    trap "rm -rf \"$td\"" EXIT
+
+    export SAFE_PATH_ROOTS=("$td")
+    export NGINX_HTTP_CONF_DIR="$td/conf.d"
+    export NGINX_WEBROOT_DIR="$td/webroot"
+    mkdir -p "$NGINX_HTTP_CONF_DIR" "$NGINX_WEBROOT_DIR"
+
+    cert="$td/test.cer"
+    key="$td/test.key"
+    : >"$cert"
+    : >"$key"
+
+    get_vps_ip() { VPS_IPV6=""; }
+    _apply_nginx_conf_with_validation() { cp "$1" "$2"; return 0; }
+    _health_check_nginx_config() { return 0; }
+
+    json=$(jq -n --arg t "remote_host" --arg p "10.0.0.8:8080" --arg cert "$cert" --arg key "$key" \
+      "{type:\$t,resolved_port:\$p,cert_file:\$cert,key_file:\$key}")
+
+    _write_and_enable_nginx_config "example.com" "$json"
+    conf="$NGINX_HTTP_CONF_DIR/example.com.conf"
+    [ -f "$conf" ]
+    grep -q "proxy_pass http://10.0.0.8:8080;" "$conf"
+  ' "$SCRIPT_PATH" "$LIB_PATH"
+  [ "$status" -eq 0 ]
+}
+
+@test "生成站点配置时支持远端 HTTPS 上游并开启 SNI" {
+  run bash -c '
+    set -euo pipefail
+    source "$1"
+    td="$(mktemp -d /tmp/nginx.remote.https.XXXXXX)"
+    trap "rm -rf \"$td\"" EXIT
+
+    export SAFE_PATH_ROOTS=("$td")
+    export NGINX_HTTP_CONF_DIR="$td/conf.d"
+    export NGINX_WEBROOT_DIR="$td/webroot"
+    mkdir -p "$NGINX_HTTP_CONF_DIR" "$NGINX_WEBROOT_DIR"
+
+    cert="$td/test.cer"
+    key="$td/test.key"
+    : >"$cert"
+    : >"$key"
+
+    get_vps_ip() { VPS_IPV6=""; }
+    _apply_nginx_conf_with_validation() { cp "$1" "$2"; return 0; }
+    _health_check_nginx_config() { return 0; }
+
+    json=$(jq -n --arg t "remote_url" --arg p "https://svc.internal:8443" --arg cert "$cert" --arg key "$key" \
+      "{type:\$t,resolved_port:\$p,cert_file:\$cert,key_file:\$key}")
+
+    _write_and_enable_nginx_config "example.com" "$json"
+    conf="$NGINX_HTTP_CONF_DIR/example.com.conf"
+    [ -f "$conf" ]
+    grep -q "proxy_pass https://svc.internal:8443;" "$conf"
+    grep -q "proxy_ssl_server_name on;" "$conf"
   ' "$SCRIPT_PATH" "$LIB_PATH"
   [ "$status" -eq 0 ]
 }
