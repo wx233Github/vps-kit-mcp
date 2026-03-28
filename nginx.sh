@@ -2721,11 +2721,14 @@ _prompt_backend_target_for_project() {
 	local type="local_port"
 	local port=""
 
-	local old_type old_port target_default
+	local old_type old_name old_port target_default
 	old_type=$(jq -r '.type // "local_port"' <<<"$cur" 2>/dev/null || printf '%s' "local_port")
+	old_name=$(jq -r '.name // ""' <<<"$cur" 2>/dev/null || printf '%s' "")
 	old_port=$(jq -r '.resolved_port // ""' <<<"$cur" 2>/dev/null || printf '%s' "")
 	target_default="$name"
-	if [ "$old_type" = "local_port" ] && [ -n "$old_port" ] && [ "$old_port" != "null" ] && [ "$old_port" != "cert_only" ]; then
+	if [ "$old_type" = "docker" ] && [ -n "$old_name" ] && [ "$old_name" != "null" ]; then
+		target_default="$old_name"
+	elif [ -n "$old_port" ] && [ "$old_port" != "null" ] && [ "$old_port" != "cert_only" ]; then
 		target_default="$old_port"
 	fi
 	[ "$target_default" == "证书" ] && target_default=""
@@ -2733,13 +2736,19 @@ _prompt_backend_target_for_project() {
 		target_default="$fallback_port"
 	fi
 
+	_render_menu "后端目标说明" \
+		"1. 本机：直接填端口，例如 8080" \
+		"2. Docker：直接填容器名，例如 my-app" \
+		"3. 异机：填 host:port 或 http(s)://host:port，例如 10.0.0.8:8080 / https://svc.internal:8443" >&2
+
 	while true; do
-		local target
-		if ! target=$(prompt_input "后端目标 (容器名/端口)" "$target_default" "" "" "false"); then
+		local target display_name
+		if ! target=$(prompt_input "后端目标 (本机端口/Docker容器/异机 host:port 或 http(s)://host:port)" "$target_default" "" "" "false"); then
 			return 1
 		fi
 		type="local_port"
 		port="$target"
+		display_name="$target"
 		if command -v docker &>/dev/null && docker ps --format '{{.Names}}' 2>/dev/null | grep -wq "$target"; then
 			type="docker"
 			port=$(docker inspect "$target" --format '{{range $p, $conf := .NetworkSettings.Ports}}{{range $conf}}{{.HostPort}}{{end}}{{end}}' 2>/dev/null | head -n1 || true)
@@ -2755,10 +2764,19 @@ _prompt_backend_target_for_project() {
 			break
 		fi
 		if [[ "$port" =~ ^[0-9]+$ ]] && _is_valid_port "$port"; then break; fi
-		log_message ERROR "错误: '$target' 既不是容器也不是端口。" >&2
+		if _is_valid_http_backend_target "$target"; then
+			if [[ "$target" =~ ^https?:// ]]; then
+				type="remote_url"
+			else
+				type="remote_host"
+			fi
+			port="$target"
+			break
+		fi
+		log_message ERROR "错误: '$target' 既不是容器、端口，也不是合法的远端目标。" >&2
 	done
 
-	printf '%s\t%s\n' "$type" "$port"
+	printf '%s\t%s\t%s\n' "$type" "$port" "$display_name"
 }
 
 _gather_project_details() {
@@ -2809,7 +2827,7 @@ _gather_project_details() {
 			return 1
 		fi
 		local old_ifs="$IFS"
-		IFS=$'\t' read -r type port <<<"$target_pair"
+		IFS=$'\t' read -r type port name <<<"$target_pair"
 		IFS="$old_ifs"
 	fi
 
@@ -2959,6 +2977,8 @@ _display_projects_list() {
 		idx=$((idx + 1))
 		local target_str="Port:$port"
 		[ "$type" = "docker" ] && target_str="Docker:$port"
+		[ "$type" = "remote_host" ] && target_str="Remote:$port"
+		[ "$type" = "remote_url" ] && target_str="Remote:$port"
 		[ "$port" == "cert_only" ] && target_str="CertOnly"
 		local display_target
 		display_target=$(printf "%-${w_target}s" "$target_str")

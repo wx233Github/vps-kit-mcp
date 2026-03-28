@@ -146,20 +146,76 @@ _apply_nginx_conf_with_validation() {
 
 _build_proxy_common_directives() {
 	local proxy_host_header="${1:-\$host}"
+	local upstream_scheme="${2:-http}"
+	local ssl_server_name_line=""
+	if [ "$upstream_scheme" = "https" ]; then
+		ssl_server_name_line=' proxy_ssl_server_name on;'
+	fi
 	cat <<EOF
         proxy_set_header Host ${proxy_host_header}; proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade";
+        proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade";${ssl_server_name_line}
         proxy_read_timeout 300s; proxy_send_timeout 300s;
 EOF
 }
 
+_resolve_http_proxy_pass_target() {
+	local target_type="${1:-}"
+	local target_value="${2:-}"
+
+	if [ -z "$target_value" ] || [ "$target_value" = "null" ]; then
+		log_message ERROR "HTTP 上游目标为空。"
+		return 1
+	fi
+
+	case "$target_type" in
+	"" | local_port | docker)
+		if _is_valid_port "$target_value"; then
+			printf 'http://127.0.0.1:%s\n' "$target_value"
+			return 0
+		fi
+		;;
+	remote_host)
+		if _is_valid_target "$target_value"; then
+			printf 'http://%s\n' "$target_value"
+			return 0
+		fi
+		;;
+	remote_url)
+		if [[ "$target_value" =~ ^https?:// ]] && _is_valid_http_backend_target "$target_value"; then
+			printf '%s\n' "$target_value"
+			return 0
+		fi
+		;;
+	esac
+
+	if _is_valid_port "$target_value"; then
+		printf 'http://127.0.0.1:%s\n' "$target_value"
+		return 0
+	fi
+	if _is_valid_target "$target_value"; then
+		printf 'http://%s\n' "$target_value"
+		return 0
+	fi
+	if [[ "$target_value" =~ ^https?:// ]] && _is_valid_http_backend_target "$target_value"; then
+		printf '%s\n' "$target_value"
+		return 0
+	fi
+
+	log_message ERROR "HTTP 上游目标无效: ${target_value}"
+	return 1
+}
+
 _render_proxy_location_block() {
 	local location_expr="${1:-/}"
-	local port="${2:-}"
+	local proxy_pass_target="${2:-}"
 	local guard_token="${3:-}"
 	local proxy_host_override="${4:-}"
 	local guard_line=""
+	local upstream_scheme="http"
+	if [[ "$proxy_pass_target" =~ ^https:// ]]; then
+		upstream_scheme="https"
+	fi
 	if [ -n "$guard_token" ]; then
 		# shellcheck disable=SC2016
 		printf -v guard_line '        if ($http_x_oenmcp_token != "%s") { return 403; }' "$guard_token"
@@ -167,8 +223,8 @@ _render_proxy_location_block() {
 	cat <<EOF
     location ${location_expr} {
 ${guard_line}
-        proxy_pass http://127.0.0.1:${port};
-$(_build_proxy_common_directives "$proxy_host_override")
+        proxy_pass ${proxy_pass_target};
+$(_build_proxy_common_directives "$proxy_host_override" "$upstream_scheme")
     }
 EOF
 }
@@ -183,7 +239,8 @@ _write_and_enable_nginx_config() {
 		log_message ERROR "配置生成失败: 传入 JSON 为空。"
 		return 1
 	fi
-	local port cert key max_body custom_cfg cf_strict mcp_path mcp_token proxy_host_override
+	local target_type port cert key max_body custom_cfg cf_strict mcp_path mcp_token proxy_host_override proxy_pass_target
+	target_type=$(jq -r '.type // empty' <<<"$json" 2>/dev/null || true)
 	port=$(jq -r '.resolved_port // empty' <<<"$json" 2>/dev/null || true)
 	cert=$(jq -r '.cert_file // empty' <<<"$json" 2>/dev/null || true)
 	key=$(jq -r '.key_file // empty' <<<"$json" 2>/dev/null || true)
@@ -198,7 +255,7 @@ _write_and_enable_nginx_config() {
 		return 1
 	fi
 	if [ "$port" == "cert_only" ]; then return 0; fi
-	if ! _require_valid_port "$port"; then return 1; fi
+	if ! proxy_pass_target=$(_resolve_http_proxy_pass_target "$target_type" "$port"); then return 1; fi
 
 	if ! _require_safe_path "$cert" "证书文件"; then return 1; fi
 	if ! _require_safe_path "$key" "密钥文件"; then return 1; fi
@@ -243,8 +300,8 @@ _write_and_enable_nginx_config() {
 	fi
 	local mcp_protect_cfg=""
 	if [ -n "$mcp_path" ] && [ -n "$mcp_token" ]; then
-		mcp_protect_cfg="$(_render_proxy_location_block "= ${mcp_path}" "$port" "$mcp_token" "$proxy_host_override")
-$(_render_proxy_location_block "^~ ${mcp_path}/" "$port" "$mcp_token" "$proxy_host_override")"
+		mcp_protect_cfg="$(_render_proxy_location_block "= ${mcp_path}" "$proxy_pass_target" "$mcp_token" "$proxy_host_override")
+$(_render_proxy_location_block "^~ ${mcp_path}/" "$proxy_pass_target" "$mcp_token" "$proxy_host_override")"
 	fi
 	local extra_cfg=""
 	local custom_cfg_effective="$custom_cfg"
@@ -322,7 +379,7 @@ server {
     ${body_cfg}${cf_strict_cfg}
     ${extra_cfg}
 ${mcp_protect_cfg}
-$(_render_proxy_location_block "/" "$port" "" "$proxy_host_override")
+$(_render_proxy_location_block "/" "$proxy_pass_target" "" "$proxy_host_override")
 }
 EOF
 	local skip_test="false"

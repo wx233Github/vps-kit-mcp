@@ -1416,6 +1416,23 @@ _is_valid_target() {
 	[[ "$t" =~ ^[A-Za-z0-9.-]+:[0-9]+(,[A-Za-z0-9.-]+:[0-9]+)*$ ]]
 }
 
+_is_valid_http_backend_target() {
+  local target="${1:-}"
+  local stripped="${target#http://}"
+  stripped="${stripped#https://}"
+
+  if _is_valid_port "$target" || _is_valid_target "$target"; then
+    return 0
+  fi
+
+  if [[ "$target" =~ ^https?:// ]]; then
+    _is_valid_target "$stripped"
+    return $?
+  fi
+
+  return 1
+}
+
 _is_valid_location_path() {
 	local p="${1:-}"
 	if [ -z "$p" ] || [ "$p" = "/" ]; then return 1; fi
