@@ -3091,7 +3091,7 @@ _display_projects_list() {
 }
 
 select_item_and_act() {
-	local list_json="${1:-}" count="${2:-0}" prompt_text="${3:-}" id_field="${4:-}" action_fn="${5:-}" list_render_fn="${6:-}"
+	local list_json="${1:-}" count="${2:-0}" prompt_text="${3:-}" id_field="${4:-}" action_fn="${5:-}" list_render_fn="${6:-}" refresh_file="${7:-}"
 	while true; do
 		if [ -n "$list_render_fn" ] && declare -f "$list_render_fn" >/dev/null 2>&1; then
 			"$list_render_fn" "$list_json"
@@ -3108,6 +3108,11 @@ select_item_and_act() {
 		"$action_fn" "$selected_id"
 		local action_ret=$?
 		if [ "$action_ret" -eq 2 ]; then return 1; fi
+		if [ -n "$refresh_file" ] && [ -f "$refresh_file" ]; then
+			list_json=$(jq . "$refresh_file" 2>/dev/null || printf '%s' "[]")
+			count=$(jq 'length' <<<"$list_json" 2>/dev/null || printf '%s' "0")
+			if [ "$count" -eq 0 ]; then return 1; fi
+		fi
 	done
 }
 
@@ -3180,7 +3185,7 @@ manage_configs() {
 			log_message WARN "暂无项目。"
 			break
 		fi
-		if ! select_item_and_act "$all" "$count" "请输入序号选择项目 (回车返回)" "domain" _manage_http_actions _display_projects_list; then break; fi
+		if ! select_item_and_act "$all" "$count" "请输入序号选择项目 (回车返回)" "domain" _manage_http_actions _display_projects_list "$PROJECTS_METADATA_FILE"; then break; fi
 	done
 }
 
@@ -4377,7 +4382,7 @@ _manage_nginx_template_center() {
 		log_message WARN "暂无 HTTP 项目，无法应用模板。"
 		press_enter_to_exit
 	fi
-	select_item_and_act "$all" "$count" "请输入序号选择项目进入模板中心 (回车返回)" "domain" _handle_nginx_template_center_for_domain _display_projects_list || true
+	select_item_and_act "$all" "$count" "请输入序号选择项目进入模板中心 (回车返回)" "domain" _handle_nginx_template_center_for_domain _display_projects_list "$PROJECTS_METADATA_FILE" || true
 }
 
 _template_parallel_execute() {
