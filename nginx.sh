@@ -2714,6 +2714,60 @@ _detect_reusable_wildcard_cert() {
 	printf '%s\t%s\t%s\n' "$reuse_wc" "$wc_cert" "$wc_key"
 }
 
+_is_backend_probe_success_code() {
+	local code="${1:-000}"
+	[[ "$code" =~ ^[1-5][0-9][0-9]$ ]]
+}
+
+_probe_backend_target_code() {
+	local scheme="${1:-http}"
+	local target="${2:-}"
+	local timeout="${BACKEND_TARGET_PROBE_TIMEOUT:-3}"
+	if ! command -v curl >/dev/null 2>&1; then
+		printf '%s\n' "000"
+		return 0
+	fi
+	local url="${scheme}://${target}"
+	local curl_args=(-sS -o /dev/null -w "%{http_code}" --connect-timeout "$timeout" --max-time "$timeout")
+	[ "$scheme" = "https" ] && curl_args+=(-k)
+	curl "${curl_args[@]}" "$url" 2>/dev/null || printf '%s' "000"
+}
+
+_autodetect_remote_backend_target() {
+	local target="${1:-}"
+	if [ "$IS_INTERACTIVE_MODE" != "true" ] || [ "${JB_NONINTERACTIVE:-false}" = "true" ]; then
+		printf '%s\n' "$target"
+		return 0
+	fi
+	if [[ "$target" =~ ^https?:// ]] || [[ "$target" == *,* ]] || ! _is_valid_target "$target"; then
+		printf '%s\n' "$target"
+		return 0
+	fi
+
+	local http_code https_code
+	http_code=$(_probe_backend_target_code "http" "$target")
+	https_code=$(_probe_backend_target_code "https" "$target")
+	local http_ok="false"
+	local https_ok="false"
+	if _is_backend_probe_success_code "$http_code"; then http_ok="true"; fi
+	if _is_backend_probe_success_code "$https_code"; then https_ok="true"; fi
+
+	if [ "$https_ok" = "true" ] && [ "$http_ok" = "false" ]; then
+		if confirm_or_cancel "检测到后端仅支持 HTTPS，是否改用 https://${target} ?" "y"; then
+			printf 'https://%s\n' "$target"
+			return 0
+		fi
+	fi
+	if [ "$https_ok" = "true" ] && [ "$http_ok" = "true" ]; then
+		if confirm_or_cancel "检测到后端同时支持 HTTP/HTTPS，是否优先使用 HTTPS?" "y"; then
+			printf 'https://%s\n' "$target"
+			return 0
+		fi
+	fi
+
+	printf '%s\n' "$target"
+}
+
 _prompt_backend_target_for_project() {
 	local cur="${1:-{}}"
 	local name="${2:-}"
@@ -2737,14 +2791,17 @@ _prompt_backend_target_for_project() {
 	fi
 
 	_render_menu "后端目标说明" \
-		"1. 本机：直接填端口，例如 8080" \
-		"2. Docker：直接填容器名，例如 my-app" \
-		"3. 异机：填 host:port 或 http(s)://host:port，例如 10.0.0.8:8080 / https://svc.internal:8443" >&2
+		"1. 本机：端口，如 8080" \
+		"2. Docker：容器名，如 my-app" \
+		"3. 异机：IP:端口 / http://IP:端口 / https://IP:端口" >&2
 
 	while true; do
 		local target display_name
-		if ! target=$(prompt_input "后端目标 (本机端口/Docker容器/异机 host:port 或 http(s)://host:port)" "$target_default" "" "" "false"); then
+		if ! target=$(prompt_input "后端目标" "$target_default" "" "" "false"); then
 			return 1
+		fi
+		if _is_valid_target "$target" && [[ ! "$target" =~ ^https?:// ]] && [[ "$target" != *,* ]]; then
+			target=$(_autodetect_remote_backend_target "$target")
 		fi
 		type="local_port"
 		port="$target"

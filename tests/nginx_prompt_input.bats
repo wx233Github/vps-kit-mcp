@@ -1,20 +1,20 @@
 #!/usr/bin/env bats
 
 @test "prompt_input 在交互模式下输出提示" {
-  REPO_ROOT="${BATS_TEST_DIRNAME%/tests}"
-  run env REPO_ROOT="$REPO_ROOT" bash -c '
+	REPO_ROOT="${BATS_TEST_DIRNAME%/tests}"
+	run env REPO_ROOT="$REPO_ROOT" bash -c '
     set -euo pipefail
     out=$(mktemp)
     printf "example.com\n" | script -q "$out" -c "bash -lc \\\"source $REPO_ROOT/lib/nginx_core.sh; IS_INTERACTIVE_MODE=true; JB_NONINTERACTIVE=false; prompt_input '"'"'主域名'"'"' '' '' '' '"'"'false'"'"' >/dev/null\\\""
     grep -q "主域名" "$out"
     rm -f "$out"
   '
-  [ "$status" -eq 0 ]
+	[ "$status" -eq 0 ]
 }
 
 @test "_gather_project_details 会输出包含 domain 与 method 的 JSON" {
-  REPO_ROOT="${BATS_TEST_DIRNAME%/tests}"
-  run env REPO_ROOT="$REPO_ROOT" bash -c '
+	REPO_ROOT="${BATS_TEST_DIRNAME%/tests}"
+	run env REPO_ROOT="$REPO_ROOT" bash -c '
     set -euo pipefail
     TMP=$(mktemp /tmp/nginx.core.XXXXXX.sh)
     head -n -1 "$REPO_ROOT/nginx.sh" >"$TMP"
@@ -39,5 +39,66 @@
     echo "$json" | jq -e '.acme_validation_method == "http-01"' >/dev/null
     rm -f "$TMP"
   '
-  [ "$status" -eq 0 ]
+	[ "$status" -eq 0 ]
+}
+
+@test "_prompt_backend_target_for_project 在探测到 HTTPS 时可自动改写远端目标" {
+	REPO_ROOT="${BATS_TEST_DIRNAME%/tests}"
+	run env REPO_ROOT="$REPO_ROOT" bash -c '
+    set -euo pipefail
+    TMP=$(mktemp /tmp/nginx.core.XXXXXX.sh)
+    head -n -1 "$REPO_ROOT/nginx.sh" >"$TMP"
+    source "$TMP"
+    IS_INTERACTIVE_MODE=true
+    JB_NONINTERACTIVE=false
+
+    prompt_input() {
+      printf "%s\n" "107.161.92.157:18789"
+    }
+    _render_menu() { return 0; }
+    _probe_backend_target_code() {
+      case "$1" in
+        http) printf "%s\n" "000" ;;
+        https) printf "%s\n" "200" ;;
+      esac
+    }
+    confirm_or_cancel() { return 0; }
+
+    result=$(_prompt_backend_target_for_project "{}" "" "")
+    IFS=$'"'"'\t'"'"' read -r type port name <<<"$result"
+    [ "$type" = "remote_url" ]
+    [ "$port" = "https://107.161.92.157:18789" ]
+    [ "$name" = "https://107.161.92.157:18789" ]
+    rm -f "$TMP"
+  '
+	[ "$status" -eq 0 ]
+}
+
+@test "_prompt_backend_target_for_project 在 HTTP/HTTPS 都可用时允许保留 HTTP" {
+	REPO_ROOT="${BATS_TEST_DIRNAME%/tests}"
+	run env REPO_ROOT="$REPO_ROOT" bash -c '
+    set -euo pipefail
+    TMP=$(mktemp /tmp/nginx.core.XXXXXX.sh)
+    head -n -1 "$REPO_ROOT/nginx.sh" >"$TMP"
+    source "$TMP"
+    IS_INTERACTIVE_MODE=true
+    JB_NONINTERACTIVE=false
+
+    prompt_input() {
+      printf "%s\n" "107.161.92.157:18789"
+    }
+    _render_menu() { return 0; }
+    _probe_backend_target_code() {
+      printf "%s\n" "200"
+    }
+    confirm_or_cancel() { return 1; }
+
+    result=$(_prompt_backend_target_for_project "{}" "" "")
+    IFS=$'"'"'\t'"'"' read -r type port name <<<"$result"
+    [ "$type" = "remote_host" ]
+    [ "$port" = "107.161.92.157:18789" ]
+    [ "$name" = "107.161.92.157:18789" ]
+    rm -f "$TMP"
+  '
+	[ "$status" -eq 0 ]
 }
