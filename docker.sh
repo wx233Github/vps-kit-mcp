@@ -596,7 +596,13 @@ uninstall_docker() {
 			fi
 		fi
 		if [ -z "$(getent group docker | cut -d: -f4)" ]; then
-			execute_with_spinner "删除空的 'docker' 用户组..." run_destructive_with_sudo groupdel docker
+			if command -v groupdel >/dev/null 2>&1; then
+				if ! execute_with_spinner "删除空的 'docker' 用户组..." run_destructive_with_sudo groupdel docker; then
+					log_warn "'docker' 组删除失败，请手动检查是否仍有残留依赖。"
+				fi
+			else
+				log_warn "系统缺少 groupdel，已跳过删除空的 'docker' 用户组。"
+			fi
 		fi
 	fi
 	log_success "✅ Docker 和 Compose 已成功卸载。"
