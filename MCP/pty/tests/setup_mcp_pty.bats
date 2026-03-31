@@ -1,24 +1,25 @@
 #!/usr/bin/env bats
 
 setup() {
-  export PTY_DIR="${BATS_TEST_DIRNAME%/tests}"
-  export TARGET_SCRIPT="${PTY_DIR}/mcp_pty.sh"
+	export PTY_DIR="${BATS_TEST_DIRNAME%/tests}"
+	export TARGET_SCRIPT="${PTY_DIR}/mcp_pty.sh"
 }
 
 @test "--help 可正常输出" {
-  run bash "$TARGET_SCRIPT" --help
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"--with-opencode"* ]]
+	run bash "$TARGET_SCRIPT" --help
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"MCP PTY Runtime Center"* ]]
+	[[ "$output" == *"--with-opencode"* ]]
 }
 
 @test "未知参数返回 EX_USAGE(64)" {
-  run bash "$TARGET_SCRIPT" --not-exists
-  [ "$status" -eq 64 ]
-  [[ "$output" == *"未知参数"* ]]
+	run bash "$TARGET_SCRIPT" --not-exists
+	[ "$status" -eq 64 ]
+	[[ "$output" == *"未知参数"* ]]
 }
 
 @test "参数解析支持可选模式与路径覆盖" {
-  run bash <<'EOF'
+	run bash <<'EOF'
 source "$TARGET_SCRIPT"
 DRY_RUN="false"
 MODE=""
@@ -36,34 +37,34 @@ parse_args --with-opencode --dry-run --remote-raw-base "https://example.com/raw"
 [ "$OPENCODE_INSTRUCTIONS_PATH" = "/tmp/pty.md" ]
 [ "$PTY_MCP_SPEC" = "pty-mcp==0.2.0" ]
 EOF
-  [ "$status" -eq 0 ]
+	[ "$status" -eq 0 ]
 }
 
 @test "PTY_MCP_SPEC 环境变量可作为默认包规格" {
-  run env PTY_MCP_SPEC="pty-mcp==9.9.9" bash <<'EOF'
+	run env PTY_MCP_SPEC="pty-mcp==9.9.9" bash <<'EOF'
 set -euo pipefail
 source "$TARGET_SCRIPT"
 [ "$PTY_MCP_SPEC" = "pty-mcp==9.9.9" ]
 EOF
-  [ "$status" -eq 0 ]
+	[ "$status" -eq 0 ]
 }
 
 @test "--uninstall 参数可切换到卸载模式" {
-  run bash <<'EOF'
+	run bash <<'EOF'
 source "$TARGET_SCRIPT"
 MODE=""
 parse_args --uninstall
 [ "$MODE" = "uninstall" ]
 EOF
-  [ "$status" -eq 0 ]
+	[ "$status" -eq 0 ]
 }
 
 @test "opencode 配置写入包含 pty-runner 命令规格与 instructions" {
-  if ! command -v jq >/dev/null 2>&1; then
-    skip "jq 不存在，跳过此测试"
-  fi
+	if ! command -v jq >/dev/null 2>&1; then
+		skip "jq 不存在，跳过此测试"
+	fi
 
-  run bash <<'EOF'
+	run bash <<'EOF'
 set -euo pipefail
 source "$TARGET_SCRIPT"
 DRY_RUN="false"
@@ -86,15 +87,15 @@ jq -e --arg spec "$PTY_MCP_SPEC" --arg ins "$instruction_path" '
   and (.instructions | index($ins) != null)
 ' "$config_path" >/dev/null
 EOF
-  [ "$status" -eq 0 ]
+	[ "$status" -eq 0 ]
 }
 
 @test "HOME 路径会写入 {env:HOME} 模板" {
-  if ! command -v jq >/dev/null 2>&1; then
-    skip "jq 不存在，跳过此测试"
-  fi
+	if ! command -v jq >/dev/null 2>&1; then
+		skip "jq 不存在，跳过此测试"
+	fi
 
-  run bash <<'EOF'
+	run bash <<'EOF'
 set -euo pipefail
 source "$TARGET_SCRIPT"
 DRY_RUN="false"
@@ -122,15 +123,15 @@ jq -e '
   and (.instructions | index("${HOME}/.config/opencode/instructions/pty.md") == null)
 ' "$config_path" >/dev/null
 EOF
-  [ "$status" -eq 0 ]
+	[ "$status" -eq 0 ]
 }
 
 @test "CLI 传入的 pty-mcp spec 优先于环境变量" {
-  if ! command -v jq >/dev/null 2>&1; then
-    skip "jq 不存在，跳过此测试"
-  fi
+	if ! command -v jq >/dev/null 2>&1; then
+		skip "jq 不存在，跳过此测试"
+	fi
 
-  run env PTY_MCP_SPEC="pty-mcp==1.0.0" bash <<'EOF'
+	run env PTY_MCP_SPEC="pty-mcp==1.0.0" bash <<'EOF'
 set -euo pipefail
 source "$TARGET_SCRIPT"
 DRY_RUN="false"
@@ -138,11 +139,11 @@ MODE=""
 parse_args --pty-mcp-spec "pty-mcp==0.2.0"
 [ "$PTY_MCP_SPEC" = "pty-mcp==0.2.0" ]
 EOF
-  [ "$status" -eq 0 ]
+	[ "$status" -eq 0 ]
 }
 
 @test "resolve_uv_bin 支持 ~/.local/bin/uv" {
-  run bash <<'EOF'
+	run bash <<'EOF'
 set -euo pipefail
 source "$TARGET_SCRIPT"
 
@@ -156,11 +157,11 @@ UV_BIN=""
 resolve_uv_bin
 [ "$UV_BIN" = "${tmp_home}/.local/bin/uv" ]
 EOF
-  [ "$status" -eq 0 ]
+	[ "$status" -eq 0 ]
 }
 
 @test "resolve_opencode_bin 支持 ~/.opencode-i18n/bin/opencode" {
-  run bash <<'EOF'
+	run bash <<'EOF'
 set -euo pipefail
 source "$TARGET_SCRIPT"
 
@@ -174,26 +175,26 @@ OPENCODE_BIN=""
 resolve_opencode_bin
 [ "$OPENCODE_BIN" = "${tmp_home}/.opencode-i18n/bin/opencode" ]
 EOF
-  [ "$status" -eq 0 ]
+	[ "$status" -eq 0 ]
 }
 
 @test "JB_NONINTERACTIVE=true 时跳过交互确认" {
-  run bash <<'EOF'
+	run bash <<'EOF'
 set -euo pipefail
 source "$TARGET_SCRIPT"
 
 JB_NONINTERACTIVE="true"
 confirm_run_if_needed
 EOF
-  [ "$status" -eq 0 ]
+	[ "$status" -eq 0 ]
 }
 
 @test "卸载清理会删除 opencode 中 pty-runner 与 instructions 关联" {
-  if ! command -v jq >/dev/null 2>&1; then
-    skip "jq 不存在，跳过此测试"
-  fi
+	if ! command -v jq >/dev/null 2>&1; then
+		skip "jq 不存在，跳过此测试"
+	fi
 
-  run bash <<'EOF'
+	run bash <<'EOF'
 set -euo pipefail
 source "$TARGET_SCRIPT"
 DRY_RUN="false"
@@ -227,5 +228,5 @@ jq -e --arg ins "$instruction_path" '
   and (.instructions | index($ins) == null)
 ' "$config_path" >/dev/null
 EOF
-  [ "$status" -eq 0 ]
+	[ "$status" -eq 0 ]
 }

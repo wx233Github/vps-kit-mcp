@@ -70,6 +70,13 @@ die() {
 
 usage() {
 	cat <<'EOF'
+
+MCP PTY Runtime Center
+Provision PTY runner dependencies, optional opencode linkage and clean uninstall workflows.
+
+Theme: plain-shell   |   Modes: install / opencode / uninstall
+Choose a mode, confirm execution, then follow the printed next-step checklist.
+
 用法:
   mcp_pty.sh [选项]
 

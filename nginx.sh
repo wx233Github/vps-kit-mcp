@@ -297,6 +297,28 @@ _render_menu() {
 	local title="$1"
 	shift
 	local -a lines=("$@")
+	if declare -f get_ui_theme >/dev/null 2>&1 && [ "$(get_ui_theme)" != "classic" ]; then
+		local width=60
+		local title_width=0
+		title_width=$(_get_visual_width "$title")
+		if [ "$title_width" -gt "$width" ]; then
+			width=$title_width
+		fi
+		for line in "${lines[@]}"; do
+			local current_width=0
+			current_width=$(_get_visual_width "$line")
+			if [ "$current_width" -gt "$width" ]; then
+				width=$current_width
+			fi
+		done
+		[ "$width" -lt 60 ] && width=60
+		[ "$width" -gt 82 ] && width=82
+		printf '%b' "\n" >"$out"
+		printf '%b' "${BOLD}${title}${NC}\n" >"$out"
+		printf '%b' "${CYAN}$(generate_line "$width" "-")${NC}\n" >"$out"
+		for line in "${lines[@]}"; do printf '%b' "${line}\n" >"$out"; done
+		return 0
+	fi
 	local max_content_width=0
 	local title_width
 	title_width=$(_get_visual_width "$title")

@@ -22,6 +22,7 @@ DEFAULT_LOG_FILE="/var/log/vps-kit-mcp-utils.log"
 DEFAULT_LOG_LEVEL="INFO"
 DEFAULT_ENABLE_AUTO_UPDATE="true"
 DEFAULT_NONINTERACTIVE="false"
+DEFAULT_UI_THEME="retro-launcher"
 # shellcheck disable=SC2034
 DEFAULT_TTY_PATH="/dev/tty"
 # shellcheck disable=SC2034
@@ -43,9 +44,41 @@ readonly -a UTILS_PUBLIC_API=(
 	"normalize_clear_mode"
 	"should_clear_screen"
 	"load_config"
+	"get_ui_theme"
+	"ui_theme_label"
+	"menu_vocab_phrase"
+	"menu_schema_default"
+	"menu_ui_text_field"
+	"menu_ui_meta_label"
+	"menu_ui_status_label"
+	"menu_ui_status_marker"
+	"menu_ui_group_label"
+	"menu_ui_section_label"
+	"menu_group_heading"
+	"menu_ui_focus_key"
+	"menu_ui_focus_value"
+	"menu_ui_focus_source"
+	"menu_resolved_focus_value"
+	"ui_append_schema_panel_header"
+	"ui_append_schema_or_fallback_panel_header"
+	"ui_append_schema_page_block"
+	"ui_append_schema_or_fallback_page_block"
+	"ui_define_manual_fallback_helpers"
+	"ui_define_meta_fallback_helpers"
+	"ui_append_manual_panel_fallback"
+	"ui_append_manual_page_block"
+	"ui_meta_focus_fallback_line"
+	"ui_meta_focus_label"
+	"ui_meta_focus_line"
+	"ui_append_context_lines"
+	"ui_append_panel_header"
+	"ui_append_main_menu_context"
+	"ui_append_page_block"
 	"generate_line"
 	"_get_visual_width"
 	"_render_menu"
+	"ui_render_main_menu_hero"
+	"ui_format_section_heading"
 	"utils_api_contract"
 )
 
@@ -59,6 +92,7 @@ if [ -t 1 ] || [ "${FORCE_COLOR:-}" = "true" ]; then
 	BLUE=$'\033[0;34m'
 	# shellcheck disable=SC2034
 	CYAN=$'\033[0;36m'
+	GRAY=$'\033[2m'
 	NC=$'\033[0m'
 	BOLD=$'\033[1m'
 	ORANGE=$'\033[38;5;208m' # 橙色 #FA720A
@@ -71,6 +105,7 @@ else
 	BLUE=""
 	# shellcheck disable=SC2034
 	CYAN=""
+	GRAY=""
 	NC=""
 	BOLD=""
 	ORANGE=""
@@ -146,7 +181,7 @@ utils_api_contract() {
 	printf '%s\n' "公共 API 稳定层（向后兼容承诺）:"
 	printf '%s\n' "- 日志: log_info/log_warn/log_err/log_debug"
 	printf '%s\n' "- 交互: _prompt_user_input/_prompt_for_menu_choice/confirm_action"
-	printf '%s\n' "- UI: _render_menu/press_enter_to_continue/should_clear_screen"
+	printf '%s\n' "- UI: _render_menu/ui_render_main_menu_hero/ui_theme_label/menu_schema_default/menu_ui_text_field/menu_ui_meta_label/menu_ui_status_label/menu_ui_status_marker/menu_ui_group_label/menu_ui_section_label/menu_group_heading/menu_ui_focus_key/menu_ui_focus_value/menu_ui_focus_source/menu_resolved_focus_value/ui_append_schema_panel_header/ui_append_schema_or_fallback_panel_header/ui_append_schema_page_block/ui_append_schema_or_fallback_page_block/ui_define_manual_fallback_helpers/ui_define_meta_fallback_helpers/ui_append_manual_panel_fallback/ui_append_manual_page_block/ui_meta_focus_fallback_line/ui_meta_focus_label/ui_meta_focus_line/ui_append_context_lines/ui_append_panel_header/ui_append_main_menu_context/ui_append_page_block/press_enter_to_continue/should_clear_screen"
 	printf '%s\n' "- 配置: load_config"
 }
 
@@ -247,30 +282,10 @@ _prompt_user_input() {
 _prompt_for_menu_choice() {
 	local numeric_range="$1"
 	local func_options="${2:-}"
-	local prompt_text="${ORANGE}>${NC} 选项 "
+	local context="${JB_MENU_CONTEXT:-submenu}"
+	local prompt_text=""
 	local prompt_target
-
-	if [ -n "$numeric_range" ]; then
-		local start="${numeric_range%%-*}"
-		local end="${numeric_range##*-}"
-		if [ "$start" = "$end" ]; then
-			prompt_text+="[${ORANGE}${start}${NC}] "
-		else
-			prompt_text+="[${ORANGE}${start}${NC}-${end}] "
-		fi
-	fi
-
-	if [ -n "$func_options" ]; then
-		local start="${func_options%%,*}"
-		local rest="${func_options#*,}"
-		if [ "$start" = "$rest" ]; then
-			prompt_text+="[${ORANGE}${start}${NC}] "
-		else
-			prompt_text+="[${ORANGE}${start}${NC},${rest}] "
-		fi
-	fi
-
-	prompt_text+="(↩ 返回): "
+	prompt_text=$(ui_build_prompt_text "$numeric_range" "$func_options" "$context")
 
 	local choice
 	if [ "${JB_NONINTERACTIVE:-false}" = "true" ]; then
@@ -375,6 +390,902 @@ confirm_action() {
 	case "$choice" in n | N) return 1 ;; *) return 0 ;; esac
 }
 
+ui_theme_exists() {
+	local theme="${1:-}"
+	case "$theme" in
+	classic | retro-launcher | compact | minimal) return 0 ;;
+	*) return 1 ;;
+	esac
+}
+
+get_ui_theme() {
+	local theme="${JB_UI_THEME:-${UI_THEME:-${DEFAULT_UI_THEME}}}"
+	if ! ui_theme_exists "$theme"; then
+		theme="${DEFAULT_UI_THEME}"
+	fi
+	printf '%s' "$theme"
+}
+
+ui_output_target() {
+	if [ -t 1 ]; then
+		printf '%s' "/dev/stdout"
+	elif _tty_available; then
+		printf '%s' "${JB_TTY_PATH:-/dev/tty}"
+	else
+		printf '%s' "/dev/stdout"
+	fi
+}
+
+ui_strip_ansi() {
+	printf '%b' "$1" | sed 's/\x1b\[[0-9;]*m//g'
+}
+
+ui_repeat_char() {
+	local len="${1:-0}"
+	local char="${2:--}"
+	if [ "$len" -le 0 ]; then
+		printf ''
+		return 0
+	fi
+	generate_line "$len" "$char"
+}
+
+ui_pad_right() {
+	local text="${1:-}"
+	local width="${2:-0}"
+	local current_width=0
+	current_width=$(_get_visual_width "$text")
+	if [ "$current_width" -ge "$width" ]; then
+		printf ''
+		return 0
+	fi
+	printf '%*s' $((width - current_width)) ''
+}
+
+ui_print_blank_line() {
+	local out="${1:-$(ui_output_target)}"
+	printf '\n' >"$out"
+}
+
+ui_print_line() {
+	local out="$1"
+	shift
+	printf '%b\n' "$*" >"$out"
+}
+
+ui_menu_footer_text() {
+	local context="${1:-submenu}"
+	case "$context" in
+	main)
+		printf '%s' 'Type an option and press Enter. Press Enter on empty input to exit.'
+		;;
+	*)
+		printf '%s' 'Enter a choice. Empty input goes back.'
+		;;
+	esac
+}
+
+ui_format_section_heading() {
+	local text="${1:-Section}"
+	local theme
+	theme=$(get_ui_theme)
+	case "$theme" in
+	minimal)
+		printf '%s' "$text"
+		;;
+	*)
+		printf '%b' "${CYAN}${text}${NC}"
+		;;
+	esac
+}
+
+ui_theme_label() {
+	local theme="${1:-$(get_ui_theme)}"
+	case "$theme" in
+	retro-launcher) printf '%s' "Retro Launcher" ;;
+	classic) printf '%s' "Classic" ;;
+	compact) printf '%s' "Compact" ;;
+	minimal) printf '%s' "Minimal" ;;
+	*) printf '%s' "$theme" ;;
+	esac
+}
+
+menu_vocab_phrase() {
+	case "${1:-}" in
+	label_version) printf '%s' "Version" ;;
+	label_theme) printf '%s' "Theme" ;;
+	label_update) printf '%s' "Update" ;;
+	label_docker) printf '%s' "Docker" ;;
+	label_nginx) printf '%s' "Nginx" ;;
+	label_watchtower) printf '%s' "Watchtower" ;;
+	label_current_cn) printf '%s' "当前" ;;
+	label_mode_cn) printf '%s' "模式" ;;
+	marker_current) printf '%s' "Current" ;;
+	headline_main_subtitle) printf '%s' "One-click VPS operations toolkit for Docker, Nginx, TLS and MCP" ;;
+	headline_tools_subtitle) printf '%s' "Operational add-ons for container updates and network tuning" ;;
+	headline_mcp_subtitle) printf '%s' "Runtime helpers for PTY sessions and MCP-side tooling" ;;
+	headline_theme_subtitle) printf '%s' "Switch visual profiles and keep the launcher consistent" ;;
+	headline_docker_subtitle) printf '%s' "Provision Docker engine, manage Compose runtime and recover service lifecycle safely" ;;
+	headline_cert_subtitle) printf '%s' "Issue TLS certificates, inspect renewal health and keep acme workflows reliable" ;;
+	headline_watchtower_subtitle) printf '%s' "Manage container auto-updates, notifications and runtime recovery workflows" ;;
+	headline_bbr_subtitle) printf '%s' "Tune congestion control, inspect kernel state and manage network recovery workflows" ;;
+	headline_bbr_kernel_subtitle) printf '%s' "Kernel lifecycle updates, rollback paths and cleanup operations" ;;
+	headline_nginx_subtitle) printf '%s' "Coordinate edge routing, certificate ops and traffic defense for web entrypoints" ;;
+	headline_generic_subtitle) printf '%s' "Focused tools for this workspace section" ;;
+	hint_tools) printf '%s' "Pick a lane to manage updates, watchdogs or kernel acceleration." ;;
+	hint_mcp) printf '%s' "Launch supporting runtimes and diagnostics for MCP workflows." ;;
+	hint_theme) printf '%s' "Choose the profile that best matches your terminal and workflow." ;;
+	hint_docker) printf '%s' "Review runtime health, adjust mirrors, reclaim resources and repair service state." ;;
+	hint_docker_bootstrap) printf '%s' "Bootstrap Docker first, then return here for runtime operations and recovery lanes." ;;
+	hint_docker_install) printf '%s' "Choose whether to rebuild the runtime stack or retire the current installation." ;;
+	hint_cert) printf '%s' "Choose issuance, renewal diagnostics or policy controls for your acme.sh workflow." ;;
+	hint_cert_maintenance) printf '%s' "Adjust renewal policy, verify cron health and keep acme.sh updated." ;;
+	hint_watchtower) printf '%s' "Review service health, adjust notifications and inspect live container activity." ;;
+	hint_bbr) printf '%s' "Pick a profile, adjust IP preference or enter maintenance and recovery lanes." ;;
+	hint_bbr_kernel) printf '%s' "Use this lane for kernel upgrades, reverting XanMod or pruning old images." ;;
+	hint_nginx) printf '%s' "Configure sites, TCP forwarding, defense posture and lifecycle operations." ;;
+	hint_generic) printf '%s' "Pick an option to continue." ;;
+	repo_default) printf '%s' "Repo: https://github.com/wx233Github/vps-kit-mcp" ;;
+	heading_core_modules) printf '%s' "Core Modules" ;;
+	heading_tools) printf '%s' "Tools" ;;
+	heading_system) printf '%s' "System" ;;
+	heading_automation) printf '%s' "Automation" ;;
+	heading_networking) printf '%s' "Networking" ;;
+	heading_runtime) printf '%s' "Runtime" ;;
+	heading_tooling) printf '%s' "Tooling" ;;
+	heading_theme_profiles) printf '%s' "Theme Profiles" ;;
+	heading_general) printf '%s' "General" ;;
+	heading_runtime_overview) printf '%s' "Runtime Overview" ;;
+	heading_action_center) printf '%s' "Action Center" ;;
+	heading_recovery_lifecycle) printf '%s' "Recovery & Lifecycle" ;;
+	heading_bootstrap_overview) printf '%s' "Bootstrap Overview" ;;
+	heading_launch_pad) printf '%s' "Launch Pad" ;;
+	heading_certificate_overview) printf '%s' "Certificate Overview" ;;
+	heading_issue_renew) printf '%s' "Issue & Renew" ;;
+	heading_policy_control) printf '%s' "Policy Control" ;;
+	heading_diagnostics) printf '%s' "Diagnostics" ;;
+	heading_service_overview) printf '%s' "Service Overview" ;;
+	heading_profile_control) printf '%s' "Profile Control" ;;
+	heading_http_workloads) printf '%s' "HTTP(S) Workloads" ;;
+	heading_transport_routing) printf '%s' "Transport Routing" ;;
+	heading_operations_policy) printf '%s' "Operations & Policy" ;;
+	focus_key_modules) printf '%s' "modules" ;;
+	focus_key_runtime) printf '%s' "runtime" ;;
+	focus_key_active) printf '%s' "active" ;;
+	focus_key_general) printf '%s' "general" ;;
+	focus_key_service) printf '%s' "service" ;;
+	focus_key_plane) printf '%s' "plane" ;;
+	focus_key_scope) printf '%s' "scope" ;;
+	focus_key_kernel) printf '%s' "kernel" ;;
+	focus_value_tools) printf '%s' "2" ;;
+	focus_value_mcp) printf '%s' "PTY" ;;
+	focus_value_lifecycle) printf '%s' "Lifecycle" ;;
+	focus_value_renewal) printf '%s' "Renewal" ;;
+	focus_value_kernel_scope) printf '%s' "Kernel" ;;
+	focus_value_edge_gateway) printf '%s' "Edge Gateway" ;;
+	focus_source_current_theme) printf '%s' "current_theme" ;;
+	*) printf '%s' "" ;;
+	esac
+}
+
+menu_schema_default() {
+	local menu_name="${1:-}"
+	local section="${2:-}"
+	local key="${3:-}"
+
+	case "$section" in
+	text)
+		case "${menu_name}:${key}" in
+		MAIN_MENU:subtitle) menu_vocab_phrase headline_main_subtitle ;;
+		MAIN_MENU:repo) menu_vocab_phrase repo_default ;;
+		TOOLS_MENU:subtitle) menu_vocab_phrase headline_tools_subtitle ;;
+		MCP_MENU:subtitle) menu_vocab_phrase headline_mcp_subtitle ;;
+		THEME_MENU:subtitle) menu_vocab_phrase headline_theme_subtitle ;;
+		DOCKER_MENU:subtitle | DOCKER_INSTALL_MENU:subtitle | DOCKER_BOOTSTRAP_MENU:subtitle) menu_vocab_phrase headline_docker_subtitle ;;
+		CERT_MENU:subtitle | CERT_MAINTENANCE_MENU:subtitle) menu_vocab_phrase headline_cert_subtitle ;;
+		WATCHTOWER_MENU:subtitle) menu_vocab_phrase headline_watchtower_subtitle ;;
+		BBR_MENU:subtitle) menu_vocab_phrase headline_bbr_subtitle ;;
+		BBR_KERNEL_MENU:subtitle) menu_vocab_phrase headline_bbr_kernel_subtitle ;;
+		NGINX_MENU:subtitle) menu_vocab_phrase headline_nginx_subtitle ;;
+		TOOLS_MENU:hint) menu_vocab_phrase hint_tools ;;
+		MCP_MENU:hint) menu_vocab_phrase hint_mcp ;;
+		THEME_MENU:hint) menu_vocab_phrase hint_theme ;;
+		DOCKER_MENU:hint) menu_vocab_phrase hint_docker ;;
+		DOCKER_BOOTSTRAP_MENU:hint) menu_vocab_phrase hint_docker_bootstrap ;;
+		DOCKER_INSTALL_MENU:hint) menu_vocab_phrase hint_docker_install ;;
+		CERT_MENU:hint) menu_vocab_phrase hint_cert ;;
+		CERT_MAINTENANCE_MENU:hint) menu_vocab_phrase hint_cert_maintenance ;;
+		WATCHTOWER_MENU:hint) menu_vocab_phrase hint_watchtower ;;
+		BBR_MENU:hint) menu_vocab_phrase hint_bbr ;;
+		BBR_KERNEL_MENU:hint) menu_vocab_phrase hint_bbr_kernel ;;
+		NGINX_MENU:hint) menu_vocab_phrase hint_nginx ;;
+		*:subtitle) menu_vocab_phrase headline_generic_subtitle ;;
+		*:hint) menu_vocab_phrase hint_generic ;;
+		*) printf '%s' "" ;;
+		esac
+		;;
+	meta_label)
+		case "$key" in
+		version) menu_vocab_phrase label_version ;;
+		theme) menu_vocab_phrase label_theme ;;
+		update) menu_vocab_phrase label_update ;;
+		*) printf '%s' "" ;;
+		esac
+		;;
+	status_label)
+		case "${menu_name}:${key}" in
+		MAIN_MENU:docker.sh) menu_vocab_phrase label_docker ;;
+		MAIN_MENU:nginx.sh) menu_vocab_phrase label_nginx ;;
+		MAIN_MENU:tools/Watchtower.sh | TOOLS_MENU:tools/Watchtower.sh) menu_vocab_phrase label_watchtower ;;
+		MAIN_MENU:THEME_MENU | MAIN_MENU:set_theme_retro_launcher | MAIN_MENU:set_theme_classic | MAIN_MENU:set_theme_compact | MAIN_MENU:set_theme_minimal)
+			menu_vocab_phrase label_current_cn
+			;;
+		MAIN_MENU:toggle_startup_update_mode) menu_vocab_phrase label_mode_cn ;;
+		*) printf '%s' "" ;;
+		esac
+		;;
+	status_marker)
+		case "$key" in
+		current) menu_vocab_phrase marker_current ;;
+		*) printf '%s' "" ;;
+		esac
+		;;
+	group)
+		if [ "$key" = "general" ] || [ "$key" = "default" ] || [ -z "$key" ]; then
+			menu_vocab_phrase heading_general
+			return 0
+		fi
+		case "${menu_name}:${key}" in
+		MAIN_MENU:core) menu_vocab_phrase heading_core_modules ;;
+		MAIN_MENU:tools) menu_vocab_phrase heading_tools ;;
+		MAIN_MENU:system) menu_vocab_phrase heading_system ;;
+		TOOLS_MENU:automation) menu_vocab_phrase heading_automation ;;
+		TOOLS_MENU:network) menu_vocab_phrase heading_networking ;;
+		MCP_MENU:runtime) menu_vocab_phrase heading_runtime ;;
+		MCP_MENU:tooling) menu_vocab_phrase heading_tooling ;;
+		THEME_MENU:profiles) menu_vocab_phrase heading_theme_profiles ;;
+		*) printf '%s' "$key" ;;
+		esac
+		;;
+	section)
+		case "${menu_name}:${key}" in
+		DOCKER_MENU:runtime_overview | BBR_MENU:runtime_overview) menu_vocab_phrase heading_runtime_overview ;;
+		DOCKER_MENU:action_center | WATCHTOWER_MENU:action_center) menu_vocab_phrase heading_action_center ;;
+		DOCKER_MENU:recovery_lifecycle | DOCKER_INSTALL_MENU:recovery_lifecycle | BBR_MENU:recovery_lifecycle | BBR_KERNEL_MENU:recovery_lifecycle)
+			menu_vocab_phrase heading_recovery_lifecycle
+			;;
+		DOCKER_BOOTSTRAP_MENU:bootstrap_overview) menu_vocab_phrase heading_bootstrap_overview ;;
+		DOCKER_BOOTSTRAP_MENU:launch_pad) menu_vocab_phrase heading_launch_pad ;;
+		CERT_MENU:certificate_overview) menu_vocab_phrase heading_certificate_overview ;;
+		CERT_MENU:issue_renew) menu_vocab_phrase heading_issue_renew ;;
+		CERT_MENU:policy_control | CERT_MAINTENANCE_MENU:policy_control | BBR_MENU:policy_control)
+			menu_vocab_phrase heading_policy_control
+			;;
+		CERT_MAINTENANCE_MENU:diagnostics) menu_vocab_phrase heading_diagnostics ;;
+		WATCHTOWER_MENU:service_overview) menu_vocab_phrase heading_service_overview ;;
+		BBR_MENU:profile_control) menu_vocab_phrase heading_profile_control ;;
+		NGINX_MENU:http_workloads) menu_vocab_phrase heading_http_workloads ;;
+		NGINX_MENU:transport_routing) menu_vocab_phrase heading_transport_routing ;;
+		NGINX_MENU:operations_policy) menu_vocab_phrase heading_operations_policy ;;
+		*) printf '%s' "$key" ;;
+		esac
+		;;
+	focus_key)
+		case "$menu_name" in
+		TOOLS_MENU) menu_vocab_phrase focus_key_modules ;;
+		MCP_MENU) menu_vocab_phrase focus_key_runtime ;;
+		THEME_MENU) menu_vocab_phrase focus_key_active ;;
+		DOCKER_MENU | DOCKER_BOOTSTRAP_MENU) menu_vocab_phrase focus_key_runtime ;;
+		CERT_MENU | WATCHTOWER_MENU) menu_vocab_phrase focus_key_service ;;
+		NGINX_MENU) menu_vocab_phrase focus_key_plane ;;
+		DOCKER_INSTALL_MENU | CERT_MAINTENANCE_MENU | BBR_KERNEL_MENU) menu_vocab_phrase focus_key_scope ;;
+		BBR_MENU) menu_vocab_phrase focus_key_kernel ;;
+		*) menu_vocab_phrase focus_key_general ;;
+		esac
+		;;
+	focus_value)
+		case "$menu_name" in
+		TOOLS_MENU) menu_vocab_phrase focus_value_tools ;;
+		MCP_MENU) menu_vocab_phrase focus_value_mcp ;;
+		DOCKER_INSTALL_MENU) menu_vocab_phrase focus_value_lifecycle ;;
+		CERT_MAINTENANCE_MENU) menu_vocab_phrase focus_value_renewal ;;
+		BBR_KERNEL_MENU) menu_vocab_phrase focus_value_kernel_scope ;;
+		NGINX_MENU) menu_vocab_phrase focus_value_edge_gateway ;;
+		*) printf '%s' "" ;;
+		esac
+		;;
+	focus_source)
+		case "$menu_name" in
+		THEME_MENU) menu_vocab_phrase focus_source_current_theme ;;
+		*) printf '%s' "" ;;
+		esac
+		;;
+	*) printf '%s' "" ;;
+	esac
+}
+
+menu_ui_text_field() {
+	local menu_name="${1:-}"
+	local field="${2:-}"
+	local default_value="${3-}"
+	local value=""
+	if [ "$#" -lt 3 ]; then
+		default_value=$(menu_schema_default "$menu_name" "text" "$field")
+	fi
+	if [ -n "${CONFIG_PATH:-}" ] && [ -f "$CONFIG_PATH" ] && command -v jq >/dev/null 2>&1; then
+		value=$(jq -r --arg menu "$menu_name" --arg field "$field" '.menus[$menu].ui[$field] // empty' "$CONFIG_PATH" 2>/dev/null || true)
+	fi
+	printf '%s' "${value:-$default_value}"
+}
+
+menu_ui_meta_label() {
+	local menu_name="${1:-}"
+	local key="${2:-}"
+	local default_value="${3-}"
+	local value=""
+	if [ "$#" -lt 3 ]; then
+		default_value=$(menu_schema_default "$menu_name" "meta_label" "$key")
+	fi
+	if [ -n "${CONFIG_PATH:-}" ] && [ -f "$CONFIG_PATH" ] && command -v jq >/dev/null 2>&1; then
+		value=$(jq -r --arg menu "$menu_name" --arg key "$key" '.menus[$menu].ui.meta_labels[$key] // empty' "$CONFIG_PATH" 2>/dev/null || true)
+	fi
+	printf '%s' "${value:-$default_value}"
+}
+
+menu_ui_status_label() {
+	local menu_name="${1:-}"
+	local action="${2:-}"
+	local default_value="${3-}"
+	local value=""
+	if [ "$#" -lt 3 ]; then
+		default_value=$(menu_schema_default "$menu_name" "status_label" "$action")
+	fi
+	if [ -n "${CONFIG_PATH:-}" ] && [ -f "$CONFIG_PATH" ] && command -v jq >/dev/null 2>&1; then
+		value=$(jq -r --arg menu "$menu_name" --arg action "$action" '.menus[$menu].ui.status_labels[$action] // empty' "$CONFIG_PATH" 2>/dev/null || true)
+	fi
+	printf '%s' "${value:-$default_value}"
+}
+
+menu_ui_status_marker() {
+	local menu_name="${1:-}"
+	local key="${2:-}"
+	local default_value="${3-}"
+	local value=""
+	if [ "$#" -lt 3 ]; then
+		default_value=$(menu_schema_default "$menu_name" "status_marker" "$key")
+	fi
+	if [ -n "${CONFIG_PATH:-}" ] && [ -f "$CONFIG_PATH" ] && command -v jq >/dev/null 2>&1; then
+		value=$(jq -r --arg menu "$menu_name" --arg key "$key" '.menus[$menu].ui.status_markers[$key] // empty' "$CONFIG_PATH" 2>/dev/null || true)
+	fi
+	printf '%s' "${value:-$default_value}"
+}
+
+menu_ui_group_label() {
+	local menu_name="${1:-}"
+	local group="${2:-general}"
+	local default_value="${3-}"
+	local value=""
+	if [ "$#" -lt 3 ]; then
+		default_value=$(menu_schema_default "$menu_name" "group" "$group")
+	fi
+	if [ -n "${CONFIG_PATH:-}" ] && [ -f "$CONFIG_PATH" ] && command -v jq >/dev/null 2>&1; then
+		value=$(jq -r --arg menu "$menu_name" --arg group "$group" '.menus[$menu].ui.groups[$group] // empty' "$CONFIG_PATH" 2>/dev/null || true)
+	fi
+	printf '%s' "${value:-$default_value}"
+}
+
+menu_ui_section_label() {
+	local menu_name="${1:-}"
+	local section_key="${2:-}"
+	local default_value="${3-}"
+	local value=""
+	if [ "$#" -lt 3 ]; then
+		default_value=$(menu_schema_default "$menu_name" "section" "$section_key")
+	fi
+	if [ -n "${CONFIG_PATH:-}" ] && [ -f "$CONFIG_PATH" ] && command -v jq >/dev/null 2>&1; then
+		value=$(jq -r --arg menu "$menu_name" --arg section "$section_key" '.menus[$menu].ui.sections[$section] // empty' "$CONFIG_PATH" 2>/dev/null || true)
+	fi
+	printf '%s' "${value:-$default_value}"
+}
+
+menu_group_heading() {
+	local menu_name="${1:-}"
+	local group="${2:-general}"
+	local default_heading="${3-}"
+	if [ "$#" -lt 3 ]; then
+		default_heading=$(menu_schema_default "$menu_name" "group" "$group")
+	fi
+	menu_ui_group_label "$menu_name" "$group" "$default_heading"
+}
+
+menu_ui_focus_key() {
+	local menu_name="${1:-}"
+	local default_value="${2-}"
+	local value=""
+	if [ "$#" -lt 2 ]; then
+		default_value=$(menu_schema_default "$menu_name" "focus_key" "default")
+	fi
+	if [ -n "${CONFIG_PATH:-}" ] && [ -f "$CONFIG_PATH" ] && command -v jq >/dev/null 2>&1; then
+		value=$(jq -r --arg menu "$menu_name" '.menus[$menu].ui.focus.key // empty' "$CONFIG_PATH" 2>/dev/null || true)
+	fi
+	printf '%s' "${value:-$default_value}"
+}
+
+menu_ui_focus_value() {
+	local menu_name="${1:-}"
+	local default_value="${2-}"
+	local value=""
+	if [ "$#" -lt 2 ]; then
+		default_value=$(menu_schema_default "$menu_name" "focus_value" "default")
+	fi
+	if [ -n "${CONFIG_PATH:-}" ] && [ -f "$CONFIG_PATH" ] && command -v jq >/dev/null 2>&1; then
+		value=$(jq -r --arg menu "$menu_name" '.menus[$menu].ui.focus.value // empty' "$CONFIG_PATH" 2>/dev/null || true)
+	fi
+	printf '%s' "${value:-$default_value}"
+}
+
+menu_ui_focus_source() {
+	local menu_name="${1:-}"
+	local default_value="${2-}"
+	local value=""
+	if [ "$#" -lt 2 ]; then
+		default_value=$(menu_schema_default "$menu_name" "focus_source" "default")
+	fi
+	if [ -n "${CONFIG_PATH:-}" ] && [ -f "$CONFIG_PATH" ] && command -v jq >/dev/null 2>&1; then
+		value=$(jq -r --arg menu "$menu_name" '.menus[$menu].ui.focus.source // empty' "$CONFIG_PATH" 2>/dev/null || true)
+	fi
+	printf '%s' "${value:-$default_value}"
+}
+
+menu_resolved_focus_value() {
+	local menu_name="${1:-}"
+	local focus_value=""
+	local focus_source=""
+	focus_value=$(menu_ui_focus_value "$menu_name")
+	focus_source=$(menu_ui_focus_source "$menu_name")
+	case "$focus_source" in
+	current_theme) ui_theme_label ;;
+	*) printf '%s' "$focus_value" ;;
+	esac
+}
+
+ui_append_schema_panel_header() {
+	local target_name="$1"
+	local menu_name="$2"
+	local focus_value="${3-}"
+	local focus_key="${4-}"
+	local subtitle=""
+	local hint=""
+
+	if [ -z "$focus_key" ]; then
+		focus_key=$(menu_ui_focus_key "$menu_name")
+	fi
+	if [ -z "$focus_value" ]; then
+		focus_value=$(menu_resolved_focus_value "$menu_name")
+	fi
+	subtitle=$(menu_ui_text_field "$menu_name" "subtitle")
+	hint=$(menu_ui_text_field "$menu_name" "hint")
+	ui_append_panel_header "$target_name" "$subtitle" "$focus_key" "$focus_value" "$hint"
+}
+
+ui_append_schema_or_fallback_panel_header() {
+	local target_name="$1"
+	local menu_name="$2"
+	local focus_value="${3-}"
+	local focus_key="${4-}"
+	local subtitle_default="${5-}"
+	local hint_default="${6-}"
+	local subtitle=""
+	local hint=""
+
+	if [ -z "$focus_key" ]; then
+		focus_key=$(menu_ui_focus_key "$menu_name")
+	fi
+	if [ -z "$focus_value" ]; then
+		focus_value=$(menu_resolved_focus_value "$menu_name")
+	fi
+	subtitle=$(menu_ui_text_field "$menu_name" "subtitle" "$subtitle_default")
+	hint=$(menu_ui_text_field "$menu_name" "hint" "$hint_default")
+	ui_append_panel_header "$target_name" "$subtitle" "$focus_key" "$focus_value" "$hint"
+}
+
+ui_append_schema_page_block() {
+	local target_name="$1"
+	local menu_name="$2"
+	local section_key="$3"
+	shift 3
+	ui_append_page_block "$target_name" "$(menu_ui_section_label "$menu_name" "$section_key")" "$@"
+}
+
+ui_append_schema_or_fallback_page_block() {
+	local target_name="$1"
+	local menu_name="$2"
+	local section_key="$3"
+	local heading_default="${4-}"
+	shift 4
+	ui_append_page_block "$target_name" "$(menu_ui_section_label "$menu_name" "$section_key" "$heading_default")" "$@"
+}
+
+ui_define_manual_fallback_helpers() {
+	if ! declare -f ui_append_manual_panel_fallback >/dev/null 2>&1; then
+		ui_append_manual_panel_fallback() {
+			local target_name="$1"
+			local subtitle="${2:-}"
+			local meta_line="${3:-}"
+			local hint="${4:-}"
+			if declare -f ui_append_context_lines >/dev/null 2>&1; then
+				ui_append_context_lines "$target_name" "$subtitle" "$meta_line" "$hint"
+				return 0
+			fi
+			local -n target_ref="$target_name"
+			[ -n "$subtitle" ] && target_ref+=("$subtitle")
+			[ -n "$meta_line" ] && target_ref+=("$meta_line")
+			[ -n "$hint" ] && target_ref+=("$hint")
+		}
+	fi
+
+	if ! declare -f ui_append_manual_page_block >/dev/null 2>&1; then
+		ui_append_manual_page_block() {
+			local target_name="$1"
+			local heading="${2:-}"
+			shift 2
+			if declare -f ui_append_page_block >/dev/null 2>&1; then
+				ui_append_page_block "$target_name" "$heading" "$@"
+				return 0
+			fi
+			local -n target_ref="$target_name"
+			target_ref+=("")
+			if [ -n "$heading" ]; then
+				target_ref+=("$heading" "")
+			fi
+			local item=""
+			for item in "$@"; do
+				[ -n "$item" ] && target_ref+=("$item")
+			done
+		}
+	fi
+}
+
+ui_define_manual_fallback_helpers
+
+ui_define_meta_fallback_helpers() {
+	if ! declare -f ui_meta_focus_fallback_line >/dev/null 2>&1; then
+		ui_meta_focus_fallback_line() {
+			local key="${1:-general}"
+			local value="${2:-}"
+			local label=""
+			local theme_label=""
+
+			if declare -f ui_meta_focus_line >/dev/null 2>&1; then
+				ui_meta_focus_line "$key" "$value"
+				return 0
+			fi
+
+			if declare -f ui_meta_focus_label >/dev/null 2>&1; then
+				label=$(ui_meta_focus_label "$key")
+			else
+				case "$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')" in
+				runtime) label="Runtime" ;;
+				service) label="Service" ;;
+				plane) label="Plane" ;;
+				scope) label="Scope" ;;
+				modules) label="Modules" ;;
+				active) label="Active" ;;
+				kernel) label="Kernel" ;;
+				*) label="General" ;;
+				esac
+			fi
+
+			if declare -f ui_theme_label >/dev/null 2>&1; then
+				theme_label=$(ui_theme_label)
+			else
+				case "${JB_UI_THEME:-${UI_THEME:-classic}}" in
+				retro-launcher) theme_label="Retro Launcher" ;;
+				compact) theme_label="Compact" ;;
+				minimal) theme_label="Minimal" ;;
+				*) theme_label="Classic" ;;
+				esac
+			fi
+
+			if [ -n "$value" ]; then
+				printf 'Theme: %s   |   Focus: %s: %s' "$theme_label" "$label" "$value"
+				return 0
+			fi
+			printf 'Theme: %s   |   Focus: %s' "$theme_label" "$label"
+		}
+	fi
+}
+
+ui_define_meta_fallback_helpers
+
+ui_meta_focus_label() {
+	local key="${1:-general}"
+	key=$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')
+	case "$key" in
+	runtime) printf '%s' "Runtime" ;;
+	service) printf '%s' "Service" ;;
+	plane) printf '%s' "Plane" ;;
+	scope) printf '%s' "Scope" ;;
+	modules) printf '%s' "Modules" ;;
+	active) printf '%s' "Active" ;;
+	kernel) printf '%s' "Kernel" ;;
+	general) printf '%s' "General" ;;
+	*) printf '%s' "General" ;;
+	esac
+}
+
+ui_meta_focus_line() {
+	local key="${1:-general}"
+	local value="${2:-}"
+	if [ -z "$value" ] && [[ "$key" == *:* ]]; then
+		value=$(printf '%s' "$key" | cut -d: -f2- | sed 's/^ //')
+		key=$(printf '%s' "$key" | cut -d: -f1)
+	fi
+	local label
+	label=$(ui_meta_focus_label "$key")
+	if [ -n "$value" ]; then
+		printf 'Theme: %s   |   Focus: %s: %s' "$(ui_theme_label)" "$label" "$value"
+		return 0
+	fi
+	printf 'Theme: %s   |   Focus: %s' "$(ui_theme_label)" "$label"
+}
+
+ui_append_context_lines() {
+	local target_name="$1"
+	shift
+	local -n target_ref="$target_name"
+	local line=""
+	for line in "$@"; do
+		if [ -n "$line" ]; then
+			target_ref+=("$line")
+		fi
+	done
+}
+
+ui_append_panel_header() {
+	local target_name="$1"
+	local subtitle="${2:-}"
+	local focus_key="${3:-general}"
+	local focus_value="${4:-}"
+	local hint="${5:-}"
+
+	ui_append_context_lines "$target_name" "$subtitle" "$(ui_meta_focus_line "$focus_key" "$focus_value")" "$hint"
+}
+
+ui_append_main_menu_context() {
+	local target_name="$1"
+	local subtitle="${2:-}"
+	local meta_line="${3:-}"
+	local repo_line="${4:-}"
+
+	ui_append_context_lines "$target_name" "$subtitle" "$meta_line" "$repo_line"
+}
+
+ui_append_page_block() {
+	local target_name="$1"
+	local heading="${2:-}"
+	shift 2
+	local -n target_ref="$target_name"
+
+	target_ref+=("")
+	if [ -n "$heading" ]; then
+		target_ref+=("$(ui_format_section_heading "$heading")" "")
+	fi
+	ui_append_context_lines "$target_name" "$@"
+}
+
+ui_render_divider() {
+	local out="$1"
+	local width="${2:-60}"
+	local theme
+	theme=$(get_ui_theme)
+	local line=""
+	case "$theme" in
+	minimal)
+		line=$(ui_repeat_char "$width" "-")
+		ui_print_line "$out" "$line"
+		;;
+	classic)
+		line=$(ui_repeat_char "$width" "─")
+		ui_print_line "$out" "${GREEN}${line}${NC}"
+		;;
+	*)
+		line=$(ui_repeat_char "$width" "-")
+		ui_print_line "$out" "${CYAN}${line}${NC}"
+		;;
+	esac
+}
+
+ui_render_footer() {
+	local out="$1"
+	local context="${2:-submenu}"
+	local theme
+	theme=$(get_ui_theme)
+	local footer_text
+	footer_text=$(ui_menu_footer_text "$context")
+	case "$theme" in
+	minimal)
+		ui_print_line "$out" "$footer_text"
+		ui_print_line "$out" "> _"
+		;;
+	*)
+		ui_print_line "$out" "${GRAY}${footer_text}${NC}"
+		ui_print_line "$out" "${ORANGE}>${NC} _"
+		;;
+	esac
+}
+
+ui_build_prompt_text() {
+	local numeric_range="$1"
+	local func_options="${2:-}"
+	local context="${3:-submenu}"
+	local theme
+	theme=$(get_ui_theme)
+	if [ "$theme" = "classic" ]; then
+		local prompt_text="${ORANGE}>${NC} 选项 "
+		if [ -n "$numeric_range" ]; then
+			local start="${numeric_range%%-*}"
+			local end="${numeric_range##*-}"
+			if [ "$start" = "$end" ]; then
+				prompt_text+="[${ORANGE}${start}${NC}] "
+			else
+				prompt_text+="[${ORANGE}${start}${NC}-${end}] "
+			fi
+		fi
+		if [ -n "$func_options" ]; then
+			local start="${func_options%%,*}"
+			local rest="${func_options#*,}"
+			if [ "$start" = "$rest" ]; then
+				prompt_text+="[${ORANGE}${start}${NC}] "
+			else
+				prompt_text+="[${ORANGE}${start}${NC},${rest}] "
+			fi
+		fi
+		prompt_text+="(↩ 返回): "
+		printf '%b' "$prompt_text"
+		return 0
+	fi
+
+	printf '%b\n%b ' "${GRAY}$(ui_menu_footer_text "$context")${NC}" "${ORANGE}>${NC}"
+}
+
+ui_render_classic_menu() {
+	local out="$1"
+	local title="$2"
+	shift 2
+	local -a lines=("$@")
+	local max_content_width=0
+	local title_width
+	title_width=$(_get_visual_width "$title")
+	max_content_width=$title_width
+	for line in "${lines[@]}"; do
+		local current_line_visual_width
+		current_line_visual_width=$(_get_visual_width "$line")
+		if [ "$current_line_visual_width" -gt "$max_content_width" ]; then
+			max_content_width="$current_line_visual_width"
+		fi
+	done
+	local box_inner_width=$max_content_width
+	if [ "$box_inner_width" -lt 40 ]; then box_inner_width=40; fi
+
+	ui_print_blank_line "$out"
+	ui_print_line "$out" "${GREEN}╭$(generate_line "$box_inner_width" "─")╮${NC}"
+	if [ -n "$title" ]; then
+		local padding_total=$((box_inner_width - title_width))
+		local padding_left=$((padding_total / 2))
+		local padding_right=$((padding_total - padding_left))
+		ui_print_line "$out" "${GREEN}│${NC}$(printf '%*s' "$padding_left" '')${BOLD}${title}${NC}$(printf '%*s' "$padding_right" '')${GREEN}│${NC}"
+	fi
+	ui_print_line "$out" "${GREEN}╰$(generate_line "$box_inner_width" "─")╯${NC}"
+	for line in "${lines[@]}"; do
+		ui_print_line "$out" "$line"
+	done
+	local box_total_physical_width=$((box_inner_width + 2))
+	ui_print_line "$out" "${GREEN}$(generate_line "$box_total_physical_width" "─")${NC}"
+}
+
+ui_render_plain_menu() {
+	local out="$1"
+	local title="$2"
+	shift 2
+	local -a lines=("$@")
+	local width=60
+	local title_width=0
+	title_width=$(_get_visual_width "$title")
+	if [ "$title_width" -gt "$width" ]; then
+		width=$title_width
+	fi
+	for line in "${lines[@]}"; do
+		local current_width=0
+		current_width=$(_get_visual_width "$line")
+		if [ "$current_width" -gt "$width" ]; then
+			width=$current_width
+		fi
+	done
+	if [ "$width" -gt 76 ]; then
+		width=76
+	fi
+
+	ui_print_blank_line "$out"
+	if [ -n "$title" ]; then
+		case "$(get_ui_theme)" in
+		minimal) ui_print_line "$out" "$title" ;;
+		*) ui_print_line "$out" "${BOLD}${title}${NC}" ;;
+		esac
+	fi
+	ui_render_divider "$out" "$width"
+	for line in "${lines[@]}"; do
+		ui_print_line "$out" "$line"
+	done
+}
+
+ui_render_main_menu_hero() {
+	local title="$1"
+	local subtitle="$2"
+	local meta_line="$3"
+	local repo_line="$4"
+	shift 4
+	local -a lines=("$@")
+	local out
+	out=$(ui_output_target)
+	local theme
+	theme=$(get_ui_theme)
+
+	if [ "$theme" = "classic" ]; then
+		ui_render_classic_menu "$out" "$title" "${lines[@]}"
+		return 0
+	fi
+
+	if [ "$theme" = "compact" ]; then
+		local -a compact_lines=()
+		ui_append_main_menu_context compact_lines "$subtitle" "$meta_line" "$repo_line"
+		if [ ${#compact_lines[@]} -gt 0 ] && [ ${#lines[@]} -gt 0 ]; then
+			compact_lines+=("")
+		fi
+		compact_lines+=("${lines[@]}")
+		ui_render_plain_menu "$out" "$title" "${compact_lines[@]}"
+		return 0
+	fi
+
+	if [ "$theme" = "minimal" ]; then
+		local -a minimal_lines=()
+		ui_append_main_menu_context minimal_lines "$subtitle" "$meta_line" "$repo_line"
+		if [ ${#minimal_lines[@]} -gt 0 ] && [ ${#lines[@]} -gt 0 ]; then
+			minimal_lines+=("")
+		fi
+		minimal_lines+=("${lines[@]}")
+		ui_render_plain_menu "$out" "$title" "${minimal_lines[@]}"
+		return 0
+	fi
+
+	ui_print_blank_line "$out"
+	ui_print_line "$out" "${GREEN}npx vkm${NC}"
+	ui_print_blank_line "$out"
+	ui_print_line "$out" "+--------------------------------------------------------------------------+"
+	ui_print_line "$out" "|                                                                          |"
+	ui_print_line "$out" "|  ██╗   ██╗██╗  ██╗███╗   ███╗                                            |"
+	ui_print_line "$out" "|  ██║   ██║██║ ██╔╝████╗ ████║                                            |"
+	ui_print_line "$out" "|  ██║   ██║█████╔╝ ██╔████╔██║                                            |"
+	ui_print_line "$out" "|  ╚██╗ ██╔╝██╔═██╗ ██║╚██╔╝██║                                            |"
+	ui_print_line "$out" "|   ╚████╔╝ ██║  ██╗██║ ╚═╝ ██║                                            |"
+	ui_print_line "$out" "|    ╚═══╝  ╚═╝  ╚═╝╚═╝     ╚═╝                                            |"
+	ui_print_line "$out" "|                                                                          |"
+	ui_print_line "$out" "|  ${BOLD}${title}${NC}$(ui_pad_right "$title" 68)|"
+	ui_print_line "$out" "|  ${subtitle}$(ui_pad_right "$subtitle" 68)|"
+	ui_print_line "$out" "|                                                                          |"
+	ui_print_line "$out" "+--------------------------------------------------------------------------+"
+	ui_print_blank_line "$out"
+	local -a hero_context_lines=()
+	ui_append_main_menu_context hero_context_lines "" "$meta_line" "$repo_line"
+	local context_line=""
+	for context_line in "${hero_context_lines[@]}"; do
+		ui_print_line "$out" "${GRAY}${context_line}${NC}"
+	done
+	for line in "${lines[@]}"; do
+		ui_print_line "$out" "$line"
+	done
+}
+
 # --- 清屏策略 ---
 # shellcheck disable=SC2034
 declare -A JB_SMART_CLEAR_SEEN=()
@@ -469,6 +1380,7 @@ load_config() {
 		JB_LOG_WITH_TIMESTAMP=$(jq -r '.log_with_timestamp // false' "$config_path" 2>/dev/null || echo "$JB_LOG_WITH_TIMESTAMP")
 		JB_ENABLE_AUTO_UPDATE=$(jq -r '.enable_auto_update // "true"' "$config_path" 2>/dev/null || echo "$JB_ENABLE_AUTO_UPDATE")
 		JB_NONINTERACTIVE=$(jq -r '.noninteractive // "false"' "$config_path" 2>/dev/null || echo "$JB_NONINTERACTIVE")
+		UI_THEME=$(jq -r --arg def "$DEFAULT_UI_THEME" '.ui.theme // $def' "$config_path" 2>/dev/null || echo "$DEFAULT_UI_THEME")
 	else
 		log_warn "未检测到 jq，使用轻量文本解析。"
 		BASE_URL=$(_get_json_value_fallback "$config_path" "base_url" "$BASE_URL")
@@ -479,6 +1391,14 @@ load_config() {
 		JB_LOG_WITH_TIMESTAMP=$(_get_json_value_fallback "$config_path" "log_with_timestamp" "$JB_LOG_WITH_TIMESTAMP")
 		JB_ENABLE_AUTO_UPDATE=$(_get_json_value_fallback "$config_path" "enable_auto_update" "$JB_ENABLE_AUTO_UPDATE")
 		JB_NONINTERACTIVE=$(_get_json_value_fallback "$config_path" "noninteractive" "$JB_NONINTERACTIVE")
+		UI_THEME=$(_get_json_value_fallback "$config_path" "theme" "$DEFAULT_UI_THEME")
+	fi
+
+	if ! ui_theme_exists "${UI_THEME:-}"; then
+		UI_THEME="$DEFAULT_UI_THEME"
+	fi
+	if [ -z "${JB_UI_THEME:-}" ]; then
+		JB_UI_THEME="$UI_THEME"
 	fi
 
 	# shellcheck disable=SC2034
@@ -523,34 +1443,19 @@ _render_menu() {
 	local title="$1"
 	shift
 	local -a lines=("$@")
-	local max_content_width=0
-	local title_width
-	title_width=$(_get_visual_width "$title")
-	max_content_width=$title_width
-	for line in "${lines[@]}"; do
-		local current_line_visual_width
-		current_line_visual_width=$(_get_visual_width "$line")
-		if [ "$current_line_visual_width" -gt "$max_content_width" ]; then
-			max_content_width="$current_line_visual_width"
-		fi
-	done
-	local box_inner_width=$max_content_width
-	if [ "$box_inner_width" -lt 40 ]; then box_inner_width=40; fi
-
-	echo ""
-	printf '%b\n' "${GREEN}╭$(generate_line "$box_inner_width" "─")╮${NC}"
-	if [ -n "$title" ]; then
-		local padding_total=$((box_inner_width - title_width))
-		local padding_left=$((padding_total / 2))
-		local padding_right=$((padding_total - padding_left))
-		printf '%b\n' "${GREEN}│${NC}$(printf '%*s' "$padding_left" "")${BOLD}${title}${NC}$(printf '%*s' "$padding_right" "")${GREEN}│${NC}"
-	fi
-	printf '%b\n' "${GREEN}╰$(generate_line "$box_inner_width" "─")╯${NC}"
-	for line in "${lines[@]}"; do
-		printf '%b\n' "${line}"
-	done
-	local box_total_physical_width=$((box_inner_width + 2))
-	printf '%b\n' "${GREEN}$(generate_line "$box_total_physical_width" "─")${NC}"
+	local out
+	out=$(ui_output_target)
+	case "$(get_ui_theme)" in
+	classic)
+		ui_render_classic_menu "$out" "$title" "${lines[@]}"
+		;;
+	minimal)
+		ui_render_plain_menu "$out" "$title" "${lines[@]}"
+		;;
+	*)
+		ui_render_plain_menu "$out" "$title" "${lines[@]}"
+		;;
+	esac
 }
 
 _on_error() {

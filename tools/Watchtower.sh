@@ -134,6 +134,23 @@ if ! declare -f _render_menu &>/dev/null; then
 	_render_menu() {
 		local title="$1"
 		shift
+		if declare -f get_ui_theme >/dev/null 2>&1 && [ "$(get_ui_theme)" != "classic" ]; then
+			printf '%b\n' "\n${BOLD}${title}${NC}"
+			local width=60
+			local plain_title="${title}"
+			if declare -f _get_visual_width >/dev/null 2>&1; then
+				width=$(_get_visual_width "$plain_title")
+				[ "$width" -lt 60 ] && width=60
+				[ "$width" -gt 76 ] && width=76
+			fi
+			if declare -f ui_render_divider >/dev/null 2>&1; then
+				ui_render_divider "$(ui_output_target)" "$width"
+			else
+				printf '%b\n' "${CYAN}$(printf '%*s' "$width" '' | tr ' ' '-')${NC}"
+			fi
+			printf " %s\n" "$@"
+			return 0
+		fi
 		printf '%b\n' "\n${BLUE}--- $title ---${NC}"
 		printf " %s\n" "$@"
 	}
@@ -193,6 +210,75 @@ if ! declare -f _prompt_for_menu_choice &>/dev/null; then
 		done
 	}
 fi
+
+if ! declare -f ui_define_manual_fallback_helpers &>/dev/null; then
+	ui_define_manual_fallback_helpers() {
+		if ! declare -f ui_append_manual_panel_fallback >/dev/null 2>&1; then
+			ui_append_manual_panel_fallback() {
+				local target_name="$1"
+				local subtitle="${2:-}"
+				local meta_line="${3:-}"
+				local hint="${4:-}"
+				local -n target_ref="$target_name"
+				[ -n "$subtitle" ] && target_ref+=("$subtitle")
+				[ -n "$meta_line" ] && target_ref+=("$meta_line")
+				[ -n "$hint" ] && target_ref+=("$hint")
+			}
+		fi
+
+		if ! declare -f ui_append_manual_page_block >/dev/null 2>&1; then
+			ui_append_manual_page_block() {
+				local target_name="$1"
+				local heading="${2:-}"
+				shift 2
+				local -n target_ref="$target_name"
+				target_ref+=("")
+				if [ -n "$heading" ]; then
+					target_ref+=("$heading" "")
+				fi
+				local item=""
+				for item in "$@"; do
+					[ -n "$item" ] && target_ref+=("$item")
+				done
+			}
+		fi
+	}
+fi
+
+if ! declare -f ui_define_meta_fallback_helpers &>/dev/null; then
+	ui_define_meta_fallback_helpers() {
+		if ! declare -f ui_meta_focus_fallback_line >/dev/null 2>&1; then
+			ui_meta_focus_fallback_line() {
+				local key="${1:-general}"
+				local value="${2:-}"
+				local label="General"
+				case "$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')" in
+				runtime) label="Runtime" ;;
+				service) label="Service" ;;
+				plane) label="Plane" ;;
+				scope) label="Scope" ;;
+				modules) label="Modules" ;;
+				active) label="Active" ;;
+				kernel) label="Kernel" ;;
+				esac
+				local theme_label="Classic"
+				case "${JB_UI_THEME:-${UI_THEME:-classic}}" in
+				retro-launcher) theme_label="Retro Launcher" ;;
+				compact) theme_label="Compact" ;;
+				minimal) theme_label="Minimal" ;;
+				esac
+				if [ -n "$value" ]; then
+					printf 'Theme: %s   |   Focus: %s: %s' "$theme_label" "$label" "$value"
+				else
+					printf 'Theme: %s   |   Focus: %s' "$theme_label" "$label"
+				fi
+			}
+		fi
+	}
+fi
+
+ui_define_manual_fallback_helpers
+ui_define_meta_fallback_helpers
 
 if ! declare -f press_enter_to_continue &>/dev/null; then
 	press_enter_to_continue() {
@@ -2654,18 +2740,62 @@ main_menu() {
 		fi
 
 		local header_text="Watchtower 自动更新管理器"
+		JB_MENU_CONTEXT="submenu"
+		local menu_subtitle="Manage container auto-updates, notifications and runtime recovery workflows"
+		local menu_hint="Review service health, adjust notifications and inspect live container activity."
+		local menu_meta_line="$(ui_meta_focus_fallback_line "service" "$STATUS_RAW")"
+		local service_overview_heading="Service Overview"
+		local action_center_heading="Action Center"
+		if declare -f ui_format_section_heading >/dev/null 2>&1; then
+			service_overview_heading=$(ui_format_section_heading "Service Overview")
+			action_center_heading=$(ui_format_section_heading "Action Center")
+		fi
 
-		local -a content_array=(
-			"🕝 服务运行状态: ${STATUS_COLOR}${warning_msg}"
-			"🔔 消息通知渠道: ${notify_mode}"
-			"⏳ 下一次扫描: ${COUNTDOWN}"
-			""
-			"主菜单："
-			"1. 部署/重新配置服务 (核心设置)"
-			"2. 配置中心 (通知+高级参数)"
-			"3. 服务运维 (停止/重建)"
-			"4. 实时日志与容器看板"
-		)
+		local -a content_array=()
+		if declare -f ui_append_schema_or_fallback_panel_header >/dev/null 2>&1; then
+			ui_append_schema_or_fallback_panel_header \
+				content_array "WATCHTOWER_MENU" "$STATUS_RAW" "service" \
+				"${menu_subtitle}" "${menu_hint}"
+		elif declare -f ui_append_panel_header >/dev/null 2>&1; then
+			ui_append_panel_header content_array \
+				"${menu_subtitle}" \
+				"service" \
+				"$STATUS_RAW" \
+				"${menu_hint}"
+		else
+			ui_append_manual_panel_fallback content_array "${menu_subtitle}" "${menu_meta_line}" "${menu_hint}"
+		fi
+		if declare -f ui_append_schema_or_fallback_page_block >/dev/null 2>&1; then
+			ui_append_schema_or_fallback_page_block content_array "WATCHTOWER_MENU" "service_overview" "Service Overview" \
+				"🕝 服务运行状态: ${STATUS_COLOR}${warning_msg}" \
+				"🔔 消息通知渠道: ${notify_mode}" \
+				"⏳ 下一次扫描: ${COUNTDOWN}"
+			ui_append_schema_or_fallback_page_block content_array "WATCHTOWER_MENU" "action_center" "Action Center" \
+				"1. 部署/重新配置服务 (核心设置)" \
+				"2. 配置中心 (通知+高级参数)" \
+				"3. 服务运维 (停止/重建)" \
+				"4. 实时日志与容器看板"
+		elif declare -f ui_append_page_block >/dev/null 2>&1; then
+			ui_append_page_block content_array "Service Overview" \
+				"🕝 服务运行状态: ${STATUS_COLOR}${warning_msg}" \
+				"🔔 消息通知渠道: ${notify_mode}" \
+				"⏳ 下一次扫描: ${COUNTDOWN}"
+			ui_append_page_block content_array "Action Center" \
+				"1. 部署/重新配置服务 (核心设置)" \
+				"2. 配置中心 (通知+高级参数)" \
+				"3. 服务运维 (停止/重建)" \
+				"4. 实时日志与容器看板"
+		else
+			ui_append_manual_page_block content_array "${service_overview_heading}" \
+				"🕝 服务运行状态: ${STATUS_COLOR}${warning_msg}" \
+				"🔔 消息通知渠道: ${notify_mode}" \
+				"⏳ 下一次扫描: ${COUNTDOWN}"
+			ui_append_manual_page_block content_array "${action_center_heading}" \
+				"1. 部署/重新配置服务 (核心设置)" \
+				"2. 配置中心 (通知+高级参数)" \
+				"3. 服务运维 (停止/重建)" \
+				"4. 实时日志与容器看板"
+		fi
 
 		_render_menu "$header_text" "${content_array[@]}"
 

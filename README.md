@@ -48,6 +48,104 @@ curl -fsSL "https://raw.githubusercontent.com/wx233Github/vps-kit-mcp/main/insta
 - 各模块支持**独立运行**，在非 root 场景下会自动尝试 sudo 提权。
 - `nginx.sh` 交互模式下配置 HTTP 反代时，后端目标支持三类输入：本机端口（如 `8080`）、Docker 容器名（如 `my-app`）、异机地址（如 `10.0.0.8:8080` 或 `https://svc.internal:8443`）。
 
+### 终端 UI 主题与文案自定义
+
+- 默认主题位于 `/opt/vps_install_modules/config.json` 的 `ui.theme`，当前支持：`retro-launcher`、`classic`、`compact`、`minimal`。
+- 主菜单与二级菜单都支持通过 `config.json` 的 `menus.<MENU>.ui` 覆盖文案；未填写的字段会回退到内置的 schema/default registry（定义在 `utils.sh`）。
+- 常用覆盖字段：
+  - `subtitle`：页头副标题
+  - `repo`：仅 `MAIN_MENU` 使用的仓库/来源行
+  - `hint`：页脚上方的提示语
+  - `meta_labels.version/theme/update`：首页 meta label 文案
+  - `status_labels.<action>`：状态摘要标签，例如 `docker.sh`、`THEME_MENU`、`toggle_startup_update_mode`
+  - `status_markers.current`：主题菜单里当前主题的标记文案
+  - `groups.<group>`：分区标题，例如 `core`、`tools`、`profiles`
+  - `sections.<section>`：页面分区标题，例如模块页里的 `runtime_overview`、`action_center`、`operations_policy`
+  - `focus.key/value/source`：二级菜单的 Focus 行；当 `source` 为 `current_theme` 时，会自动显示当前主题名称
+- 模块页（如 `DOCKER_MENU`、`DOCKER_INSTALL_MENU`、`DOCKER_BOOTSTRAP_MENU`、`CERT_MENU`、`CERT_MAINTENANCE_MENU`、`WATCHTOWER_MENU`、`BBR_MENU`、`BBR_KERNEL_MENU`、`NGINX_MENU`）的 header 与 section 默认文案也来自 `utils.sh` 的共享 registry；新增菜单页时，优先补 `menu_schema_default()` / `menu_ui_*`，不要在模块里再塞一套硬编码默认词表。
+- 这些逻辑菜单 ID 不需要先出现在仓库自带的 `config.json` 里；只要你在本机 `/opt/vps_install_modules/config.json` 的 `menus.<MENU>.ui` 下新增对应节点，就会覆盖共享默认值。
+- 逻辑菜单 ID 一览：
+
+| 菜单 ID | 典型页面 | 可覆盖内容 |
+| --- | --- | --- |
+| `DOCKER_MENU` | Docker 已安装主菜单 | `subtitle` / `hint` / `focus.*` / `sections.*` |
+| `DOCKER_INSTALL_MENU` | Docker 安装管理页 | `subtitle` / `hint` / `focus.*` / `sections.recovery_lifecycle` |
+| `DOCKER_BOOTSTRAP_MENU` | Docker 未安装引导页 | `subtitle` / `hint` / `focus.*` / `sections.bootstrap_overview` / `sections.launch_pad` |
+| `CERT_MENU` | 证书主菜单 | `subtitle` / `hint` / `focus.*` / `sections.*` |
+| `CERT_MAINTENANCE_MENU` | 证书系统维护页 | `subtitle` / `hint` / `focus.*` / `sections.diagnostics` / `sections.policy_control` |
+| `WATCHTOWER_MENU` | Watchtower 主菜单 | `subtitle` / `hint` / `focus.*` / `sections.service_overview` / `sections.action_center` |
+| `BBR_MENU` | BBR ACE 主菜单 | `subtitle` / `hint` / `focus.*` / `sections.*` |
+| `BBR_KERNEL_MENU` | BBR 内核维护页 | `subtitle` / `hint` / `focus.*` / `sections.recovery_lifecycle` |
+| `NGINX_MENU` | Nginx 主菜单 | `subtitle` / `hint` / `focus.*` / `sections.http_workloads` / `sections.transport_routing` / `sections.operations_policy` |
+- 配置示例：
+
+```json
+{
+  "ui": {
+    "theme": "retro-launcher"
+  },
+  "menus": {
+    "MAIN_MENU": {
+      "ui": {
+        "subtitle": "Custom main subtitle",
+        "repo": "Repo: example/custom",
+        "meta_labels": {
+          "version": "Build",
+          "theme": "Skin",
+          "update": "Refresh"
+        },
+        "groups": {
+          "core": "Core Lane",
+          "tools": "Utility Deck",
+          "system": "Control Room"
+        },
+        "status_labels": {
+          "docker.sh": "Engine",
+          "THEME_MENU": "Profile"
+        }
+      }
+    },
+    "THEME_MENU": {
+      "ui": {
+        "status_markers": {
+          "current": "Selected"
+        },
+        "focus": {
+          "source": "current_theme"
+        }
+      }
+    },
+    "DOCKER_MENU": {
+      "ui": {
+        "sections": {
+          "runtime_overview": "Runtime Deck",
+          "action_center": "Control Actions",
+          "recovery_lifecycle": "Recovery Lane"
+        }
+      }
+    },
+    "DOCKER_INSTALL_MENU": {
+      "ui": {
+        "hint": "Choose how to rebuild or retire the current Docker runtime.",
+        "sections": {
+          "recovery_lifecycle": "Lifecycle Controls"
+        }
+      }
+    },
+    "BBR_KERNEL_MENU": {
+      "ui": {
+        "focus": {
+          "value": "Kernel Lane"
+        },
+        "sections": {
+          "recovery_lifecycle": "Kernel Recovery"
+        }
+      }
+    }
+  }
+}
+```
+
 ### 清屏策略
 
 - 当前默认与运行时策略均为 `off`（关闭自动清屏）

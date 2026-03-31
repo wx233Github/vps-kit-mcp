@@ -957,6 +957,15 @@ prompt_menu_choice() {
 	local range="${1:-}"
 	local allow_empty="${2:-false}"
 	local prompt_text="${BRIGHT_YELLOW}选项 [${range}]${NC} (Enter 返回): "
+	if declare -f get_ui_theme >/dev/null 2>&1 && [ "$(get_ui_theme)" != "classic" ]; then
+		local context="submenu"
+		if [ "${JB_MENU_CONTEXT:-submenu}" = "main" ]; then
+			context="main"
+		fi
+		if declare -f ui_build_prompt_text >/dev/null 2>&1; then
+			prompt_text=$(ui_build_prompt_text "$range" "" "$context")
+		fi
+	fi
 	local choice
 	local range_start="" range_end="" range_is_numeric="false"
 	if [[ "$range" =~ ^[0-9]+-[0-9]+$ ]]; then
@@ -1417,20 +1426,20 @@ _is_valid_target() {
 }
 
 _is_valid_http_backend_target() {
-  local target="${1:-}"
-  local stripped="${target#http://}"
-  stripped="${stripped#https://}"
+	local target="${1:-}"
+	local stripped="${target#http://}"
+	stripped="${stripped#https://}"
 
-  if _is_valid_port "$target" || _is_valid_target "$target"; then
-    return 0
-  fi
+	if _is_valid_port "$target" || _is_valid_target "$target"; then
+		return 0
+	fi
 
-  if [[ "$target" =~ ^https?:// ]]; then
-    _is_valid_target "$stripped"
-    return $?
-  fi
+	if [[ "$target" =~ ^https?:// ]]; then
+		_is_valid_target "$stripped"
+		return $?
+	fi
 
-  return 1
+	return 1
 }
 
 _is_valid_location_path() {

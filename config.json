@@ -25,33 +25,118 @@
   "timezone": "Asia/Shanghai",
   "comment_log_with_timestamp": "是否在所有日志输出中包含时间戳 (true/false)",
   "log_with_timestamp": false,
+  "comment_ui": "终端界面主题配置 (retro-launcher/classic/compact/minimal)",
+  "ui": {
+    "theme": "retro-launcher"
+  },
 
   "comment_menus": "主菜单配置",
+  "comment_menu_override_ids": "模块页也支持按逻辑菜单 ID 增量覆盖 UI，例如 DOCKER_MENU、DOCKER_INSTALL_MENU、DOCKER_BOOTSTRAP_MENU、CERT_MENU、CERT_MAINTENANCE_MENU、WATCHTOWER_MENU、BBR_MENU、BBR_KERNEL_MENU、NGINX_MENU；可按需新增 menus.<MENU>.ui 节点",
   "menus": {
     "MAIN_MENU": {
-      "title": "🖥️ VPS 一键安装脚本",
+      "title": "VPS-Kit MCP",
+      "comment_ui": "首页文案与状态标签可覆盖默认 registry 词表",
+      "ui": {
+        "subtitle": "One-click VPS operations toolkit for Docker, Nginx, TLS and MCP",
+        "repo": "Repo: https://github.com/wx233Github/vps-kit-mcp",
+        "meta_labels": {
+          "version": "Version",
+          "theme": "Theme",
+          "update": "Update"
+        },
+        "status_labels": {
+          "docker.sh": "Docker",
+          "nginx.sh": "Nginx",
+          "tools/Watchtower.sh": "Watchtower",
+          "THEME_MENU": "当前",
+          "toggle_startup_update_mode": "模式",
+          "set_theme_retro_launcher": "当前",
+          "set_theme_classic": "当前",
+          "set_theme_compact": "当前",
+          "set_theme_minimal": "当前"
+        },
+        "groups": {
+          "core": "Core Modules",
+          "tools": "Tools",
+          "system": "System"
+        }
+      },
       "items": [
-        { "type": "item", "name": "Docker", "icon": "🐳", "action": "docker.sh" },
-        { "type": "item", "name": "Nginx", "icon": "🌐", "action": "nginx.sh" },
-        { "type": "submenu", "name": "常用工具", "icon": "🛠️", "action": "TOOLS_MENU" },
-        { "type": "item", "name": "证书申请", "icon": "📜", "action": "cert.sh" },
-        { "type": "submenu", "name": "mcp", "icon": "🧩", "action": "MCP_MENU" },
-        { "type": "func", "name": "更新切换", "icon": "🔁", "action": "toggle_startup_update_mode" },
-        { "type": "func", "name": "强制重置", "icon": "⚙️", "action": "confirm_and_force_update" },
-        { "type": "func", "name": "卸载脚本", "icon": "🗑️", "action": "uninstall_script" }
+        { "type": "item", "name": "Docker", "icon": "🐳", "action": "docker.sh", "group": "core", "desc": "安装 Docker / Compose 与运行环境管理" },
+        { "type": "item", "name": "Nginx", "icon": "🌐", "action": "nginx.sh", "group": "core", "desc": "反代、TLS、TCP 网关与模板中心" },
+        { "type": "item", "name": "证书申请", "icon": "📜", "action": "cert.sh", "group": "core", "desc": "证书签发、续期与基础体检" },
+        { "type": "submenu", "name": "常用工具", "icon": "🛠️", "action": "TOOLS_MENU", "group": "tools", "desc": "Watchtower 与 BBR ACE 工具集" },
+        { "type": "submenu", "name": "MCP", "icon": "🧩", "action": "MCP_MENU", "group": "tools", "desc": "PTY 模块与 MCP 辅助工具" },
+        { "type": "submenu", "name": "Theme Center", "icon": "🎛️", "action": "THEME_MENU", "group": "system", "desc": "切换终端主题与查看当前界面风格" },
+        { "type": "func", "name": "更新切换", "icon": "🔁", "action": "toggle_startup_update_mode", "group": "system", "desc": "切换启动检查更新模式" },
+        { "type": "func", "name": "强制重置", "icon": "⚙️", "action": "confirm_and_force_update", "group": "system", "desc": "强制拉取最新脚本并刷新安装" },
+        { "type": "func", "name": "卸载脚本", "icon": "🗑️", "action": "uninstall_script", "group": "system", "desc": "移除安装目录与命令链接" }
       ]
     },
     "TOOLS_MENU": {
       "title": "🛠️ 常用工具",
+      "comment_ui": "二级菜单文案、分组名、focus 与状态标签可按需覆盖默认词表",
+      "ui": {
+        "subtitle": "Operational add-ons for container updates and network tuning",
+        "hint": "Pick a lane to manage updates, watchdogs or kernel acceleration.",
+        "status_labels": {
+          "tools/Watchtower.sh": "Watchtower"
+        },
+        "focus": {
+          "key": "modules",
+          "value": "2"
+        },
+        "groups": {
+          "automation": "Automation",
+          "network": "Networking"
+        }
+      },
       "items": [
-        { "type": "item", "name": "Watchtower (Docker 更新)", "icon": "🔄", "action": "tools/Watchtower.sh" },
-        { "type": "item", "name": "BBR ACE (网络调优)", "icon": "⚡", "action": "tools/bbr_ace.sh" }  
+        { "type": "item", "name": "Watchtower", "icon": "🔄", "action": "tools/Watchtower.sh", "group": "automation", "desc": "容器自动更新、定时巡检与通知联动中心" },
+        { "type": "item", "name": "BBR ACE", "icon": "⚡", "action": "tools/bbr_ace.sh", "group": "network", "desc": "拥塞控制加速、内核调优与链路优化助手" }
       ]
     },
     "MCP_MENU": {
       "title": "🧩 MCP 工具",
+      "comment_ui": "未覆盖的字段将自动回退到 install.sh 内置 schema/default registry",
+      "ui": {
+        "subtitle": "Runtime helpers for PTY sessions and MCP-side tooling",
+        "hint": "Launch supporting runtimes and diagnostics for MCP workflows.",
+        "focus": {
+          "key": "runtime",
+          "value": "PTY"
+        },
+        "groups": {
+          "runtime": "Runtime",
+          "tooling": "Tooling"
+        }
+      },
       "items": [
-        { "type": "item", "name": "mcp_pty", "icon": "🖥️", "action": "MCP/pty/mcp_pty.sh" }
+        { "type": "item", "name": "mcp_pty", "icon": "🖥️", "action": "MCP/pty/mcp_pty.sh", "group": "runtime", "desc": "PTY 会话部署、守护恢复与运行诊断入口" }
+      ]
+    },
+    "THEME_MENU": {
+      "title": "🎛️ Theme Center",
+      "comment_ui": "主题菜单支持覆盖副标题、状态标记与 focus 来源",
+      "ui": {
+        "subtitle": "Switch visual profiles and keep the launcher consistent",
+        "hint": "Choose the profile that best matches your terminal and workflow.",
+        "status_markers": {
+          "current": "Current"
+        },
+        "focus": {
+          "key": "active",
+          "source": "current_theme"
+        },
+        "groups": {
+          "profiles": "Theme Profiles"
+        }
+      },
+      "items": [
+        { "type": "func", "name": "Retro Launcher", "icon": "🚀", "action": "set_theme_retro_launcher", "group": "profiles", "desc": "大标题启动器首页 + 分区式产品子页" },
+        { "type": "func", "name": "Classic", "icon": "🧱", "action": "set_theme_classic", "group": "profiles", "desc": "保留原始框线菜单与旧式脚本操作感" },
+        { "type": "func", "name": "Compact", "icon": "📦", "action": "set_theme_compact", "group": "profiles", "desc": "更紧凑的工具台布局，适合小终端窗口" },
+        { "type": "func", "name": "Minimal", "icon": "🪶", "action": "set_theme_minimal", "group": "profiles", "desc": "纯文本极简视图，适合日志与兼容性场景" }
       ]
     }
   },
