@@ -700,7 +700,12 @@ _manage_certificates() {
 			return
 		fi
 
-		echo ""
+		local -a list_lines=(
+			"当前状态"
+			"- 共 ${#domains[@]} 个证书项目"
+			""
+			"证书列表"
+		)
 		local i
 		for ((i = 0; i < ${#domains[@]}; i++)); do
 			local d="${domains[i]}"
@@ -763,15 +768,18 @@ _manage_certificates() {
 				[ -n "$next_ts" ] && next_renew_str=$(date -d "@$next_ts" +%F 2>/dev/null || echo "Err")
 			fi
 
-			printf "${GREEN}[ %d ] %s${NC} (CA: %s)\n" "$((i + 1))" "$d" "$ca_str"
-			printf "  ├─ 路 径 : %s\n" "$install_path"
-			printf "  ├─ 续 期 : %s (计划)\n" "$next_renew_str"
-			printf "  └─ 证 书 : ${color}%s (%s , %s 到 期)${NC}\n" "$status_text" "$days_info" "$date_str"
-			echo -e "${CYAN}····························································${NC}"
+			list_lines+=("○ $((i + 1)). ${d}")
+			list_lines+=("   证书状态: ${color}${status_text}${NC} | CA: ${ca_str}")
+			list_lines+=("   到期时间: ${date_str} | 剩余: ${days_info}")
+			list_lines+=("   下次续期: ${next_renew_str} | 路径: ${install_path}")
+			list_lines+=("")
 		done
 
+		list_lines+=("请输入序号进入管理，直接回车返回。")
+		_render_menu "证书管理列表" "${list_lines[@]}"
+
 		local choice_idx
-		choice_idx=$(_prompt_user_input "请输入序号管理 (按 Enter 返回主菜单): " "")
+		choice_idx=$(_prompt_user_input "请输入序号进入管理: " "")
 		if [ -z "$choice_idx" ] || [ "$choice_idx" == "0" ]; then return; fi
 
 		if ! [[ "$choice_idx" =~ ^[0-9]+$ ]] || ((choice_idx < 1 || choice_idx > ${#domains[@]})); then
