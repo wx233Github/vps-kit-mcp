@@ -1581,16 +1581,16 @@ _wait_for_container_healthy() {
 
 		case "$status" in
 		"running")
-			log_success "容器 '$container_name' 已成功启动并处于运行状态。"
+			result_success "容器 ${container_name} 已启动并处于运行状态"
 			return "${ERR_OK}"
 			;;
 		"exited" | "dead")
-			log_error "容器 '$container_name' 启动失败，状态为 '$status'。请检查日志。"
+			result_failure "容器 ${container_name} 启动失败，状态为 ${status}"
 			JB_SUDO_LOG_QUIET="true" run_with_sudo docker logs "$container_name" >&2
 			return "${ERR_RUNTIME}"
 			;;
 		"not-found")
-			log_error "容器 '$container_name' 未找到，启动命令可能已失败。"
+			result_failure "容器 ${container_name} 未找到，启动命令可能已失败"
 			return "${ERR_RUNTIME}"
 			;;
 		*)
@@ -1600,7 +1600,7 @@ _wait_for_container_healthy() {
 		esac
 	done
 
-	log_error "健康检查超时！容器 '$container_name' 在 ${timeout} 秒内未能进入 'running' 状态。"
+	result_failure "健康检查超时，容器 ${container_name} 在 ${timeout} 秒内未能进入运行状态"
 	return "${ERR_RUNTIME}"
 }
 
@@ -1698,7 +1698,7 @@ _start_watchtower_container_logic() {
 			return "${ERR_RUNTIME}"
 		}
 		prune_dangling_images || true
-		log_success "手动更新扫描任务已结束"
+		result_success "手动更新扫描已完成"
 		return "${ERR_OK}"
 	else
 		[ "$interactive_mode" = "false" ] && echo -e "${CYAN}执行命令: JB_SUDO_LOG_QUIET=true run_with_sudo docker run ...${NC}"
@@ -1707,12 +1707,12 @@ _start_watchtower_container_logic() {
 		JB_SUDO_LOG_QUIET="true" run_with_sudo "${final_command_to_run[@]}" || rc=$?
 
 		if [ "$rc" -ne 0 ]; then
-			log_error "$mode_description 启动命令失败 (exit code: $rc)"
+			result_failure "${mode_description} 启动命令失败 (exit code: $rc)"
 			return "${ERR_RUNTIME}"
 		fi
 
 		if ! _wait_for_container_healthy "$run_container_name"; then
-			log_error "自修复：启动失败，正在清理残留的 '$run_container_name' 容器..."
+			log_error "启动失败，正在清理残留容器 ${run_container_name}..."
 			JB_SUDO_LOG_QUIET="true" run_with_sudo docker rm -f "$run_container_name" &>/dev/null || true
 			return "${ERR_RUNTIME}"
 		fi
@@ -1742,7 +1742,7 @@ _rebuild_watchtower() {
 	fi
 
 	if ! _start_watchtower_container_logic "$interval" "Watchtower (监控模式)"; then
-		log_error "Watchtower 重建失败！"
+		result_failure "Watchtower 重建失败"
 		if [ "$had_existing_container" = "true" ]; then
 			_remove_named_watchtower_container "${WATCHTOWER_CONTAINER_NAME}"
 			if _rename_watchtower_container "$backup_container_name" "${WATCHTOWER_CONTAINER_NAME}"; then
@@ -1760,7 +1760,7 @@ _rebuild_watchtower() {
 
 	prune_dangling_images || true
 
-	log_success "Watchtower 重建成功！"
+	result_success "Watchtower 重建成功"
 	return "${ERR_OK}"
 }
 
@@ -1791,7 +1791,7 @@ _prompt_rebuild_if_needed() {
 
 	if [ "$current_hash" != "$new_hash" ]; then
 		echo -e "\n${RED}⚠️ 检测到配置已变更 (Diff Found)，建议前往'服务运维'重建服务以生效。${NC}"
-		if confirm_action "检测到配置变更，是否立即重建 Watchtower 以应用新配置?"; then
+		if confirm_destructive_action "重建 Watchtower" "会重新创建容器以应用新配置。"; then
 			_rebuild_watchtower || return $?
 		fi
 	fi

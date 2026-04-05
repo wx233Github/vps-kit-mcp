@@ -3224,18 +3224,18 @@ _handle_renew_cert() {
 	_generate_op_id
 	NGINX_RELOAD_NEEDED="true"
 	if _issue_and_install_certificate "$p" && control_nginx_reload_if_needed; then
-		printf '%b' "已续期: ${d}\n"
-		printf '%b' "请返回项目列表继续操作。\n"
+		printf '%b' "已完成：证书已续期 ${d}\n"
+		printf '%b' "下一步：可返回项目列表继续操作。\n"
 	else
-		printf '%b' "续期失败: ${d}\n"
-		printf '%b' "请查看日志后重试。\n"
+		printf '%b' "操作失败：证书续期失败 ${d}\n"
+		printf '%b' "建议：请查看日志后重试。\n"
 	fi
 	press_enter_to_continue
 }
 _handle_delete_project() {
 	local d="${1:-}"
 	_generate_op_id
-	if confirm_or_cancel "确认彻底删除 $d 及其证书?"; then
+	if confirm_or_cancel "将执行：删除项目；影响：会移除 $d 的站点配置和证书文件。是否继续" "n"; then
 		_remove_and_disable_nginx_config "$d"
 		"$ACME_BIN" --remove -d "$d" --ecc >/dev/null 2>&1 || true
 		if _require_safe_path "$SSL_CERTS_BASE_DIR/$d.cer" "删除证书"; then rm -f "$SSL_CERTS_BASE_DIR/$d.cer"; fi
@@ -3243,14 +3243,14 @@ _handle_delete_project() {
 		_delete_project_json "$d"
 		NGINX_RELOAD_NEEDED="true"
 		if control_nginx_reload_if_needed; then
-			printf '%b' "已删除: ${d}\n"
-			printf '%b' "配置已重载。\n"
+			printf '%b' "已完成：项目已删除 ${d}\n"
+			printf '%b' "当前结果：Nginx 配置已重载。\n"
 		else
-			printf '%b' "已删除: ${d}\n"
-			printf '%b' "Nginx 重载失败,请手动处理。\n"
+			printf '%b' "已完成：项目已删除 ${d}\n"
+			printf '%b' "操作失败：Nginx 重载失败，请手动处理。\n"
 		fi
 	else
-		printf '%b' "已取消删除。\n"
+		printf '%b' "已取消：删除项目。\n"
 	fi
 	press_enter_to_continue
 }
@@ -3271,7 +3271,7 @@ _handle_reconfigure_project() {
 	port=$(jq -r .resolved_port <<<"$cur")
 	[ "$port" == "cert_only" ] && mode="cert_only"
 	local skip_cert="true"
-	if confirm_or_cancel "是否连同证书也重新申请/重载?" "n"; then skip_cert="false"; fi
+	if confirm_or_cancel "是否连同证书一起重新申请并重载" "n"; then skip_cert="false"; fi
 	local new
 	if ! new=$(_gather_project_details "$cur" "$skip_cert" "$mode" "true" "$d" "${port:-}"); then
 		log_message WARN "取消。"
@@ -3298,7 +3298,7 @@ _handle_reconfigure_project() {
 					printf '%b' "旧域名配置移除失败，请手动检查: ${d}\n"
 				fi
 			fi
-			printf '%b' "重配完成: ${d} -> ${new_domain}\n"
+			printf '%b' "已完成：项目重配成功 ${d} -> ${new_domain}\n"
 			if [ -n "$LAST_CERT_ELAPSED" ]; then printf '%b' "申请耗时: ${LAST_CERT_ELAPSED}\n"; fi
 			if [ -n "$LAST_CERT_CERT" ] && [ -n "$LAST_CERT_KEY" ]; then
 				printf '%b' "证书路径: ${LAST_CERT_CERT}\n"
@@ -3311,13 +3311,13 @@ _handle_reconfigure_project() {
 			press_enter_to_continue
 			return
 		fi
-		printf '%b' "重配失败: ${d}\n"
-		printf '%b' "已保留原配置。\n"
+		printf '%b' "操作失败：项目重配失败 ${d}\n"
+		printf '%b' "当前结果：已保留原配置。\n"
 		press_enter_to_continue
 		return
 	fi
 	if _apply_project_transaction "$d" "$new" "$old_json" "$mode"; then
-		printf '%b' "重配完成: ${d}\n"
+		printf '%b' "已完成：项目重配成功 ${d}\n"
 		if [ -n "$LAST_CERT_ELAPSED" ]; then printf '%b' "申请耗时: ${LAST_CERT_ELAPSED}\n"; fi
 		if [ -n "$LAST_CERT_CERT" ] && [ -n "$LAST_CERT_KEY" ]; then
 			printf '%b' "证书路径: ${LAST_CERT_CERT}\n"
@@ -3328,8 +3328,8 @@ _handle_reconfigure_project() {
 		fi
 		printf '%b' "已重载 Nginx。\n"
 	else
-		printf '%b' "重配失败: ${d}\n"
-		printf '%b' "已自动回滚到原配置。\n"
+		printf '%b' "操作失败：项目重配失败 ${d}\n"
+		printf '%b' "当前结果：已自动回滚到原配置。\n"
 	fi
 	press_enter_to_continue
 }
