@@ -1510,8 +1510,7 @@ run_startup_update_legacy() {
 		fi
 
 		if [ "$restart_needed" = true ]; then
-			log_success "主程序更新，重启中" >&2
-			restart_main_script "${@:-}"
+			log_success "主程序已更新，本次执行结束后生效。" >&2
 		fi
 	fi
 }
@@ -2586,7 +2585,7 @@ main() {
 
 	exec 200>"${LOCK_FILE}"
 	if ! flock -n 200; then
-		log_err "脚本已在运行。"
+		log_err "已有一个会话正在运行，请先退出旧会话后再试。"
 		exit 1
 	fi
 
