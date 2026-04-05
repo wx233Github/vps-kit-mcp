@@ -440,8 +440,8 @@ _draw_dashboard() {
 	load=$(uptime | awk -F'load average:' '{print $2}' | xargs | cut -d, -f1-3 2>/dev/null || printf '%s' "unknown")
 
 	local title="Nginx 管理面板"
-	local line1="Nginx: ${nginx_v} | 运行: ${uptime_raw} | 负载: ${load}"
-	local line2="HTTP : ${count} 个 | TCP : ${tcp_count} 个 | 告警 : ${warn_count}"
+	local line1="Nginx ${nginx_v}"
+	local line2="运行 ${uptime_raw} | HTTP ${count} | TCP ${tcp_count} | 告警 ${warn_count}"
 	local line3=""
 	line3=$(_nginx_http2_warn_line "$nginx_v")
 
@@ -469,7 +469,7 @@ _draw_dashboard() {
 	printf '%b' "${GREEN}╰$(generate_line "$max_width" "─")╯${NC}\n"
 	local pad1=$((max_width - w1))
 	local pad2=$((max_width - w2))
-	printf '%b' " ${line1}$(printf '%*s' "$pad1" "")\n"
+	printf '%b' " ${GRAY}${line1}${NC}$(printf '%*s' "$pad1" "")\n"
 	printf '%b' " ${line2}$(printf '%*s' "$pad2" "")\n"
 	if [ -n "$line3" ]; then
 		local pad3=$((max_width - w3))

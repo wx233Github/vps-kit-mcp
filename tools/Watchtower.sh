@@ -2741,60 +2741,44 @@ main_menu() {
 
 		local header_text="Watchtower 自动更新管理器"
 		JB_MENU_CONTEXT="submenu"
-		local menu_subtitle="Manage container auto-updates, notifications and runtime recovery workflows"
-		local menu_hint="Review service health, adjust notifications and inspect live container activity."
-		local menu_meta_line="$(ui_meta_focus_fallback_line "service" "$STATUS_RAW")"
-		local service_overview_heading="Service Overview"
-		local action_center_heading="Action Center"
+		local service_overview_heading="当前状态"
+		local action_center_heading="常用操作"
 		if declare -f ui_format_section_heading >/dev/null 2>&1; then
-			service_overview_heading=$(ui_format_section_heading "Service Overview")
-			action_center_heading=$(ui_format_section_heading "Action Center")
+			service_overview_heading=$(ui_format_section_heading "当前状态")
+			action_center_heading=$(ui_format_section_heading "常用操作")
 		fi
 
 		local -a content_array=()
-		if declare -f ui_append_schema_or_fallback_panel_header >/dev/null 2>&1; then
-			ui_append_schema_or_fallback_panel_header \
-				content_array "WATCHTOWER_MENU" "$STATUS_RAW" "service" \
-				"${menu_subtitle}" "${menu_hint}"
-		elif declare -f ui_append_panel_header >/dev/null 2>&1; then
-			ui_append_panel_header content_array \
-				"${menu_subtitle}" \
-				"service" \
-				"$STATUS_RAW" \
-				"${menu_hint}"
-		else
-			ui_append_manual_panel_fallback content_array "${menu_subtitle}" "${menu_meta_line}" "${menu_hint}"
-		fi
 		if declare -f ui_append_schema_or_fallback_page_block >/dev/null 2>&1; then
-			ui_append_schema_or_fallback_page_block content_array "WATCHTOWER_MENU" "service_overview" "Service Overview" \
-				"🕝 服务运行状态: ${STATUS_COLOR}${warning_msg}" \
-				"🔔 消息通知渠道: ${notify_mode}" \
-				"⏳ 下一次扫描: ${COUNTDOWN}"
-			ui_append_schema_or_fallback_page_block content_array "WATCHTOWER_MENU" "action_center" "Action Center" \
-				"1. 部署/重新配置服务 (核心设置)" \
-				"2. 配置中心 (通知+高级参数)" \
-				"3. 服务运维 (停止/重建)" \
-				"4. 实时日志与容器看板"
+			ui_append_schema_or_fallback_page_block content_array "WATCHTOWER_MENU" "service_overview" "当前状态" \
+				"服务状态: ${STATUS_COLOR}${warning_msg}" \
+				"通知方式: ${notify_mode}" \
+				"下一次扫描: ${COUNTDOWN}"
+			ui_append_schema_or_fallback_page_block content_array "WATCHTOWER_MENU" "action_center" "常用操作" \
+				"● 1. ⚙️ 部署或重配服务    重新配置核心运行参数" \
+				"○ 2. 🔔 配置中心         管理通知和高级参数" \
+				"○ 3. 🩺 服务运维         停止、重建和恢复服务" \
+				"○ 4. 📄 日志与容器看板    查看实时日志和容器状态"
 		elif declare -f ui_append_page_block >/dev/null 2>&1; then
-			ui_append_page_block content_array "Service Overview" \
-				"🕝 服务运行状态: ${STATUS_COLOR}${warning_msg}" \
-				"🔔 消息通知渠道: ${notify_mode}" \
-				"⏳ 下一次扫描: ${COUNTDOWN}"
-			ui_append_page_block content_array "Action Center" \
-				"1. 部署/重新配置服务 (核心设置)" \
-				"2. 配置中心 (通知+高级参数)" \
-				"3. 服务运维 (停止/重建)" \
-				"4. 实时日志与容器看板"
+			ui_append_page_block content_array "当前状态" \
+				"服务状态: ${STATUS_COLOR}${warning_msg}" \
+				"通知方式: ${notify_mode}" \
+				"下一次扫描: ${COUNTDOWN}"
+			ui_append_page_block content_array "常用操作" \
+				"● 1. ⚙️ 部署或重配服务    重新配置核心运行参数" \
+				"○ 2. 🔔 配置中心         管理通知和高级参数" \
+				"○ 3. 🩺 服务运维         停止、重建和恢复服务" \
+				"○ 4. 📄 日志与容器看板    查看实时日志和容器状态"
 		else
 			ui_append_manual_page_block content_array "${service_overview_heading}" \
-				"🕝 服务运行状态: ${STATUS_COLOR}${warning_msg}" \
-				"🔔 消息通知渠道: ${notify_mode}" \
-				"⏳ 下一次扫描: ${COUNTDOWN}"
+				"服务状态: ${STATUS_COLOR}${warning_msg}" \
+				"通知方式: ${notify_mode}" \
+				"下一次扫描: ${COUNTDOWN}"
 			ui_append_manual_page_block content_array "${action_center_heading}" \
-				"1. 部署/重新配置服务 (核心设置)" \
-				"2. 配置中心 (通知+高级参数)" \
-				"3. 服务运维 (停止/重建)" \
-				"4. 实时日志与容器看板"
+				"● 1. ⚙️ 部署或重配服务    重新配置核心运行参数" \
+				"○ 2. 🔔 配置中心         管理通知和高级参数" \
+				"○ 3. 🩺 服务运维         停止、重建和恢复服务" \
+				"○ 4. 📄 日志与容器看板    查看实时日志和容器状态"
 		fi
 
 		_render_menu "$header_text" "${content_array[@]}"
