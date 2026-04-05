@@ -391,6 +391,22 @@ confirm_action() {
 	case "$choice" in n | N) return 1 ;; *) return 0 ;; esac
 }
 
+confirm_destructive_action() {
+	local action_desc="${1:-危险操作}"
+	local impact_desc="${2:-该操作可能修改当前配置或服务状态。}"
+	confirm_action "将执行：${action_desc}；影响：${impact_desc} 是否继续"
+}
+
+result_success() {
+	local message="${1:-操作完成。}"
+	log_success "已完成：${message}"
+}
+
+result_failure() {
+	local message="${1:-操作失败。}"
+	log_err "操作失败：${message}"
+}
+
 ui_theme_exists() {
 	local theme="${1:-}"
 	case "$theme" in

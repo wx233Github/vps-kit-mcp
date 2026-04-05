@@ -562,7 +562,7 @@ ensure_docker_repo_ready() {
 }
 
 uninstall_docker() {
-	if ! confirm_action "将执行：卸载 Docker 和 Compose；影响：会删除相关软件包并中断容器服务。是否继续"; then
+	if ! confirm_destructive_action "卸载 Docker 和 Compose" "会删除相关软件包并中断容器服务。"; then
 		log_warn "🚫 操作已取消。"
 		return 1
 	fi
@@ -605,7 +605,7 @@ uninstall_docker() {
 			fi
 		fi
 	fi
-	log_success "✅ Docker 和 Compose 已成功卸载。"
+	result_success "Docker 和 Compose 已卸载"
 	return 0
 }
 
@@ -626,7 +626,7 @@ configure_docker_mirror() {
 		execute_with_spinner "写入/更新镜像加速器配置..." \
 			update_docker_daemon_config "$DAEMON_FILE" "$MIRRORS_JSON"
 		execute_with_spinner "应用配置并重启 Docker..." run_destructive_with_sudo systemctl daemon-reload && run_destructive_with_sudo systemctl restart docker
-		log_success "✅ 镜像加速器配置完成！"
+		result_success "镜像加速器已配置完成"
 	fi
 }
 
@@ -672,13 +672,12 @@ install_docker() {
 	execute_with_spinner "启动 Docker 并设置开机自启..." run_with_sudo systemctl enable --now docker
 	execute_with_spinner "运行 hello-world 容器进行功能测试..." run_with_sudo docker run --rm hello-world
 	execute_with_spinner "清理测试镜像..." run_with_sudo docker image rm hello-world
-	log_success "\n🎉 Docker 安装成功！"
+	result_success "Docker 安装成功"
 	get_docker_status
 	printf "   Docker 版本: %s\n   Compose 版本: %s\n\n" "$DOCKER_VERSION" "$COMPOSE_VERSION"
 	configure_docker_mirror "auto"
 	add_user_to_docker_group
-	log_success "--------------------------------------------------"
-	log_success "✅ 所有操作已完成！"
+	log_info "当前结果：Docker 与 Compose 已可用。"
 }
 
 docker_service_menu() {
@@ -732,7 +731,7 @@ docker_prune_system() {
 		log_info "正在执行系统清理 (不包含数据卷)..."
 		run_destructive_with_sudo docker system prune -a -f
 	fi
-	log_success "✅ 系统清理完成。"
+	result_success "Docker 空间清理完成"
 }
 
 repair_docker_service() {

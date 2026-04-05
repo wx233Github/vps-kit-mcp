@@ -669,7 +669,7 @@ _apply_for_certificate() {
 	tmp_apply_time_file=$(mktemp "/tmp/cert_apply_time_XXXXXX")
 	printf '%s\n' "$(date +'%Y-%m-%d %H:%M:%S')" >"$tmp_apply_time_file"
 	run_with_sudo mv -f "$tmp_apply_time_file" "$apply_time_file"
-	log_success "完成！路径: $INSTALL_PATH"
+	result_success "证书已安装，路径：$INSTALL_PATH"
 	unset CF_Token CF_Account_ID Ali_Key Ali_Secret
 }
 
@@ -848,7 +848,7 @@ _manage_certificates() {
 				log_info "执行续期命令..."
 				local renew_success="false"
 				if "$ACME_BIN" --renew -d "$SELECTED_DOMAIN" --force --ecc; then
-					log_success "续期指令执行成功！"
+					result_success "证书续期命令已执行"
 					renew_success="true"
 				else
 					local err_code=$?
@@ -859,7 +859,7 @@ _manage_certificates() {
 						log_success "证书可能已生成 (Reload 跳过，因服务已停止)。"
 						renew_success="true"
 					else
-						log_err "续期失败 (Code: $err_code)。"
+						result_failure "证书续期失败 (Code: $err_code)"
 						echo "$log_tail"
 
 						if [[ "$log_tail" == *"retryafter"* ]]; then
@@ -881,17 +881,17 @@ _manage_certificates() {
 				press_enter_to_continue
 				;;
 			3)
-				if confirm_action "将执行：删除证书；影响：会移除 $SELECTED_DOMAIN 的证书文件和 acme 记录。是否继续"; then
+				if confirm_destructive_action "删除证书" "会移除 $SELECTED_DOMAIN 的证书文件和 acme 记录。"; then
 					"$ACME_BIN" --remove -d "$SELECTED_DOMAIN" --ecc || true
 					if [ -d "/etc/ssl/$SELECTED_DOMAIN" ]; then
 						run_destructive_with_sudo rm -rf "/etc/ssl/$SELECTED_DOMAIN"
 					fi
-					log_success "已删除。"
+					result_success "证书已删除"
 					break 2
 				fi
 				;;
 			4)
-				if confirm_action "将执行：重新申请证书；影响：会覆盖原有申请配置。是否继续"; then
+				if confirm_destructive_action "重新申请证书" "会覆盖原有申请配置。"; then
 					_apply_for_certificate "$SELECTED_DOMAIN"
 					press_enter_to_continue
 					break 2
