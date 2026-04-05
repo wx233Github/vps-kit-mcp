@@ -61,6 +61,14 @@ log_error() {
 	_log "ERROR" "$*"
 }
 
+result_success() {
+	log_info "已完成：$*"
+}
+
+result_failure() {
+	log_error "操作失败：$*"
+}
+
 die() {
 	local msg="${1:-未知错误}"
 	local code="${2:-$EX_SOFTWARE}"
@@ -509,7 +517,7 @@ configure_opencode_optional() {
 
 print_next_steps() {
 	printf '\n'
-	printf '%s\n' "=== MCP PTY 部署完成 ==="
+	printf '%s\n' "已完成：MCP PTY 部署"
 	printf '%s\n' "版本: ${VERSION}"
 	printf '%s\n' "描述: ${DESCRIPTION}"
 	printf '%s\n' "依赖: ${DEPENDENCIES}"
@@ -525,7 +533,7 @@ print_next_steps() {
 	fi
 
 	printf '\n'
-	printf '%s\n' "建议验证："
+	printf '%s\n' "下一步建议："
 	printf '%s\n' "1) uv --version"
 	printf '%s\n' "2) uvx --from ${PTY_MCP_SPEC} pty-mcp --help"
 	if [ "$WITH_OPENCODE" = "true" ]; then
@@ -540,7 +548,7 @@ print_next_steps() {
 
 print_uninstall_next_steps() {
 	printf '\n'
-	printf '%s\n' "=== MCP PTY 卸载完成 ==="
+	printf '%s\n' "已完成：MCP PTY 卸载"
 	printf '%s\n' "版本: ${VERSION}"
 	printf '%s\n' "PTY 包规格: ${PTY_MCP_SPEC}"
 	printf '%s\n' "历史本地目录: ${LOCAL_BASE_DIR}"
@@ -669,7 +677,8 @@ select_mode_if_needed() {
 		MODE="uninstall"
 		;;
 	*)
-		die "无效选项: ${choice}" "$EX_USAGE"
+		log_warn "无效选项: ${choice}，已回退为 install"
+		MODE="install"
 		;;
 	esac
 }
@@ -683,13 +692,13 @@ confirm_run_if_needed() {
 
 	case "$MODE" in
 	install)
-		printf '%s' "确认执行 mcp_pty 本地搭建? [Y/n]: " >/dev/tty
+		printf '%s' "将执行：安装 MCP PTY；影响：会安装运行依赖并写入本地文件。是否继续 [Y/n]: " >/dev/tty
 		;;
 	opencode)
-		printf '%s' "确认执行 mcp_pty 搭建并关联 opencode? [Y/n]: " >/dev/tty
+		printf '%s' "将执行：安装 MCP PTY 并关联 opencode；影响：会修改本地 opencode 配置。是否继续 [Y/n]: " >/dev/tty
 		;;
 	uninstall)
-		printf '%s' "确认执行 mcp_pty 卸载（不卸载 uv）? [Y/n]: " >/dev/tty
+		printf '%s' "将执行：卸载 MCP PTY；影响：会删除相关本地文件和 opencode 关联。是否继续 [Y/n]: " >/dev/tty
 		;;
 	*)
 		die "未知运行模式: ${MODE}" "$EX_SOFTWARE"
