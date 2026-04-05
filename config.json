@@ -93,8 +93,8 @@
         }
       },
       "items": [
-        { "type": "item", "name": "Watchtower", "icon": "🔄", "action": "tools/Watchtower.sh", "group": "automation", "desc": "容器自动更新、定时巡检与通知联动中心" },
-        { "type": "item", "name": "BBR ACE", "icon": "⚡", "action": "tools/bbr_ace.sh", "group": "network", "desc": "拥塞控制加速、内核调优与链路优化助手" }
+        { "type": "item", "name": "Watchtower", "icon": "🔄", "action": "tools/Watchtower.sh", "group": "automation", "desc": "容器自动更新与通知" },
+        { "type": "item", "name": "BBR ACE", "icon": "⚡", "action": "tools/bbr_ace.sh", "group": "network", "desc": "网络调优与内核优化" }
       ]
     },
     "MCP_MENU": {
@@ -113,7 +113,7 @@
         }
       },
       "items": [
-        { "type": "item", "name": "mcp_pty", "icon": "🖥️", "action": "MCP/pty/mcp_pty.sh", "group": "runtime", "desc": "PTY 会话部署、守护恢复与运行诊断入口" }
+        { "type": "item", "name": "PTY 工具", "icon": "🖥️", "action": "MCP/pty/mcp_pty.sh", "group": "runtime", "desc": "PTY 部署与运行诊断" }
       ]
     },
     "THEME_MENU": {
@@ -134,10 +134,10 @@
         }
       },
       "items": [
-        { "type": "func", "name": "启动器风格", "icon": "🚀", "action": "set_theme_retro_launcher", "group": "profiles", "desc": "大标题启动器首页 + 分区式产品子页" },
-        { "type": "func", "name": "经典风格", "icon": "🧱", "action": "set_theme_classic", "group": "profiles", "desc": "保留原始框线菜单与旧式脚本操作感" },
-        { "type": "func", "name": "紧凑风格", "icon": "📦", "action": "set_theme_compact", "group": "profiles", "desc": "更紧凑的工具台布局，适合小终端窗口" },
-        { "type": "func", "name": "极简风格", "icon": "🪶", "action": "set_theme_minimal", "group": "profiles", "desc": "纯文本极简视图，适合日志与兼容性场景" }
+        { "type": "func", "name": "启动器风格", "icon": "🚀", "action": "set_theme_retro_launcher", "group": "profiles", "desc": "保留首页大标题" },
+        { "type": "func", "name": "经典风格", "icon": "🧱", "action": "set_theme_classic", "group": "profiles", "desc": "保留传统框线菜单" },
+        { "type": "func", "name": "紧凑风格", "icon": "📦", "action": "set_theme_compact", "group": "profiles", "desc": "适合小终端窗口" },
+        { "type": "func", "name": "极简风格", "icon": "🪶", "action": "set_theme_minimal", "group": "profiles", "desc": "更纯粹的文本视图" }
       ]
     }
   },
