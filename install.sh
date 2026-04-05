@@ -897,6 +897,7 @@ migrate_runtime_config_schema() {
     | .menus.MAIN_MENU.title = (default_menu_ui.MAIN_MENU.title)
     | .menus.MAIN_MENU.ui = ((.menus.MAIN_MENU.ui // {}) * (default_menu_ui.MAIN_MENU.ui // {}))
     | .menus.MAIN_MENU.ui.status_labels = (default_menu_ui.MAIN_MENU.ui.status_labels)
+    | .menus.MAIN_MENU.ui.repo = (default_menu_ui.MAIN_MENU.ui.repo)
   ' "$config_file" >"$tmp_file"; then
 		rm -f "$tmp_file" 2>/dev/null || true
 		return 1

@@ -524,10 +524,10 @@ ui_format_section_heading() {
 ui_theme_label() {
 	local theme="${1:-$(get_ui_theme)}"
 	case "$theme" in
-	retro-launcher) printf '%s' "Retro Launcher" ;;
-	classic) printf '%s' "Classic" ;;
-	compact) printf '%s' "Compact" ;;
-	minimal) printf '%s' "Minimal" ;;
+	retro-launcher) printf '%s' "启动器风格" ;;
+	classic) printf '%s' "经典风格" ;;
+	compact) printf '%s' "紧凑风格" ;;
+	minimal) printf '%s' "极简风格" ;;
 	*) printf '%s' "$theme" ;;
 	esac
 }
@@ -567,7 +567,7 @@ menu_vocab_phrase() {
 	hint_bbr_kernel) printf '%s' "请选择内核升级、回退或清理操作。" ;;
 	hint_nginx) printf '%s' "请选择网站、证书、TCP 转发或修复操作。" ;;
 	hint_generic) printf '%s' "请选择要执行的操作。" ;;
-	repo_default) printf '%s' "Repo: https://github.com/wx233Github/vps-kit-mcp" ;;
+	repo_default) printf '%s' "项目地址: https://github.com/wx233Github/vps-kit-mcp" ;;
 	heading_core_modules) printf '%s' "核心功能" ;;
 	heading_tools) printf '%s' "工具" ;;
 	heading_system) printf '%s' "系统" ;;
