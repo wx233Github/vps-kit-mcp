@@ -35,6 +35,7 @@ readonly SCRIPT_DIR
 readonly UTILS_PRIMARY_PATH="/opt/vps_install_modules/utils.sh"
 readonly UTILS_FALLBACK_PATH="${SCRIPT_DIR}/../utils.sh"
 readonly CLEAR_MENU_KEY_MAIN="bbr_ace:main_menu"
+readonly EXIT_MENU_BACK=10
 readonly CLEAR_MENU_KEY_KERNEL="bbr_ace:kernel_menu"
 
 IS_CONTAINER=0
@@ -384,7 +385,7 @@ error_handler() {
 	local exit_code="${1:-1}"
 	local line_no="${2:-0}"
 	local command="${3:-unknown}"
-	if [[ "${exit_code}" -ne 0 ]]; then
+	if [[ "${exit_code}" -ne 0 && "${exit_code}" -ne "${EXIT_MENU_BACK}" ]]; then
 		log_error "脚本异常退出! (Line: ${line_no}, Command: '${command}', ExitCode: ${exit_code})"
 	fi
 	exit "${exit_code}"
@@ -1269,7 +1270,7 @@ main() {
 		local c=""
 		c="$(ui_prompt_choice "1-8" "请选择操作")"
 		case "${c}" in
-		"") return 10 ;;
+		"") return "${EXIT_MENU_BACK}" ;;
 		1) apply_profile "stock" ;;
 		2) apply_profile "aggressive" ;;
 		3) manage_ipv4_precedence "enable" ;;
