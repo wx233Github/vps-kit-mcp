@@ -2073,19 +2073,19 @@ configure_tcp_proxy() {
 
 _display_tcp_projects_list() {
 	local json="${1:-}"
-	printf '%b' "\n"
-	printf "${BOLD}%-4s %-10s %-5s %-12s %-22s${NC}\n" "ID" "端口" "TLS" "备注" "目标地址"
-	printf '%b' "──────────────────────────────────────────────────────────\n"
+	printf '%b' "当前状态\n"
+	printf '%b' "- 共 $(jq 'length' <<<"$json") 个 TCP 项目\n\n"
+	printf '%b' "TCP 项目列表\n"
 	local idx=0
 	jq -r '.[] | [(.listen_port // ""), (.name // "-"), (.target // ""), (.tls_enabled // "n")] | @tsv' <<<"$json" | while IFS=$'\t' read -r port name target tls; do
 		idx=$((idx + 1))
-		local short_target="${target:0:22}"
-		[ ${#target} -gt 22 ] && short_target="${target:0:19}..."
 		local tls_str="${RED}否${NC}"
 		[ "$tls" == "y" ] && tls_str="${GREEN}是${NC}"
-		printf "%-4d ${GREEN}%-10s${NC} %-14s %-12s %-22s\n" "$idx" "$port" "$tls_str" "${name:0:10}" "$short_target"
+		printf '%b\n' "○ ${idx}. 端口 ${GREEN}${port}${NC}"
+		printf '%b\n' "   TLS: ${tls_str} | 备注: ${name}"
+		printf '%b\n\n' "   目标地址: ${target}"
 	done
-	printf '%b' "\n"
+	printf '%b' "请输入序号选择 TCP 项目，直接回车返回。\n"
 }
 
 manage_tcp_configs() {
@@ -3037,19 +3037,9 @@ _display_projects_list() {
 		printf '%b' "暂无数据\n"
 		return
 	fi
-	local w_id=4 w_domain=24 w_target=18 w_status=14 w_renew=12
-	local header=""
-	header+="$(_center_text "ID" $w_id) "
-	header+="$(_center_text "域名" $w_domain) "
-	header+="$(_center_text "目标" $w_target) "
-	header+="$(_center_text "状态" $w_status) "
-	header+="$(_center_text "续期" $w_renew)"
-	printf "${BOLD}${CYAN}%s${NC}\n" "$header"
-	printf "%${w_id}s " | sed "s/ /─/g"
-	printf "%${w_domain}s " | sed "s/ /─/g"
-	printf "%${w_target}s " | sed "s/ /─/g"
-	printf "%${w_status}s " | sed "s/ /─/g"
-	printf "%${w_renew}s\n" | sed "s/ /─/g"
+	printf '%b' "当前状态\n"
+	printf '%b' "- 共 $(jq 'length' <<<"$json") 个网站项目\n\n"
+	printf '%b' "网站列表\n"
 
 	local idx=0
 	jq -r '.[] | [(.domain // "未知"), (.type // ""), (.resolved_port // ""), (.cert_file // ""), (.acme_validation_method // "")] | @tsv' <<<"$json" | while IFS=$'\t' read -r domain type port cert method; do
@@ -3059,8 +3049,6 @@ _display_projects_list() {
 		[ "$type" = "remote_host" ] && target_str="Remote:$port"
 		[ "$type" = "remote_url" ] && target_str="Remote:$port"
 		[ "$port" == "cert_only" ] && target_str="CertOnly"
-		local display_target
-		display_target=$(printf "%-${w_target}s" "$target_str")
 		local renew_date="-"
 		if [ "$method" == "reuse" ]; then
 			renew_date="跟随主域"
@@ -3097,19 +3085,12 @@ _display_projects_list() {
 				color_code="${GREEN}"
 			fi
 		fi
-		local line=""
-		line+="$(_center_text "$idx" "$w_id") "
-		line+="$(_center_text "$domain" "$w_domain") "
-		line+="$(_center_text "$display_target" "$w_target") "
-		local status_len=${#status_text}
-		local s_pad=$((w_status - status_len))
-		local s_left=$((s_pad / 2))
-		local s_right=$((s_pad - s_left))
-		line+="$(printf '%*s' "$s_left" "")${color_code}${status_text}${NC}$(printf '%*s' "$s_right" "") "
-		line+="$(_center_text "$renew_date" "$w_renew")"
-		printf '%b\n' "$line"
+		printf '%b\n' "○ ${idx}. ${domain}"
+		printf '%b\n' "   目标类型: ${target_str} | 证书状态: ${color_code}${status_text}${NC}"
+		printf '%b\n' "   下次续期: ${renew_date}"
+		printf '%b\n\n' "   说明: 选择后可查看配置、续期、重配或删除"
 	done
-	printf '%b' "\n"
+	printf '%b' "请输入序号选择项目，直接回车返回。\n"
 }
 
 select_item_and_act() {
@@ -3140,7 +3121,23 @@ select_item_and_act() {
 
 _manage_http_actions() {
 	local selected_domain="${1:-}"
-	_render_menu "管理: $selected_domain" "1. 查看证书详情 (中文诊断)" "2. 手动续期" "3. 删除项目" "4. 查看 Nginx 配置" "5. 重新配置 (目标/防御/Hook等)" "6. 修改证书申请与续期设置" "7. 添加自定义指令" "8. 配置模板中心 (Block追加/Site替换)"
+	_render_menu "管理: $selected_domain" \
+		"当前操作对象" \
+		"- ${selected_domain}" \
+		"" \
+		"常用操作" \
+		"○ 1. 查看证书详情    查看证书和签发信息" \
+		"● 2. 手动续期        立即续期当前证书" \
+		"○ 4. 查看 Nginx 配置  查看当前站点配置文件" \
+		"○ 5. 重新配置项目    修改目标、防御和 Hook" \
+		"" \
+		"诊断与策略" \
+		"○ 6. 修改续期设置    调整 CA 和验证方式" \
+		"○ 7. 添加自定义指令  追加 server 级配置" \
+		"○ 8. 配置模板中心    管理 Block 和 Site 模板" \
+		"" \
+		"危险操作" \
+		"! 3. 删除项目        删除站点及证书文件"
 	local cc
 	if ! cc=$(prompt_menu_choice "1-8" "true"); then return 0; fi
 	case "$cc" in
@@ -3162,7 +3159,15 @@ _manage_http_actions() {
 
 _manage_tcp_actions() {
 	local selected_port="${1:-}"
-	_render_menu "管理 TCP: 端口 $selected_port" "1. 删除项目" "2. 查看配置"
+	_render_menu "管理 TCP: 端口 $selected_port" \
+		"当前操作对象" \
+		"- 端口 ${selected_port}" \
+		"" \
+		"常用操作" \
+		"○ 2. 查看配置        查看当前 TCP 配置文件" \
+		"" \
+		"危险操作" \
+		"! 1. 删除项目        删除 TCP 转发配置"
 	local cc
 	if ! cc=$(prompt_menu_choice "1-2" "true"); then return 0; fi
 	case "$cc" in
