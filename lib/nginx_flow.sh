@@ -189,66 +189,75 @@ main_menu() {
 			local -a menu_lines=()
 			if declare -f ui_append_schema_or_fallback_panel_header >/dev/null 2>&1; then
 				ui_append_schema_or_fallback_panel_header menu_lines "NGINX_MENU" "" "plane" \
-					"Coordinate edge routing, certificate ops and traffic defense for web entrypoints" \
-					"Configure sites, TCP forwarding, defense posture and lifecycle operations."
+					"管理网站代理、证书、TCP 转发和运行状态" \
+					"先看当前状态，再选择网站、证书、日志或维护操作。"
 			else
 				ui_append_manual_panel_fallback menu_lines \
-					"Coordinate edge routing, certificate ops and traffic defense for web entrypoints" \
-					"$(ui_meta_focus_fallback_line "plane" "Edge Gateway")" \
-					"Configure sites, TCP forwarding, defense posture and lifecycle operations."
+					"管理网站代理、证书、TCP 转发和运行状态" \
+					"$(ui_meta_focus_fallback_line "入口" "网站入口")" \
+					"先看当前状态，再选择网站、证书、日志或维护操作。"
 			fi
 			if declare -f ui_append_schema_or_fallback_page_block >/dev/null 2>&1; then
-				ui_append_schema_or_fallback_page_block menu_lines "NGINX_MENU" "http_workloads" "HTTP(S) Workloads" \
-					"1. 配置新域名反代        支持泛域名免代理" \
-					"2. HTTP 项目管理          查看配置、重配、删除" \
-					"3. 仅申请证书            S-UI / V2Ray 专用"
-				ui_append_schema_or_fallback_page_block menu_lines "NGINX_MENU" "transport_routing" "Transport Routing" \
-					"4. 配置 TCP 反代/负载均衡" \
-					"5. 管理 TCP 反向代理"
-				ui_append_schema_or_fallback_page_block menu_lines "NGINX_MENU" "operations_policy" "Operations & Policy" \
-					"6. 批量续期" \
-					"7. 查看日志              Nginx / acme" \
-					"8. ${BRIGHT_RED}${BOLD}Cloudflare 防御中心${NC}  状态 / 更新 / 切换" \
-					"9. 备份/还原与配置重建" \
-					"10. Telegram 机器人通知" \
-					"11. 配置模板中心         Block追加 / Site替换" \
-					"12. 升级 Nginx           官方源"
+				ui_append_schema_or_fallback_page_block menu_lines "NGINX_MENU" "http_workloads" "当前状态" \
+					"HTTP 项目: ${GREEN}${count:-0} 个${NC}" \
+					"TCP 项目: ${GREEN}${tcp_count:-0} 个${NC}" \
+					"告警数量: ${YELLOW}${warn_count:-0} 个${NC}"
+				ui_append_schema_or_fallback_page_block menu_lines "NGINX_MENU" "transport_routing" "常用操作" \
+					"● 1. 🌐 配置新网站        新建反向代理网站" \
+					"○ 2. 🗂️ 管理网站          查看、修改或删除网站" \
+					"○ 3. 📜 仅申请证书        只管理证书，不配置代理" \
+					"○ 4. 🔀 配置 TCP 转发     新建 TCP 反代或负载均衡" \
+					"○ 5. 🧩 管理 TCP 转发     查看、修改或删除 TCP 项目"
+				ui_append_schema_or_fallback_page_block menu_lines "NGINX_MENU" "operations_policy" "诊断与策略" \
+					"○ 6. 🔁 批量续期          检查并续期现有证书" \
+					"○ 7. 📄 查看日志          查看 Nginx 和 acme 日志" \
+					"○ 8. 🛡️ Cloudflare 防御   管理防御状态和 IP 库" \
+					"○ 9. 💾 备份与恢复        备份、还原和配置重建" \
+					"○ 10. 🤖 Telegram 通知    配置机器人通知" \
+					"○ 11. 🧱 配置模板中心     管理 Block 和 Site 模板" \
+					"! 12. ⬆️ 升级 Nginx       从官方源升级"
 			else
-				ui_append_manual_page_block menu_lines "HTTP(S) Workloads" \
-					"1. 配置新域名反代        支持泛域名免代理" \
-					"2. HTTP 项目管理          查看配置、重配、删除" \
-					"3. 仅申请证书            S-UI / V2Ray 专用"
-				ui_append_manual_page_block menu_lines "Transport Routing" \
-					"4. 配置 TCP 反代/负载均衡" \
-					"5. 管理 TCP 反向代理"
-				ui_append_manual_page_block menu_lines "Operations & Policy" \
-					"6. 批量续期" \
-					"7. 查看日志              Nginx / acme" \
-					"8. ${BRIGHT_RED}${BOLD}Cloudflare 防御中心${NC}  状态 / 更新 / 切换" \
-					"9. 备份/还原与配置重建" \
-					"10. Telegram 机器人通知" \
-					"11. 配置模板中心         Block追加 / Site替换" \
-					"12. 升级 Nginx           官方源"
+				ui_append_manual_page_block menu_lines "当前状态" \
+					"HTTP 项目: ${GREEN}${count:-0} 个${NC}" \
+					"TCP 项目: ${GREEN}${tcp_count:-0} 个${NC}" \
+					"告警数量: ${YELLOW}${warn_count:-0} 个${NC}"
+				ui_append_manual_page_block menu_lines "常用操作" \
+					"● 1. 🌐 配置新网站        新建反向代理网站" \
+					"○ 2. 🗂️ 管理网站          查看、修改或删除网站" \
+					"○ 3. 📜 仅申请证书        只管理证书，不配置代理" \
+					"○ 4. 🔀 配置 TCP 转发     新建 TCP 反代或负载均衡" \
+					"○ 5. 🧩 管理 TCP 转发     查看、修改或删除 TCP 项目"
+				ui_append_manual_page_block menu_lines "诊断与策略" \
+					"○ 6. 🔁 批量续期          检查并续期现有证书" \
+					"○ 7. 📄 查看日志          查看 Nginx 和 acme 日志" \
+					"○ 8. 🛡️ Cloudflare 防御   管理防御状态和 IP 库" \
+					"○ 9. 💾 备份与恢复        备份、还原和配置重建" \
+					"○ 10. 🤖 Telegram 通知    配置机器人通知" \
+					"○ 11. 🧱 配置模板中心     管理 Block 和 Site 模板" \
+					"! 12. ⬆️ 升级 Nginx       从官方源升级"
 			fi
 			_render_menu "Nginx 管理" "${menu_lines[@]}"
 		else
-			printf '%b' "${PURPLE}【HTTP(S) 业务】${NC}\n"
-			printf '%b' " 1. 配置新域名反代 (支持泛域名免代理)\n"
-			printf '%b' " 2. HTTP 项目管理\n"
-			printf '%b' " 3. 仅申请证书 (S-UI/V2Ray 专用)\n"
+			printf '%b' "${PURPLE}【当前状态】${NC}\n"
+			printf '%b' " HTTP 项目: ${count:-0} 个\n"
+			printf '%b' " TCP 项目: ${tcp_count:-0} 个\n"
+			printf '%b' " 告警数量: ${warn_count:-0} 个\n"
 			printf '%b' "\n"
-			printf '%b' "${PURPLE}【TCP 负载均衡】${NC}\n"
-			printf '%b' " 4. 配置 TCP 反代/负载均衡\n"
-			printf '%b' " 5. 管理 TCP 反向代理\n"
+			printf '%b' "${PURPLE}【常用操作】${NC}\n"
+			printf '%b' " ● 1. 配置新网站\n"
+			printf '%b' " ○ 2. 管理网站\n"
+			printf '%b' " ○ 3. 仅申请证书\n"
+			printf '%b' " ○ 4. 配置 TCP 转发\n"
+			printf '%b' " ○ 5. 管理 TCP 转发\n"
 			printf '%b' "\n"
-			printf '%b' "${PURPLE}【运维监控与系统维护】${NC}\n"
-			printf '%b' " 6. 批量续期\n"
-			printf '%b' " 7. 查看日志 (Logs - Nginx/acme)\n"
-			printf '%b' " 8. ${BRIGHT_RED}${BOLD}Cloudflare 防御中心 (状态/更新/切换)${NC}\n"
-			printf '%b' " 9. 备份/还原与配置重建\n"
-			printf '%b' "10. 设置 Telegram 机器人通知\n"
-			printf '%b' "11. 配置模板中心 (Block追加/Site替换)\n"
-			printf '%b' "12. 升级 Nginx (官方源)\n"
+			printf '%b' "${PURPLE}【诊断与策略】${NC}\n"
+			printf '%b' " ○ 6. 批量续期\n"
+			printf '%b' " ○ 7. 查看日志\n"
+			printf '%b' " ○ 8. Cloudflare 防御\n"
+			printf '%b' " ○ 9. 备份与恢复\n"
+			printf '%b' " ○ 10. Telegram 通知\n"
+			printf '%b' " ○ 11. 配置模板中心\n"
+			printf '%b' " ! 12. 升级 Nginx\n"
 			printf '%b' "\n"
 		fi
 		local c
