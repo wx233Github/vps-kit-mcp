@@ -1236,7 +1236,15 @@ ui_render_main_menu_hero() {
 		return 0
 	fi
 
-	if [ "$theme" = "compact" ]; then
+	local cols=0
+	if [ -t 1 ]; then
+		cols=$(tput cols 2>/dev/null || echo 0)
+	fi
+	if [ "$cols" -gt 0 ] && [ "$cols" -lt 74 ]; then
+		theme="narrow"
+	fi
+
+	if [ "$theme" = "compact" ] || [ "$theme" = "narrow" ]; then
 		local -a compact_lines=()
 		ui_append_main_menu_context compact_lines "$subtitle" "$meta_line" "$repo_line"
 		if [ ${#compact_lines[@]} -gt 0 ] && [ ${#lines[@]} -gt 0 ]; then
