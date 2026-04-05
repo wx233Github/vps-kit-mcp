@@ -416,11 +416,11 @@ ui_force_retro_hero_enabled() {
 
 ui_output_target() {
 	if [ -t 1 ]; then
-		printf '%s' "/dev/stdout"
+		printf '%s' "/proc/self/fd/1"
 	elif _tty_available; then
 		printf '%s' "${JB_TTY_PATH:-/dev/tty}"
 	else
-		printf '%s' "/dev/stdout"
+		printf '%s' "/proc/self/fd/1"
 	fi
 }
 
@@ -456,13 +456,27 @@ ui_pad_right() {
 
 ui_print_blank_line() {
 	local out="${1:-$(ui_output_target)}"
-	printf '\n' >"$out"
+	case "$out" in
+	/proc/self/fd/1 | /dev/stdout | /dev/fd/1)
+		printf '\n'
+		;;
+	*)
+		printf '\n' >"$out"
+		;;
+	esac
 }
 
 ui_print_line() {
 	local out="$1"
 	shift
-	printf '%b\n' "$*" >"$out"
+	case "$out" in
+	/proc/self/fd/1 | /dev/stdout | /dev/fd/1)
+		printf '%b\n' "$*"
+		;;
+	*)
+		printf '%b\n' "$*" >"$out"
+		;;
+	esac
 }
 
 ui_menu_footer_text() {
