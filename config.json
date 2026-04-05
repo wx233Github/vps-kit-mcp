@@ -38,12 +38,12 @@
       "title": "VPS-Kit MCP",
       "comment_ui": "首页文案与状态标签可覆盖默认 registry 词表",
       "ui": {
-        "subtitle": "One-click VPS operations toolkit for Docker, Nginx, TLS and MCP",
+        "subtitle": "管理 Docker、Nginx、证书、常用工具和 MCP",
         "repo": "Repo: https://github.com/wx233Github/vps-kit-mcp",
         "meta_labels": {
-          "version": "Version",
-          "theme": "Theme",
-          "update": "Update"
+          "version": "版本",
+          "theme": "主题",
+          "update": "更新"
         },
         "status_labels": {
           "docker.sh": "Docker",
@@ -57,20 +57,20 @@
           "set_theme_minimal": "当前"
         },
         "groups": {
-          "core": "Core Modules",
-          "tools": "Tools",
-          "system": "System"
+          "core": "核心功能",
+          "tools": "工具",
+          "system": "系统"
         }
       },
       "items": [
         { "type": "item", "name": "Docker", "icon": "🐳", "action": "docker.sh", "group": "core", "desc": "安装 Docker / Compose 与运行环境管理" },
         { "type": "item", "name": "Nginx", "icon": "🌐", "action": "nginx.sh", "group": "core", "desc": "反代、TLS、TCP 网关与模板中心" },
-        { "type": "item", "name": "证书申请", "icon": "📜", "action": "cert.sh", "group": "core", "desc": "证书签发、续期与基础体检" },
+        { "type": "item", "name": "证书管理", "icon": "📜", "action": "cert.sh", "group": "core", "desc": "证书签发、续期与基础体检" },
         { "type": "submenu", "name": "常用工具", "icon": "🛠️", "action": "TOOLS_MENU", "group": "tools", "desc": "Watchtower 与 BBR ACE 工具集" },
         { "type": "submenu", "name": "MCP", "icon": "🧩", "action": "MCP_MENU", "group": "tools", "desc": "PTY 模块与 MCP 辅助工具" },
-        { "type": "submenu", "name": "Theme Center", "icon": "🎛️", "action": "THEME_MENU", "group": "system", "desc": "切换终端主题与查看当前界面风格" },
-        { "type": "func", "name": "更新切换", "icon": "🔁", "action": "toggle_startup_update_mode", "group": "system", "desc": "切换启动检查更新模式" },
-        { "type": "func", "name": "强制重置", "icon": "⚙️", "action": "confirm_and_force_update", "group": "system", "desc": "强制拉取最新脚本并刷新安装" },
+        { "type": "submenu", "name": "界面主题", "icon": "🎛️", "action": "THEME_MENU", "group": "system", "desc": "切换终端主题与查看当前界面风格" },
+        { "type": "func", "name": "启动更新方式", "icon": "🔁", "action": "toggle_startup_update_mode", "group": "system", "desc": "切换启动检查更新模式" },
+        { "type": "func", "name": "重新拉取脚本", "icon": "⚙️", "action": "confirm_and_force_update", "group": "system", "desc": "强制拉取最新脚本并刷新安装" },
         { "type": "func", "name": "卸载脚本", "icon": "🗑️", "action": "uninstall_script", "group": "system", "desc": "移除安装目录与命令链接" }
       ]
     },

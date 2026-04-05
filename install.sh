@@ -1871,11 +1871,13 @@ format_menu_entry_line() {
 	local desc="$4"
 	local status_text="$5"
 	local desc_padding="${6:-8}"
+	local marker="${7:-○}"
+	local marker_color="${8:-${NC}}"
 	local line
 	if [ -n "$icon" ]; then
-		line=$(printf '%s. %s %s' "$index" "$icon" "$name")
+		line=$(printf '%b %s. %s %s' "${marker_color}${marker}${NC}" "$index" "$icon" "$name")
 	else
-		line=$(printf '%s. %s' "$index" "$name")
+		line=$(printf '%b %s. %s' "${marker_color}${marker}${NC}" "$index" "$name")
 	fi
 	if [ -n "$desc" ]; then
 		line+=$(printf '%*s- %s' "$desc_padding" '' "$desc")
@@ -1886,12 +1888,34 @@ format_menu_entry_line() {
 	printf '%s' "$line"
 }
 
+menu_entry_marker() {
+	local label="${1:-}"
+	case "$label" in
+	Docker | "安装 Docker" | "服务控制") printf '%s' '●' ;;
+	"重新拉取脚本" | "卸载脚本" | "卸载 Docker" | "重新安装 Docker") printf '%s' '!' ;;
+	*) printf '%s' '○' ;;
+	esac
+}
+
+menu_entry_marker_color() {
+	local marker="${1:-○}"
+	case "$marker" in
+	'●') printf '%b' "$GREEN" ;;
+	'!') printf '%b' "$YELLOW" ;;
+	*) printf '%b' "$NC" ;;
+	esac
+}
+
 format_main_menu_primary_line() {
-	format_menu_entry_line "$1" "$2" "$3" "$4" "$5" 8
+	local marker
+	marker=$(menu_entry_marker "$2")
+	format_menu_entry_line "$1" "$2" "$3" "" "$5" 0 "$marker" "$(menu_entry_marker_color "$marker")"
 }
 
 format_main_menu_func_line() {
-	format_menu_entry_line "$1" "$2" "$3" "$4" "$5" 6
+	local marker
+	marker=$(menu_entry_marker "$2")
+	format_menu_entry_line "$1" "$2" "$3" "" "$5" 0 "$marker" "$(menu_entry_marker_color "$marker")"
 }
 
 theme_action_target() {
@@ -1911,9 +1935,15 @@ menu_status_value_for_action() {
 	nginx.sh) _get_nginx_status ;;
 	tools/Watchtower.sh) _get_watchtower_status ;;
 	THEME_MENU | set_theme_retro_launcher | set_theme_classic | set_theme_compact | set_theme_minimal)
-		ui_theme_label "$(get_ui_theme)"
+		printf '%s' "当前"
 		;;
-	toggle_startup_update_mode) startup_update_mode_label "$(get_startup_update_mode)" ;;
+	toggle_startup_update_mode)
+		case "$(get_startup_update_mode)" in
+		background) printf '%s' "后台" ;;
+		legacy) printf '%s' "前台" ;;
+		*) startup_update_mode_label "$(get_startup_update_mode)" ;;
+		esac
+		;;
 	*) printf '%s' "" ;;
 	esac
 }
@@ -1979,7 +2009,7 @@ main_menu_meta_line() {
 	printf '%s: %s   |   %s: %s   |   %s: %s' \
 		"$version_label" "$SCRIPT_VERSION" \
 		"$theme_label" "$(ui_theme_label "$(get_ui_theme)")" \
-		"$update_label" "$(get_startup_update_mode)"
+		"$update_label" "$(menu_status_value_for_action toggle_startup_update_mode)"
 }
 
 main_menu_group_heading() {
@@ -2003,11 +2033,15 @@ secondary_menu_hint_line() {
 }
 
 format_secondary_menu_primary_line() {
-	format_menu_entry_line "$1" "$2" "$3" "$4" "$5" 8
+	local marker
+	marker=$(menu_entry_marker "$2")
+	format_menu_entry_line "$1" "$2" "$3" "$4" "$5" 4 "$marker" "$(menu_entry_marker_color "$marker")"
 }
 
 format_secondary_menu_func_line() {
-	format_menu_entry_line "$1" "$2" "$3" "$4" "$5" 6
+	local marker
+	marker=$(menu_entry_marker "$2")
+	format_menu_entry_line "$1" "$2" "$3" "$4" "$5" 4 "$marker" "$(menu_entry_marker_color "$marker")"
 }
 
 format_secondary_menu_classic_primary_line() {

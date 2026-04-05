@@ -469,10 +469,10 @@ ui_menu_footer_text() {
 	local context="${1:-submenu}"
 	case "$context" in
 	main)
-		printf '%s' 'Type an option and press Enter. Press Enter on empty input to exit.'
+		printf '%s' '请输入编号，直接回车退出。'
 		;;
 	*)
-		printf '%s' 'Enter a choice. Empty input goes back.'
+		printf '%s' '请输入编号，直接回车返回。'
 		;;
 	esac
 }
@@ -504,78 +504,78 @@ ui_theme_label() {
 
 menu_vocab_phrase() {
 	case "${1:-}" in
-	label_version) printf '%s' "Version" ;;
-	label_theme) printf '%s' "Theme" ;;
-	label_update) printf '%s' "Update" ;;
+	label_version) printf '%s' "版本" ;;
+	label_theme) printf '%s' "主题" ;;
+	label_update) printf '%s' "更新" ;;
 	label_docker) printf '%s' "Docker" ;;
 	label_nginx) printf '%s' "Nginx" ;;
 	label_watchtower) printf '%s' "Watchtower" ;;
 	label_current_cn) printf '%s' "当前" ;;
-	label_mode_cn) printf '%s' "模式" ;;
-	marker_current) printf '%s' "Current" ;;
-	headline_main_subtitle) printf '%s' "One-click VPS operations toolkit for Docker, Nginx, TLS and MCP" ;;
-	headline_tools_subtitle) printf '%s' "Operational add-ons for container updates and network tuning" ;;
-	headline_mcp_subtitle) printf '%s' "Runtime helpers for PTY sessions and MCP-side tooling" ;;
-	headline_theme_subtitle) printf '%s' "Switch visual profiles and keep the launcher consistent" ;;
-	headline_docker_subtitle) printf '%s' "Provision Docker engine, manage Compose runtime and recover service lifecycle safely" ;;
-	headline_cert_subtitle) printf '%s' "Issue TLS certificates, inspect renewal health and keep acme workflows reliable" ;;
-	headline_watchtower_subtitle) printf '%s' "Manage container auto-updates, notifications and runtime recovery workflows" ;;
-	headline_bbr_subtitle) printf '%s' "Tune congestion control, inspect kernel state and manage network recovery workflows" ;;
-	headline_bbr_kernel_subtitle) printf '%s' "Kernel lifecycle updates, rollback paths and cleanup operations" ;;
-	headline_nginx_subtitle) printf '%s' "Coordinate edge routing, certificate ops and traffic defense for web entrypoints" ;;
-	headline_generic_subtitle) printf '%s' "Focused tools for this workspace section" ;;
-	hint_tools) printf '%s' "Pick a lane to manage updates, watchdogs or kernel acceleration." ;;
-	hint_mcp) printf '%s' "Launch supporting runtimes and diagnostics for MCP workflows." ;;
-	hint_theme) printf '%s' "Choose the profile that best matches your terminal and workflow." ;;
-	hint_docker) printf '%s' "Review runtime health, adjust mirrors, reclaim resources and repair service state." ;;
-	hint_docker_bootstrap) printf '%s' "Bootstrap Docker first, then return here for runtime operations and recovery lanes." ;;
-	hint_docker_install) printf '%s' "Choose whether to rebuild the runtime stack or retire the current installation." ;;
-	hint_cert) printf '%s' "Choose issuance, renewal diagnostics or policy controls for your acme.sh workflow." ;;
-	hint_cert_maintenance) printf '%s' "Adjust renewal policy, verify cron health and keep acme.sh updated." ;;
-	hint_watchtower) printf '%s' "Review service health, adjust notifications and inspect live container activity." ;;
-	hint_bbr) printf '%s' "Pick a profile, adjust IP preference or enter maintenance and recovery lanes." ;;
-	hint_bbr_kernel) printf '%s' "Use this lane for kernel upgrades, reverting XanMod or pruning old images." ;;
-	hint_nginx) printf '%s' "Configure sites, TCP forwarding, defense posture and lifecycle operations." ;;
-	hint_generic) printf '%s' "Pick an option to continue." ;;
+	label_mode_cn) printf '%s' "方式" ;;
+	marker_current) printf '%s' "当前" ;;
+	headline_main_subtitle) printf '%s' "管理 Docker、Nginx、证书、常用工具和 MCP" ;;
+	headline_tools_subtitle) printf '%s' "管理自动更新和网络调优工具" ;;
+	headline_mcp_subtitle) printf '%s' "管理 PTY 会话和 MCP 相关工具" ;;
+	headline_theme_subtitle) printf '%s' "切换界面样式，选择适合当前终端的显示方式" ;;
+	headline_docker_subtitle) printf '%s' "管理 Docker 运行环境、服务状态和清理操作" ;;
+	headline_cert_subtitle) printf '%s' "申请证书、续期证书并检查当前状态" ;;
+	headline_watchtower_subtitle) printf '%s' "管理容器自动更新、通知和运行状态" ;;
+	headline_bbr_subtitle) printf '%s' "管理网络调优、拥塞控制和内核相关设置" ;;
+	headline_bbr_kernel_subtitle) printf '%s' "处理内核升级、回退和清理操作" ;;
+	headline_nginx_subtitle) printf '%s' "管理网站代理、证书、TCP 转发和运行状态" ;;
+	headline_generic_subtitle) printf '%s' "管理当前模块的常用操作和状态" ;;
+	hint_tools) printf '%s' "请选择要管理的工具。" ;;
+	hint_mcp) printf '%s' "请选择要管理的 PTY 或 MCP 工具。" ;;
+	hint_theme) printf '%s' "请选择适合当前终端的界面主题。" ;;
+	hint_docker) printf '%s' "先看当前状态，再选择需要执行的操作。" ;;
+	hint_docker_bootstrap) printf '%s' "当前尚未安装 Docker，请先完成安装。" ;;
+	hint_docker_install) printf '%s' "请选择重新安装或卸载 Docker。" ;;
+	hint_cert) printf '%s' "请选择证书申请、续期或诊断操作。" ;;
+	hint_cert_maintenance) printf '%s' "请选择续期、策略或诊断相关操作。" ;;
+	hint_watchtower) printf '%s' "请选择自动更新、通知或诊断相关操作。" ;;
+	hint_bbr) printf '%s' "请选择网络调优、内核管理或恢复操作。" ;;
+	hint_bbr_kernel) printf '%s' "请选择内核升级、回退或清理操作。" ;;
+	hint_nginx) printf '%s' "请选择网站、证书、TCP 转发或修复操作。" ;;
+	hint_generic) printf '%s' "请选择要执行的操作。" ;;
 	repo_default) printf '%s' "Repo: https://github.com/wx233Github/vps-kit-mcp" ;;
-	heading_core_modules) printf '%s' "Core Modules" ;;
-	heading_tools) printf '%s' "Tools" ;;
-	heading_system) printf '%s' "System" ;;
-	heading_automation) printf '%s' "Automation" ;;
-	heading_networking) printf '%s' "Networking" ;;
-	heading_runtime) printf '%s' "Runtime" ;;
-	heading_tooling) printf '%s' "Tooling" ;;
-	heading_theme_profiles) printf '%s' "Theme Profiles" ;;
-	heading_general) printf '%s' "General" ;;
-	heading_runtime_overview) printf '%s' "Runtime Overview" ;;
-	heading_action_center) printf '%s' "Action Center" ;;
-	heading_recovery_lifecycle) printf '%s' "Recovery & Lifecycle" ;;
-	heading_bootstrap_overview) printf '%s' "Bootstrap Overview" ;;
-	heading_launch_pad) printf '%s' "Launch Pad" ;;
-	heading_certificate_overview) printf '%s' "Certificate Overview" ;;
-	heading_issue_renew) printf '%s' "Issue & Renew" ;;
-	heading_policy_control) printf '%s' "Policy Control" ;;
-	heading_diagnostics) printf '%s' "Diagnostics" ;;
-	heading_service_overview) printf '%s' "Service Overview" ;;
-	heading_profile_control) printf '%s' "Profile Control" ;;
-	heading_http_workloads) printf '%s' "HTTP(S) Workloads" ;;
-	heading_transport_routing) printf '%s' "Transport Routing" ;;
-	heading_operations_policy) printf '%s' "Operations & Policy" ;;
-	focus_key_modules) printf '%s' "modules" ;;
-	focus_key_runtime) printf '%s' "runtime" ;;
-	focus_key_active) printf '%s' "active" ;;
-	focus_key_general) printf '%s' "general" ;;
-	focus_key_service) printf '%s' "service" ;;
-	focus_key_plane) printf '%s' "plane" ;;
-	focus_key_scope) printf '%s' "scope" ;;
-	focus_key_kernel) printf '%s' "kernel" ;;
+	heading_core_modules) printf '%s' "核心功能" ;;
+	heading_tools) printf '%s' "工具" ;;
+	heading_system) printf '%s' "系统" ;;
+	heading_automation) printf '%s' "自动化" ;;
+	heading_networking) printf '%s' "网络" ;;
+	heading_runtime) printf '%s' "运行状态" ;;
+	heading_tooling) printf '%s' "工具" ;;
+	heading_theme_profiles) printf '%s' "主题方案" ;;
+	heading_general) printf '%s' "通用" ;;
+	heading_runtime_overview) printf '%s' "当前状态" ;;
+	heading_action_center) printf '%s' "常用操作" ;;
+	heading_recovery_lifecycle) printf '%s' "重装与卸载" ;;
+	heading_bootstrap_overview) printf '%s' "当前状态" ;;
+	heading_launch_pad) printf '%s' "开始安装" ;;
+	heading_certificate_overview) printf '%s' "证书状态" ;;
+	heading_issue_renew) printf '%s' "申请与续期" ;;
+	heading_policy_control) printf '%s' "策略设置" ;;
+	heading_diagnostics) printf '%s' "诊断排查" ;;
+	heading_service_overview) printf '%s' "服务状态" ;;
+	heading_profile_control) printf '%s' "模式设置" ;;
+	heading_http_workloads) printf '%s' "网站与代理" ;;
+	heading_transport_routing) printf '%s' "TCP 转发" ;;
+	heading_operations_policy) printf '%s' "运行与策略" ;;
+	focus_key_modules) printf '%s' "模块数" ;;
+	focus_key_runtime) printf '%s' "状态" ;;
+	focus_key_active) printf '%s' "当前" ;;
+	focus_key_general) printf '%s' "概览" ;;
+	focus_key_service) printf '%s' "服务" ;;
+	focus_key_plane) printf '%s' "入口" ;;
+	focus_key_scope) printf '%s' "范围" ;;
+	focus_key_kernel) printf '%s' "内核" ;;
 	focus_value_tools) printf '%s' "2" ;;
 	focus_value_mcp) printf '%s' "PTY" ;;
-	focus_value_lifecycle) printf '%s' "Lifecycle" ;;
-	focus_value_renewal) printf '%s' "Renewal" ;;
-	focus_value_kernel_scope) printf '%s' "Kernel" ;;
-	focus_value_edge_gateway) printf '%s' "Edge Gateway" ;;
-	focus_source_current_theme) printf '%s' "current_theme" ;;
+	focus_value_lifecycle) printf '%s' "重装与卸载" ;;
+	focus_value_renewal) printf '%s' "续期" ;;
+	focus_value_kernel_scope) printf '%s' "内核" ;;
+	focus_value_edge_gateway) printf '%s' "网站入口" ;;
+	focus_source_current_theme) printf '%s' "当前主题" ;;
 	*) printf '%s' "" ;;
 	esac
 }

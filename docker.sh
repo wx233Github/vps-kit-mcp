@@ -759,10 +759,21 @@ docker_menu_line() {
 	local index="$1"
 	local name="$2"
 	local desc="${3:-}"
+	local icon=""
+	local marker="○"
+	case "$name" in
+	"服务控制") marker="●"; icon="🔧" ;;
+	"安装 Docker") marker="●"; icon="🐳" ;;
+	"环境配置") icon="⚙️" ;;
+	"清理空间") icon="🧹" ;;
+	"重新安装 Docker") marker="!"; icon="🐳" ;;
+	"卸载 Docker") marker="!"; icon="🗑️" ;;
+	"修复服务状态") icon="🩺" ;;
+	esac
 	if [ -n "$desc" ]; then
-		printf '%s. %s        - %s' "$index" "$name" "$desc"
+		printf '%s %s. %s %s    %s' "$marker" "$index" "$icon" "$name" "$desc"
 	else
-		printf '%s. %s' "$index" "$name"
+		printf '%s %s. %s %s' "$marker" "$index" "$icon" "$name"
 	fi
 }
 
@@ -771,8 +782,8 @@ render_manage_installation_menu() {
 	theme="$(docker_menu_theme)"
 	if [ "$theme" = "classic" ]; then
 		local -a menu_items=(
-			"1. 重新安装 Docker"
-			"2. 卸载 Docker"
+			"! 1. 重新安装 Docker    先卸载后重建环境"
+			"! 2. 卸载 Docker       删除当前环境"
 		)
 		_render_menu "安装管理" "${menu_items[@]}"
 		return 0
@@ -781,22 +792,22 @@ render_manage_installation_menu() {
 	local -a menu_items=()
 	if declare -f ui_append_schema_or_fallback_panel_header >/dev/null 2>&1; then
 		ui_append_schema_or_fallback_panel_header menu_items "DOCKER_INSTALL_MENU" "" "scope" \
-			"Provision Docker engine, manage Compose runtime and recover service lifecycle safely" \
-			"Choose whether to rebuild the runtime stack or retire the current installation."
+			"安装、重建或卸载 Docker 运行环境" \
+			"请选择重新安装或卸载 Docker。"
 	else
 		ui_append_manual_panel_fallback menu_items \
-			"Provision Docker engine, manage Compose runtime and recover service lifecycle safely" \
-			"$(ui_meta_focus_fallback_line "scope" "Lifecycle")" \
-			"Choose whether to rebuild the runtime stack or retire the current installation."
+			"安装、重建或卸载 Docker 运行环境" \
+			"$(ui_meta_focus_fallback_line "范围" "重装与卸载")" \
+			"请选择重新安装或卸载 Docker。"
 	fi
 	if declare -f ui_append_schema_or_fallback_page_block >/dev/null 2>&1; then
-		ui_append_schema_or_fallback_page_block menu_items "DOCKER_INSTALL_MENU" "recovery_lifecycle" "Recovery & Lifecycle" \
-			"$(docker_menu_line "1" "重新安装 Docker" "先卸载再重建运行时")" \
-			"$(docker_menu_line "2" "卸载 Docker" "移除 engine、compose 与服务入口")"
+		ui_append_schema_or_fallback_page_block menu_items "DOCKER_INSTALL_MENU" "recovery_lifecycle" "重装与卸载" \
+			"$(docker_menu_line "1" "重新安装 Docker" "先卸载后重建环境")" \
+			"$(docker_menu_line "2" "卸载 Docker" "删除当前环境")"
 	else
-		ui_append_manual_page_block menu_items "Recovery & Lifecycle" \
-			"$(docker_menu_line "1" "重新安装 Docker" "先卸载再重建运行时")" \
-			"$(docker_menu_line "2" "卸载 Docker" "移除 engine、compose 与服务入口")"
+		ui_append_manual_page_block menu_items "重装与卸载" \
+			"$(docker_menu_line "1" "重新安装 Docker" "先卸载后重建环境")" \
+			"$(docker_menu_line "2" "卸载 Docker" "删除当前环境")"
 	fi
 	_render_menu "安装管理" "${menu_items[@]}"
 }
@@ -811,108 +822,118 @@ render_docker_main_menu() {
 		local -a menu_items=()
 		if [ "$DOCKER_INSTALLED" = "true" ]; then
 			menu_items=(
-				"ℹ️ ${GREEN}Docker 已安装${NC}"
-				"服务状态: ${status_color}${DOCKER_SERVICE_STATUS}${NC}"
+				"当前状态"
+				"- ${GREEN}已安装${NC}"
+				"- 服务 ${status_color}${DOCKER_SERVICE_STATUS}${NC}"
 				"Docker 版本: ${DOCKER_VERSION}"
 				"Compose 版本: ${COMPOSE_VERSION}"
 				""
-				"1. 服务管理"
-				"2. 配置镜像/用户组"
-				"3. 系统清理 (Prune)"
-				"4. 重新安装 Docker"
-				"5. 卸载 Docker"
-				"6. 快速修复服务状态"
+				"常用操作"
+				"● 1. 🔧 服务控制      启动、停止、重启服务"
+				"○ 2. ⚙️ 环境配置      配置镜像和用户组"
+				"○ 3. 🧹 清理空间      清理镜像和缓存"
+				""
+				"进阶操作"
+				"○ 4. 🩺 修复服务状态   检查并重新拉起服务"
+				"! 5. 🐳 重新安装 Docker  重新建立运行环境"
+				""
+				"危险操作"
+				"! 6. 🗑️ 卸载 Docker   删除当前环境"
 			)
 		else
 			menu_items=(
-				"ℹ️ ${YELLOW}检测到 Docker 未安装${NC}"
+				"当前状态"
+				"- ${YELLOW}未安装${NC}"
 				""
-				"1. 安装 Docker 和 Compose"
+				"建议操作"
+				"● 1. 安装 Docker    初始化运行环境"
 			)
 		fi
-		_render_menu "Docker & Docker Compose 管理" "${menu_items[@]}"
+		_render_menu "Docker" "${menu_items[@]}"
 		return 0
 	fi
 
 	local status_color="$GREEN"
-	local runtime_status="Ready"
+	local runtime_status="运行中"
 	if [ "$DOCKER_SERVICE_STATUS" != "active" ]; then
 		status_color="$YELLOW"
 		runtime_status="$DOCKER_SERVICE_STATUS"
 	fi
 	if [ "$DOCKER_INSTALLED" != "true" ]; then
 		status_color="$YELLOW"
-		runtime_status="Not Installed"
+		runtime_status="未安装"
 	fi
 
 	local -a menu_items=()
 	if [ "$DOCKER_INSTALLED" = "true" ]; then
 		if declare -f ui_append_schema_or_fallback_panel_header >/dev/null 2>&1; then
 			ui_append_schema_or_fallback_panel_header menu_items "DOCKER_MENU" "${runtime_status}" "runtime" \
-				"Provision Docker engine, manage Compose runtime and recover service lifecycle safely" \
-				"Review runtime health, adjust mirrors, reclaim resources and repair service state."
+				"管理 Docker 运行环境、服务状态和清理操作" \
+				"先看当前状态，再选择需要执行的操作。"
 		else
 			ui_append_manual_panel_fallback menu_items \
-				"Provision Docker engine, manage Compose runtime and recover service lifecycle safely" \
-				"$(ui_meta_focus_fallback_line "runtime" "${runtime_status}")" \
-				"Review runtime health, adjust mirrors, reclaim resources and repair service state."
+				"管理 Docker 运行环境、服务状态和清理操作" \
+				"$(ui_meta_focus_fallback_line "状态" "${runtime_status}")" \
+				"先看当前状态，再选择需要执行的操作。"
 		fi
 		if declare -f ui_append_schema_or_fallback_page_block >/dev/null 2>&1; then
-			ui_append_schema_or_fallback_page_block menu_items "DOCKER_MENU" "runtime_overview" "Runtime Overview" \
-				"Engine: ${GREEN}Installed${NC}" \
-				"Service: ${status_color}${runtime_status}${NC}" \
+			ui_append_schema_or_fallback_page_block menu_items "DOCKER_MENU" "runtime_overview" "当前状态" \
+				"Docker: ${GREEN}已安装${NC}" \
+				"服务: ${status_color}${runtime_status}${NC}" \
 				"Docker: ${DOCKER_VERSION:-unknown}" \
 				"Compose: ${COMPOSE_VERSION:-unknown}"
-			ui_append_schema_or_fallback_page_block menu_items "DOCKER_MENU" "action_center" "Action Center" \
-				"$(docker_menu_line "1" "服务管理" "启停、重启与状态巡检")" \
-				"$(docker_menu_line "2" "配置镜像 / 用户组" "加速拉取并补齐权限")" \
-				"$(docker_menu_line "3" "系统清理" "清理镜像、缓存与未使用资源")"
-			ui_append_schema_or_fallback_page_block menu_items "DOCKER_MENU" "recovery_lifecycle" "Recovery & Lifecycle" \
-				"$(docker_menu_line "4" "重新安装 Docker" "重建运行时与 Compose 组件")" \
-				"$(docker_menu_line "5" "卸载 Docker" "移除当前引擎与数据入口")" \
-				"$(docker_menu_line "6" "快速修复服务状态" "重载 systemd 并拉起服务")"
+			ui_append_schema_or_fallback_page_block menu_items "DOCKER_MENU" "action_center" "常用操作" \
+				"$(docker_menu_line "1" "服务控制" "启动、停止、重启服务")" \
+				"$(docker_menu_line "2" "环境配置" "配置镜像和用户组")" \
+				"$(docker_menu_line "3" "清理空间" "清理镜像和缓存")"
+			ui_append_schema_or_fallback_page_block menu_items "DOCKER_MENU" "recovery_lifecycle" "进阶操作" \
+				"$(docker_menu_line "4" "修复服务状态" "检查并重新拉起服务")" \
+				"$(docker_menu_line "5" "重新安装 Docker" "重新建立运行环境")"
+			ui_append_manual_page_block menu_items "危险操作" \
+				"$(docker_menu_line "6" "卸载 Docker" "删除当前环境")"
 		else
-			ui_append_manual_page_block menu_items "Runtime Overview" \
-				"Engine: ${GREEN}Installed${NC}" \
-				"Service: ${status_color}${runtime_status}${NC}" \
+			ui_append_manual_page_block menu_items "当前状态" \
+				"Docker: ${GREEN}已安装${NC}" \
+				"服务: ${status_color}${runtime_status}${NC}" \
 				"Docker: ${DOCKER_VERSION:-unknown}" \
 				"Compose: ${COMPOSE_VERSION:-unknown}"
-			ui_append_manual_page_block menu_items "Action Center" \
-				"$(docker_menu_line "1" "服务管理" "启停、重启与状态巡检")" \
-				"$(docker_menu_line "2" "配置镜像 / 用户组" "加速拉取并补齐权限")" \
-				"$(docker_menu_line "3" "系统清理" "清理镜像、缓存与未使用资源")"
-			ui_append_manual_page_block menu_items "Recovery & Lifecycle" \
-				"$(docker_menu_line "4" "重新安装 Docker" "重建运行时与 Compose 组件")" \
-				"$(docker_menu_line "5" "卸载 Docker" "移除当前引擎与数据入口")" \
-				"$(docker_menu_line "6" "快速修复服务状态" "重载 systemd 并拉起服务")"
+			ui_append_manual_page_block menu_items "常用操作" \
+				"$(docker_menu_line "1" "服务控制" "启动、停止、重启服务")" \
+				"$(docker_menu_line "2" "环境配置" "配置镜像和用户组")" \
+				"$(docker_menu_line "3" "清理空间" "清理镜像和缓存")"
+			ui_append_manual_page_block menu_items "进阶操作" \
+				"$(docker_menu_line "4" "修复服务状态" "检查并重新拉起服务")" \
+				"$(docker_menu_line "5" "重新安装 Docker" "重新建立运行环境")"
+			ui_append_manual_page_block menu_items "危险操作" \
+				"$(docker_menu_line "6" "卸载 Docker" "删除当前环境")"
 		fi
 	else
 		if declare -f ui_append_schema_or_fallback_panel_header >/dev/null 2>&1; then
 			ui_append_schema_or_fallback_panel_header menu_items "DOCKER_BOOTSTRAP_MENU" "${runtime_status}" "runtime" \
-				"Provision Docker engine, manage Compose runtime and recover service lifecycle safely" \
-				"Bootstrap Docker first, then return here for runtime operations and recovery lanes."
+				"当前尚未安装 Docker" \
+				"请先完成安装，再继续使用其他功能。"
 		else
 			ui_append_manual_panel_fallback menu_items \
-				"Provision Docker engine, manage Compose runtime and recover service lifecycle safely" \
-				"$(ui_meta_focus_fallback_line "runtime" "${runtime_status}")" \
-				"Bootstrap Docker first, then return here for runtime operations and recovery lanes."
+				"当前尚未安装 Docker" \
+				"$(ui_meta_focus_fallback_line "状态" "${runtime_status}")" \
+				"请先完成安装，再继续使用其他功能。"
 		fi
 		if declare -f ui_append_schema_or_fallback_page_block >/dev/null 2>&1; then
-			ui_append_schema_or_fallback_page_block menu_items "DOCKER_BOOTSTRAP_MENU" "bootstrap_overview" "Bootstrap Overview" \
-				"Engine: ${YELLOW}Not Installed${NC}" \
-				"Recommendation: 先初始化 engine / compose / CLI 环境"
-			ui_append_schema_or_fallback_page_block menu_items "DOCKER_BOOTSTRAP_MENU" "launch_pad" "Launch Pad" \
-				"$(docker_menu_line "1" "安装 Docker 和 Compose" "初始化容器运行时与插件")"
+			ui_append_schema_or_fallback_page_block menu_items "DOCKER_BOOTSTRAP_MENU" "bootstrap_overview" "当前状态" \
+				"Docker: ${YELLOW}未安装${NC}" \
+				"建议: 先安装 Docker 和 Compose"
+			ui_append_schema_or_fallback_page_block menu_items "DOCKER_BOOTSTRAP_MENU" "launch_pad" "开始安装" \
+				"$(docker_menu_line "1" "安装 Docker" "初始化运行环境")"
 		else
-			ui_append_manual_page_block menu_items "Bootstrap Overview" \
-				"Engine: ${YELLOW}Not Installed${NC}" \
-				"Recommendation: 先初始化 engine / compose / CLI 环境"
-			ui_append_manual_page_block menu_items "Launch Pad" \
-				"$(docker_menu_line "1" "安装 Docker 和 Compose" "初始化容器运行时与插件")"
+			ui_append_manual_page_block menu_items "当前状态" \
+				"Docker: ${YELLOW}未安装${NC}" \
+				"建议: 先安装 Docker 和 Compose"
+			ui_append_manual_page_block menu_items "开始安装" \
+				"$(docker_menu_line "1" "安装 Docker" "初始化运行环境")"
 		fi
 	fi
 
-	_render_menu "Docker & Docker Compose 管理" "${menu_items[@]}"
+	_render_menu "Docker" "${menu_items[@]}"
 }
 
 _manage_installation() {
@@ -925,7 +946,7 @@ _manage_installation() {
 
 		case "$choice" in
 		1)
-			if confirm_action "确定要重新安装 Docker 吗? 这将先执行卸载流程。"; then
+			if confirm_action "将执行：重新安装 Docker；影响：会先卸载当前环境，再重新安装。是否继续"; then
 				if uninstall_docker; then
 					install_docker
 				fi
@@ -983,8 +1004,8 @@ main_menu() {
 			;;
 		prune) docker_prune_system ;;
 		reinstall)
-			log_warn "影响摘要: 将先卸载后重装 Docker，可能中断容器服务。"
-			if confirm_action "确定要重新安装 Docker 吗? 这将先执行卸载流程。"; then
+			log_warn "将执行：重新安装 Docker；影响：会先卸载当前环境，容器服务会中断。"
+			if confirm_action "是否继续重新安装 Docker"; then
 				if uninstall_docker; then
 					install_docker
 				fi
@@ -1005,8 +1026,7 @@ main() {
 	trap 'printf "\n操作被中断。\n" >&2; exit 10' INT
 	self_elevate_or_die "$@"
 	parse_dry_run_args "$@"
-	log_info "您选择了 [Docker & Compose 管理]"
-	log_info "欢迎使用 Docker 模块 ${SCRIPT_VERSION}"
+	log_info "进入 Docker 模块"
 	init_runtime
 	pre_check_dependencies
 	main_menu "${RUN_ARGS[@]}"
