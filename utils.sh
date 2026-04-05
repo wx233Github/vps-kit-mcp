@@ -23,6 +23,7 @@ DEFAULT_LOG_LEVEL="INFO"
 DEFAULT_ENABLE_AUTO_UPDATE="true"
 DEFAULT_NONINTERACTIVE="false"
 DEFAULT_UI_THEME="retro-launcher"
+DEFAULT_FORCE_RETRO_HERO="false"
 # shellcheck disable=SC2034
 DEFAULT_TTY_PATH="/dev/tty"
 # shellcheck disable=SC2034
@@ -404,6 +405,13 @@ get_ui_theme() {
 		theme="${DEFAULT_UI_THEME}"
 	fi
 	printf '%s' "$theme"
+}
+
+ui_force_retro_hero_enabled() {
+	case "${JB_FORCE_RETRO_HERO:-${UI_FORCE_RETRO_HERO:-${DEFAULT_FORCE_RETRO_HERO}}}" in
+	true | TRUE | 1 | yes | YES | on | ON) return 0 ;;
+	*) return 1 ;;
+	esac
 }
 
 ui_output_target() {
@@ -1246,7 +1254,7 @@ ui_render_main_menu_hero() {
 	elif [ -t 1 ]; then
 		cols=$(tput cols 2>/dev/null || stty size 2>/dev/null | awk '{print $2}' || echo 0)
 	fi
-	if [ "$cols" -gt 0 ] && [ "$cols" -lt 74 ]; then
+	if ! ui_force_retro_hero_enabled && [ "$cols" -gt 0 ] && [ "$cols" -lt 74 ]; then
 		theme="narrow"
 	fi
 
@@ -1395,6 +1403,7 @@ load_config() {
 		JB_ENABLE_AUTO_UPDATE=$(jq -r '.enable_auto_update // "true"' "$config_path" 2>/dev/null || echo "$JB_ENABLE_AUTO_UPDATE")
 		JB_NONINTERACTIVE=$(jq -r '.noninteractive // "false"' "$config_path" 2>/dev/null || echo "$JB_NONINTERACTIVE")
 		UI_THEME=$(jq -r --arg def "$DEFAULT_UI_THEME" '.ui.theme // $def' "$config_path" 2>/dev/null || echo "$DEFAULT_UI_THEME")
+		UI_FORCE_RETRO_HERO=$(jq -r --arg def "$DEFAULT_FORCE_RETRO_HERO" '.ui.force_retro_hero // $def' "$config_path" 2>/dev/null || echo "$DEFAULT_FORCE_RETRO_HERO")
 	else
 		log_warn "未检测到 jq，使用轻量文本解析。"
 		BASE_URL=$(_get_json_value_fallback "$config_path" "base_url" "$BASE_URL")
@@ -1406,6 +1415,7 @@ load_config() {
 		JB_ENABLE_AUTO_UPDATE=$(_get_json_value_fallback "$config_path" "enable_auto_update" "$JB_ENABLE_AUTO_UPDATE")
 		JB_NONINTERACTIVE=$(_get_json_value_fallback "$config_path" "noninteractive" "$JB_NONINTERACTIVE")
 		UI_THEME=$(_get_json_value_fallback "$config_path" "theme" "$DEFAULT_UI_THEME")
+		UI_FORCE_RETRO_HERO="$DEFAULT_FORCE_RETRO_HERO"
 	fi
 
 	if ! ui_theme_exists "${UI_THEME:-}"; then
@@ -1414,6 +1424,7 @@ load_config() {
 	if [ -z "${JB_UI_THEME:-}" ]; then
 		JB_UI_THEME="$UI_THEME"
 	fi
+	JB_FORCE_RETRO_HERO="${JB_FORCE_RETRO_HERO:-$UI_FORCE_RETRO_HERO}"
 
 	# shellcheck disable=SC2034
 	JB_CLEAR_MODE="$(normalize_clear_mode)"

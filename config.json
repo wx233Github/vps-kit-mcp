@@ -27,7 +27,8 @@
   "log_with_timestamp": false,
   "comment_ui": "终端界面主题配置 (retro-launcher/classic/compact/minimal)",
   "ui": {
-    "theme": "retro-launcher"
+    "theme": "retro-launcher",
+    "force_retro_hero": false
   },
 
   "comment_menus": "主菜单配置",

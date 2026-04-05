@@ -166,13 +166,19 @@ _full_sync_update() {
 
 	if [ -f "${INSTALL_DIR}/config.json" ] && [ -f "${new_dir}/config.json" ]; then
 		local merged_file
+		local config_changed="false"
 		merged_file=$(create_temp_file) || {
 			rm -rf "$update_tmp" 2>/dev/null || true
 			return 1
 		}
 		if merge_config_json "${new_dir}/config.json" "${INSTALL_DIR}/config.json" "$merged_file"; then
+			if ! cmp -s "$merged_file" "${INSTALL_DIR}/config.json" 2>/dev/null; then
+				config_changed="true"
+			fi
 			mv "$merged_file" "${new_dir}/config.json"
-			log_info "已合并本地配置" >&2
+			if [ "$config_changed" = "true" ]; then
+				log_info "已合并本地配置" >&2
+			fi
 		else
 			log_warn "配置文件合并失败，保留远端配置"
 			rm -f "$merged_file" 2>/dev/null || true
