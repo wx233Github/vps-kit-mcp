@@ -198,10 +198,6 @@ main_menu() {
 					"先看当前状态，再选择网站、证书、日志或维护操作。"
 			fi
 			if declare -f ui_append_schema_or_fallback_page_block >/dev/null 2>&1; then
-				ui_append_schema_or_fallback_page_block menu_lines "NGINX_MENU" "http_workloads" "当前状态" \
-					"HTTP 项目: ${GREEN}${count:-0} 个${NC}" \
-					"TCP 项目: ${GREEN}${tcp_count:-0} 个${NC}" \
-					"告警数量: ${YELLOW}${warn_count:-0} 个${NC}"
 				ui_append_schema_or_fallback_page_block menu_lines "NGINX_MENU" "transport_routing" "常用操作" \
 					"● 1. 🌐 配置新网站        新建反向代理网站" \
 					"○ 2. 🗂️ 管理网站          查看、修改或删除网站" \
@@ -217,10 +213,6 @@ main_menu() {
 					"○ 11. 🧱 配置模板中心     管理 Block 和 Site 模板" \
 					"! 12. ⬆️ 升级 Nginx       从官方源升级"
 			else
-				ui_append_manual_page_block menu_lines "当前状态" \
-					"HTTP 项目: ${GREEN}${count:-0} 个${NC}" \
-					"TCP 项目: ${GREEN}${tcp_count:-0} 个${NC}" \
-					"告警数量: ${YELLOW}${warn_count:-0} 个${NC}"
 				ui_append_manual_page_block menu_lines "常用操作" \
 					"● 1. 🌐 配置新网站        新建反向代理网站" \
 					"○ 2. 🗂️ 管理网站          查看、修改或删除网站" \
@@ -238,11 +230,6 @@ main_menu() {
 			fi
 			_render_menu "Nginx 管理" "${menu_lines[@]}"
 		else
-			printf '%b' "${PURPLE}【当前状态】${NC}\n"
-			printf '%b' " HTTP 项目: ${count:-0} 个\n"
-			printf '%b' " TCP 项目: ${tcp_count:-0} 个\n"
-			printf '%b' " 告警数量: ${warn_count:-0} 个\n"
-			printf '%b' "\n"
 			printf '%b' "${PURPLE}【常用操作】${NC}\n"
 			printf '%b' " ● 1. 配置新网站\n"
 			printf '%b' " ○ 2. 管理网站\n"

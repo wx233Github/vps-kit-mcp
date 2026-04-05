@@ -445,37 +445,14 @@ _draw_dashboard() {
 	local line3=""
 	line3=$(_nginx_http2_warn_line "$nginx_v")
 
-	local max_width
-	max_width=$(_get_visual_width "$title")
-	local w1
-	w1=$(_get_visual_width "$line1")
-	local w2
-	w2=$(_get_visual_width "$line2")
-	local w3=0
-	if [ -n "$line3" ]; then
-		w3=$(_get_visual_width "$line3")
-	fi
-	[ "$w1" -gt "$max_width" ] && max_width=$w1
-	[ "$w2" -gt "$max_width" ] && max_width=$w2
-	[ "$w3" -gt "$max_width" ] && max_width=$w3
-	[ "$max_width" -lt 50 ] && max_width=50
-
 	printf '%b' "\n"
-	printf '%b' "${GREEN}╭$(generate_line "$max_width" "─")╮${NC}\n"
-	local title_pad_total=$((max_width - $(_get_visual_width "$title")))
-	local title_pad_left=$((title_pad_total / 2))
-	local title_pad_right=$((title_pad_total - title_pad_left))
-	printf '%b' "${GREEN}│${NC}$(printf '%*s' "$title_pad_left" "")${BOLD}${title}${NC}$(printf '%*s' "$title_pad_right" "")${GREEN}│${NC}\n"
-	printf '%b' "${GREEN}╰$(generate_line "$max_width" "─")╯${NC}\n"
-	local pad1=$((max_width - w1))
-	local pad2=$((max_width - w2))
-	printf '%b' " ${GRAY}${line1}${NC}$(printf '%*s' "$pad1" "")\n"
-	printf '%b' " ${line2}$(printf '%*s' "$pad2" "")\n"
+	printf '%b' "${BOLD}Nginx${NC}\n"
+	printf '%b' "${GRAY}${line1}${NC}\n"
+	printf '%b' "${line2}\n"
 	if [ -n "$line3" ]; then
-		local pad3=$((max_width - w3))
-		printf '%b' " ${line3}$(printf '%*s' "$pad3" "")\n"
+		printf '%b' "${line3}\n"
 	fi
-	printf '%b' "${GREEN}$(generate_line $((max_width + 2)) "─")${NC}\n"
+	printf '%b' "${GREEN}$(generate_line 68 "─")${NC}\n"
 }
 
 get_vps_ip() {
