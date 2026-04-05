@@ -315,7 +315,7 @@ _render_menu() {
 		[ "$width" -gt 82 ] && width=82
 		printf '%b' "\n" >"$out"
 		printf '%b' "${BOLD}${title}${NC}\n" >"$out"
-		printf '%b' "${CYAN}$(generate_line "$width" "-")${NC}\n" >"$out"
+		printf '%b' "${CYAN}$(generate_line "$width" "─")${NC}\n" >"$out"
 		for line in "${lines[@]}"; do printf '%b' "${line}\n" >"$out"; done
 		return 0
 	fi
@@ -1155,9 +1155,9 @@ install_acme_sh() {
 	fi
 	sh "$install_script" >"$install_log" 2>&1 || {
 		rm -f "$install_script"
-		printf '%b' "${CYAN}--- 安装错误详情 (已脱敏) ---${NC}\n"
+		printf '%b' "${CYAN}─── 安装错误详情（已脱敏） ───${NC}\n"
 		_mask_sensitive_data <"$install_log"
-		printf '%b' "${CYAN}------------------------------${NC}\n"
+		printf '%b' "${CYAN}──────────────────────────────${NC}\n"
 		rm -f "$install_log"
 		log_message ERROR "acme.sh 安装失败"
 		return 1
@@ -1231,9 +1231,9 @@ _ensure_zerossl_account_email() {
 	chmod 600 "$log_temp"
 	if ! run_cmd 90 "$ACME_BIN" --register-account -m "$email" --server "$ca_url" --log >"$log_temp" 2>&1; then
 		log_message ERROR "ZeroSSL 账号邮箱注册失败。"
-		printf '%b' "${CYAN}--- 注册错误详情 (已脱敏) ---${NC}\n"
+		printf '%b' "${CYAN}─── 注册错误详情（已脱敏） ───${NC}\n"
 		_mask_sensitive_data <"$log_temp"
-		printf '%b' "${CYAN}------------------------------${NC}\n"
+		printf '%b' "${CYAN}──────────────────────────────${NC}\n"
 		rm -f "$log_temp"
 		return 1
 	fi
@@ -2460,9 +2460,9 @@ _issue_and_install_certificate() {
 	if [ $ret -ne 0 ]; then
 		printf '%b' "\n"
 		log_message ERROR "申请失败: $domain"
-		printf '%b' "${CYAN}--- 错误详情 (已脱敏) ---${NC}\n"
+		printf '%b' "${CYAN}─── 错误详情（已脱敏） ───${NC}\n"
 		_mask_sensitive_data <"$log_temp"
-		printf '%b' "${CYAN}------------------------${NC}\n"
+		printf '%b' "${CYAN}────────────────────────${NC}\n"
 		rm -f "$log_temp"
 		_send_tg_notify "fail" "$domain" "acme.sh 申请证书失败。" ""
 		unset CF_Token CF_Account_ID Ali_Key Ali_Secret

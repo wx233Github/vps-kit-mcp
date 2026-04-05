@@ -27,7 +27,7 @@ else
 	log_success() { echo "[完成] $*"; }
 	generate_line() {
 		local len=${1:-40}
-		printf "%${len}s" "" | sed "s/ /-/g"
+		printf "%${len}s" "" | sed "s/ /─/g"
 	}
 	press_enter_to_continue() {
 		if [ "${JB_NONINTERACTIVE:-false}" = "true" ]; then
@@ -815,7 +815,7 @@ _manage_certificates() {
 				if [ -f "$CERT_FILE" ]; then
 					echo -e "${CYAN}--- 证书详情 ---${NC}"
 					openssl x509 -in "$CERT_FILE" -noout -text | grep -E "Issuer:|Not After|Subject:|DNS:"
-					echo -e "${CYAN}----------------${NC}"
+					echo -e "${CYAN}────────────────${NC}"
 					log_info "文件路径: $CERT_FILE"
 				else
 					log_err "找不到证书文件。"

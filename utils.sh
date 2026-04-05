@@ -1124,7 +1124,7 @@ ui_render_divider() {
 	local line=""
 	case "$theme" in
 	minimal)
-		line=$(ui_repeat_char "$width" "-")
+		line=$(ui_repeat_char "$width" "─")
 		ui_print_line "$out" "$line"
 		;;
 	classic)
@@ -1132,7 +1132,7 @@ ui_render_divider() {
 		ui_print_line "$out" "${GREEN}${line}${NC}"
 		;;
 	*)
-		line=$(ui_repeat_char "$width" "-")
+		line=$(ui_repeat_char "$width" "─")
 		ui_print_line "$out" "${CYAN}${line}${NC}"
 		;;
 	esac
