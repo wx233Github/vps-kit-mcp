@@ -2096,6 +2096,12 @@ render_main_menu() {
 	append_grouped_menu_section lines "$(main_menu_group_heading system)" "system" primary_items func_items index func_letters \
 		format_main_menu_primary_line format_main_menu_func_line main_menu_status_text || true
 
+	# 兼容旧版 config.json：若主菜单项未配置 group，则回退为不分组平铺渲染。
+	if [ ${#lines[@]} -eq 0 ]; then
+		append_menu_entry_lines lines "" primary_items func_items index func_letters \
+			format_main_menu_primary_line format_main_menu_func_line main_menu_status_text || true
+	fi
+
 	ui_render_main_menu_hero "$menu_title" "$subtitle" "$meta_line" "$repo_line" "${lines[@]}"
 }
 
