@@ -841,8 +841,8 @@ render_docker_main_menu() {
 				"当前状态"
 				"- ${GREEN}已安装${NC}"
 				"- 服务 ${status_color}${display_status}${NC}"
-				"Docker 版本: ${DOCKER_VERSION}"
-				"Compose 版本: ${COMPOSE_VERSION}"
+				"- Docker 版本: ${DOCKER_VERSION#Docker version }"
+				"- Compose 版本: ${COMPOSE_VERSION}"
 				""
 				"常用操作"
 				"● 1. 🔧 服务控制      启动、停止、重启服务"
@@ -886,8 +886,8 @@ render_docker_main_menu() {
 			ui_append_schema_or_fallback_page_block menu_items "DOCKER_MENU" "runtime_overview" "当前状态" \
 				"Docker: ${GREEN}已安装${NC}" \
 				"服务: ${status_color}${runtime_status}${NC}" \
-				"Docker: ${DOCKER_VERSION:-unknown}" \
-				"Compose: ${COMPOSE_VERSION:-unknown}"
+				"Docker 版本: ${DOCKER_VERSION#Docker version }" \
+				"Compose 版本: ${COMPOSE_VERSION:-unknown}"
 			ui_append_schema_or_fallback_page_block menu_items "DOCKER_MENU" "action_center" "常用操作" \
 				"$(docker_menu_line "1" "服务控制" "启动、停止、重启服务")" \
 				"$(docker_menu_line "2" "环境配置" "配置镜像和用户组")" \
@@ -901,8 +901,8 @@ render_docker_main_menu() {
 			ui_append_manual_page_block menu_items "当前状态" \
 				"Docker: ${GREEN}已安装${NC}" \
 				"服务: ${status_color}${runtime_status}${NC}" \
-				"Docker: ${DOCKER_VERSION:-unknown}" \
-				"Compose: ${COMPOSE_VERSION:-unknown}"
+				"Docker 版本: ${DOCKER_VERSION#Docker version }" \
+				"Compose 版本: ${COMPOSE_VERSION:-unknown}"
 			ui_append_manual_page_block menu_items "常用操作" \
 				"$(docker_menu_line "1" "服务控制" "启动、停止、重启服务")" \
 				"$(docker_menu_line "2" "环境配置" "配置镜像和用户组")" \

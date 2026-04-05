@@ -187,16 +187,6 @@ main_menu() {
 		JB_MENU_CONTEXT="submenu"
 		if declare -f get_ui_theme >/dev/null 2>&1 && [ "$(get_ui_theme)" != "classic" ]; then
 			local -a menu_lines=()
-			if declare -f ui_append_schema_or_fallback_panel_header >/dev/null 2>&1; then
-				ui_append_schema_or_fallback_panel_header menu_lines "NGINX_MENU" "" "plane" \
-					"管理网站代理、证书、TCP 转发和运行状态" \
-					"先看当前状态，再选择网站、证书、日志或维护操作。"
-			else
-				ui_append_manual_panel_fallback menu_lines \
-					"管理网站代理、证书、TCP 转发和运行状态" \
-					"$(ui_meta_focus_fallback_line "入口" "网站入口")" \
-					"先看当前状态，再选择网站、证书、日志或维护操作。"
-			fi
 			if declare -f ui_append_schema_or_fallback_page_block >/dev/null 2>&1; then
 				ui_append_schema_or_fallback_page_block menu_lines "NGINX_MENU" "transport_routing" "常用操作" \
 					"● 1. 🌐 配置新网站        新建反向代理网站" \
