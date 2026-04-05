@@ -220,14 +220,14 @@ main_menu() {
 			fi
 			_render_menu "Nginx 管理" "${menu_lines[@]}"
 		else
-			printf '%b' "${PURPLE}【常用操作】${NC}\n"
+			printf '%b' "${CYAN}常用操作${NC}\n"
 			printf '%b' " ● 1. 配置新网站\n"
 			printf '%b' " ○ 2. 管理网站\n"
 			printf '%b' " ○ 3. 仅申请证书\n"
 			printf '%b' " ○ 4. 配置 TCP 转发\n"
 			printf '%b' " ○ 5. 管理 TCP 转发\n"
 			printf '%b' "\n"
-			printf '%b' "${PURPLE}【诊断与策略】${NC}\n"
+			printf '%b' "${CYAN}诊断与策略${NC}\n"
 			printf '%b' " ○ 6. 批量续期\n"
 			printf '%b' " ○ 7. 查看日志\n"
 			printf '%b' " ○ 8. Cloudflare 防御\n"
