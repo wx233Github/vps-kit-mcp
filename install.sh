@@ -2012,6 +2012,12 @@ menu_status_text() {
 		printf '%s' "$status_value"
 		return 0
 	fi
+	case "$menu_name" in
+	TOOLS_MENU | MCP_MENU | THEME_MENU)
+		printf '%s' "$status_value"
+		return 0
+		;;
+	esac
 
 	status_label=$(menu_ui_status_label "$menu_name" "$action" "$(menu_status_default_label "$menu_name" "$action")")
 	if [ "$status_label" = "$status_value" ]; then

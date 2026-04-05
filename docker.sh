@@ -1022,7 +1022,6 @@ main() {
 	trap 'printf "\n操作被中断。\n" >&2; exit 10' INT
 	self_elevate_or_die "$@"
 	parse_dry_run_args "$@"
-	log_info "进入 Docker 模块"
 	init_runtime
 	pre_check_dependencies
 	main_menu "${RUN_ARGS[@]}"

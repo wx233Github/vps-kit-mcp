@@ -1106,7 +1106,6 @@ main() {
 	self_elevate_or_die "$@"
 	parse_dry_run_args "$@"
 	init_runtime
-	log_info "进入证书管理模块"
 	_check_dependencies || return 1
 	if [ "${#RUN_ARGS[@]}" -gt 0 ]; then
 		case "${RUN_ARGS[0]}" in

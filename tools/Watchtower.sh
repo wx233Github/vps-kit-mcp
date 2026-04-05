@@ -2808,7 +2808,6 @@ main() {
 	init_runtime
 	watchtower_validate_args "$@"
 	self_elevate_or_die "$@"
-	log_info "配置文件路径: ${CONFIG_FILE}"
 	[ -f "$CONFIG_FILE" ] && load_config
 
 	case "${1:-}" in
@@ -2829,12 +2828,12 @@ main() {
 		exit $?
 		;;
 	--systemd-start)
-		log_info "Starting Watchtower via systemd..."
+		log_info "正在通过 systemd 启动 Watchtower..."
 		_rebuild_watchtower
 		exit $?
 		;;
 	--systemd-stop)
-		log_info "Stopping Watchtower via systemd..."
+		log_info "正在通过 systemd 停止 Watchtower..."
 		_remove_watchtower_container
 		exit "${ERR_OK}"
 		;;
