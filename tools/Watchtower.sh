@@ -251,26 +251,26 @@ if ! declare -f ui_define_meta_fallback_helpers &>/dev/null; then
 			ui_meta_focus_fallback_line() {
 				local key="${1:-general}"
 				local value="${2:-}"
-				local label="General"
+				local label="通用"
 				case "$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')" in
-				runtime) label="Runtime" ;;
-				service) label="Service" ;;
-				plane) label="Plane" ;;
-				scope) label="Scope" ;;
-				modules) label="Modules" ;;
-				active) label="Active" ;;
-				kernel) label="Kernel" ;;
+				runtime) label="运行状态" ;;
+				service) label="服务" ;;
+				plane) label="入口" ;;
+				scope) label="范围" ;;
+				modules) label="模块" ;;
+				active) label="当前" ;;
+				kernel) label="内核" ;;
 				esac
-				local theme_label="Classic"
+				local theme_label="经典风格"
 				case "${JB_UI_THEME:-${UI_THEME:-classic}}" in
-				retro-launcher) theme_label="Retro Launcher" ;;
-				compact) theme_label="Compact" ;;
-				minimal) theme_label="Minimal" ;;
+				retro-launcher) theme_label="启动器风格" ;;
+				compact) theme_label="紧凑风格" ;;
+				minimal) theme_label="极简风格" ;;
 				esac
 				if [ -n "$value" ]; then
-					printf 'Theme: %s   |   Focus: %s: %s' "$theme_label" "$label" "$value"
+					printf '主题: %s   |   焦点: %s: %s' "$theme_label" "$label" "$value"
 				else
-					printf 'Theme: %s   |   Focus: %s' "$theme_label" "$label"
+					printf '主题: %s   |   焦点: %s' "$theme_label" "$label"
 				fi
 			}
 		fi
@@ -2265,8 +2265,8 @@ manage_tasks() {
 	while true; do
 		if should_clear_screen "watchtower:manage_tasks"; then clear; fi
 		local -a items_array=(
-			"1. 停止并移除服务 (uninstall) - 删除容器并清除配置"
-			"2. 重建服务 (redeploy) - 应用新配置，重启 Watchtower"
+			"! 1. 停止并移除服务    删除容器并清除配置"
+			"○ 2. 重建服务         应用新配置并重新启动 Watchtower"
 		)
 		_render_menu "⚙️ 服务运维 ⚙️" "${items_array[@]}"
 

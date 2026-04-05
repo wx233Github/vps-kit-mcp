@@ -307,26 +307,26 @@ if ! declare -f ui_define_meta_fallback_helpers >/dev/null 2>&1; then
 			ui_meta_focus_fallback_line() {
 				local key="${1:-general}"
 				local value="${2:-}"
-				local label="General"
+				local label="通用"
 				case "$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')" in
-				runtime) label="Runtime" ;;
-				service) label="Service" ;;
-				plane) label="Plane" ;;
-				scope) label="Scope" ;;
-				modules) label="Modules" ;;
-				active) label="Active" ;;
-				kernel) label="Kernel" ;;
+				runtime) label="运行状态" ;;
+				service) label="服务" ;;
+				plane) label="入口" ;;
+				scope) label="范围" ;;
+				modules) label="模块" ;;
+				active) label="当前" ;;
+				kernel) label="内核" ;;
 				esac
-				local theme_label="Classic"
+				local theme_label="经典风格"
 				case "${JB_UI_THEME:-${UI_THEME:-classic}}" in
-				retro-launcher) theme_label="Retro Launcher" ;;
-				compact) theme_label="Compact" ;;
-				minimal) theme_label="Minimal" ;;
+				retro-launcher) theme_label="启动器风格" ;;
+				compact) theme_label="紧凑风格" ;;
+				minimal) theme_label="极简风格" ;;
 				esac
 				if [ -n "$value" ]; then
-					printf 'Theme: %s   |   Focus: %s: %s' "$theme_label" "$label" "$value"
+					printf '主题: %s   |   焦点: %s: %s' "$theme_label" "$label" "$value"
 				else
-					printf 'Theme: %s   |   Focus: %s' "$theme_label" "$label"
+					printf '主题: %s   |   焦点: %s' "$theme_label" "$label"
 				fi
 			}
 		fi
@@ -1046,35 +1046,35 @@ kernel_manager() {
 	fi
 
 	local -a km_lines=()
-	local kernel_subtitle="Kernel lifecycle updates, rollback paths and cleanup operations"
-	local kernel_hint="Use this lane for kernel upgrades, reverting XanMod or pruning old images."
-	local kernel_meta_line="$(ui_meta_focus_fallback_line 'scope' 'Kernel')"
-	local kernel_heading="Recovery & Lifecycle"
+	local kernel_subtitle="管理内核升级、回退和清理操作"
+	local kernel_hint="请选择内核升级、回退或清理操作。"
+	local kernel_meta_line="$(ui_meta_focus_fallback_line 'scope' '内核')"
+	local kernel_heading="维护与恢复"
 	if [[ "${USE_UTILS_UI}" -eq 1 ]] && declare -f ui_format_section_heading >/dev/null 2>&1; then
-		kernel_heading=$(ui_format_section_heading "Recovery & Lifecycle")
+		kernel_heading=$(ui_format_section_heading "维护与恢复")
 	else
-		kernel_heading=$(printf '%b' "${COLOR_CYAN}Recovery & Lifecycle${COLOR_RESET}")
+		kernel_heading=$(printf '%b' "${COLOR_CYAN}维护与恢复${COLOR_RESET}")
 	fi
 	if [[ "${USE_UTILS_UI}" -eq 1 ]] && declare -f ui_append_schema_or_fallback_panel_header >/dev/null 2>&1; then
 		ui_append_schema_or_fallback_panel_header \
-			km_lines "BBR_KERNEL_MENU" "Kernel" "scope" \
+			km_lines "BBR_KERNEL_MENU" "内核" "scope" \
 			"${kernel_subtitle}" "${kernel_hint}"
 	elif [[ "${USE_UTILS_UI}" -eq 1 ]] && declare -f ui_append_panel_header >/dev/null 2>&1; then
 		ui_append_panel_header km_lines \
 			"${kernel_subtitle}" \
 			"scope" \
-			"Kernel" \
+			"内核" \
 			"${kernel_hint}"
 	else
 		ui_append_manual_panel_fallback km_lines "${kernel_subtitle}" "${kernel_meta_line}" "${kernel_hint}"
 	fi
 	if [[ "${USE_UTILS_UI}" -eq 1 ]] && declare -f ui_append_schema_or_fallback_page_block >/dev/null 2>&1; then
-		ui_append_schema_or_fallback_page_block km_lines "BBR_KERNEL_MENU" "recovery_lifecycle" "Recovery & Lifecycle" \
+		ui_append_schema_or_fallback_page_block km_lines "BBR_KERNEL_MENU" "recovery_lifecycle" "维护与恢复" \
 			"   1) 更新原版内核 (系统仓库)" \
 			"   2) 从 XanMod 切回原版内核 (Debian/Ubuntu)" \
 			"   3) 清理所有冗余旧内核 (Debian/Ubuntu)"
 	elif [[ "${USE_UTILS_UI}" -eq 1 ]] && declare -f ui_append_page_block >/dev/null 2>&1; then
-		ui_append_page_block km_lines "Recovery & Lifecycle" \
+		ui_append_page_block km_lines "维护与恢复" \
 			"   1) 更新原版内核 (系统仓库)" \
 			"   2) 从 XanMod 切回原版内核 (Debian/Ubuntu)" \
 			"   3) 清理所有冗余旧内核 (Debian/Ubuntu)"

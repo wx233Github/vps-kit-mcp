@@ -97,8 +97,8 @@ else
 	ui_menu_footer_text() {
 		local context="${1:-submenu}"
 		case "$context" in
-		main) printf '%s' 'Type an option and press Enter. Press Enter on empty input to exit.' ;;
-		*) printf '%s' 'Enter a choice. Empty input goes back.' ;;
+		main) printf '%s' '请输入编号，直接回车退出。' ;;
+		*) printf '%s' '请输入编号，直接回车返回。' ;;
 		esac
 	}
 	ui_build_prompt_text() {
