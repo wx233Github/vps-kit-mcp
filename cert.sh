@@ -783,7 +783,18 @@ _manage_certificates() {
 		local SELECTED_DOMAIN="${domains[$((choice_idx - 1))]}"
 
 		while true; do
-			local -a action_menu=("1. 查看详情 (Details)" "2. 强制续期 (Force Renew)" "3. 删除证书 (Delete)" "4. 重新申请/切换模式 (Re-issue)")
+			local -a action_menu=(
+				"当前操作对象"
+				"- ${SELECTED_DOMAIN}"
+				""
+				"常用操作"
+				"○ 1. 查看证书详情    查看证书签发方、到期时间和域名信息"
+				"● 2. 立即续期        立即尝试续期当前证书"
+				""
+				"危险操作"
+				"! 3. 删除证书        删除证书文件和 acme 记录"
+				"! 4. 重新申请证书    覆盖原有配置并重新申请"
+			)
 			_render_menu "管理: $SELECTED_DOMAIN" "${action_menu[@]}"
 
 			local action
@@ -804,7 +815,8 @@ _manage_certificates() {
 				press_enter_to_continue
 				;;
 			2)
-				log_info "正在准备续期 $SELECTED_DOMAIN ..."
+				log_info "将执行：续期证书。"
+				log_info "目标域名：$SELECTED_DOMAIN"
 				local port_conflict="false"
 				local temp_stop_svc=""
 
@@ -814,7 +826,7 @@ _manage_certificates() {
 
 					if [ -n "$temp_stop_svc" ]; then
 						echo -e "${YELLOW}发现服务: $temp_stop_svc 正在运行。${NC}"
-						if confirm_action "是否临时停止 $temp_stop_svc 以释放端口? (续期后自动启动)"; then
+						if confirm_action "检测到 80 端口占用，是否临时停止 $temp_stop_svc 以完成续期"; then
 							port_conflict="true"
 						fi
 					fi
@@ -861,7 +873,7 @@ _manage_certificates() {
 				press_enter_to_continue
 				;;
 			3)
-				if confirm_action "⚠️  确认彻底删除 $SELECTED_DOMAIN ?"; then
+				if confirm_action "将执行：删除证书；影响：会移除 $SELECTED_DOMAIN 的证书文件和 acme 记录。是否继续"; then
 					"$ACME_BIN" --remove -d "$SELECTED_DOMAIN" --ecc || true
 					if [ -d "/etc/ssl/$SELECTED_DOMAIN" ]; then
 						run_destructive_with_sudo rm -rf "/etc/ssl/$SELECTED_DOMAIN"
@@ -871,7 +883,7 @@ _manage_certificates() {
 				fi
 				;;
 			4)
-				if confirm_action "此操作将覆盖原有配置 (可修复配置错误或切换CA)。确认继续?"; then
+				if confirm_action "将执行：重新申请证书；影响：会覆盖原有申请配置。是否继续"; then
 					_apply_for_certificate "$SELECTED_DOMAIN"
 					press_enter_to_continue
 					break 2
@@ -894,18 +906,18 @@ _system_maintenance() {
 
 		case "$sys_choice" in
 		1)
-			log_info "检查 Cron 服务..."
+			log_info "开始诊断自动续期..."
 			if systemctl is-active --quiet cron || systemctl is-active --quiet crond; then
 				log_success "Cron 服务运行中。"
 			else
 				log_err "Cron 未运行。"
-				confirm_action "尝试启动?" && (run_with_sudo systemctl enable --now cron 2>/dev/null || run_with_sudo systemctl enable --now crond 2>/dev/null)
+				confirm_action "是否尝试启动 Cron 服务" && (run_with_sudo systemctl enable --now cron 2>/dev/null || run_with_sudo systemctl enable --now crond 2>/dev/null)
 			fi
 			if crontab -l 2>/dev/null | grep -q "acme.sh"; then
 				log_success "Crontab 任务存在。"
 			else
 				log_err "Crontab 任务缺失。"
-				confirm_action "修复?" && "$ACME_BIN" --install-cronjob
+				confirm_action "是否修复自动续期任务" && "$ACME_BIN" --install-cronjob
 			fi
 			press_enter_to_continue
 			;;

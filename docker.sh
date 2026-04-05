@@ -562,7 +562,7 @@ ensure_docker_repo_ready() {
 }
 
 uninstall_docker() {
-	if ! confirm_action "⚠️  确定要卸载 Docker 和 Compose 吗？这将删除所有相关软件包！"; then
+	if ! confirm_action "将执行：卸载 Docker 和 Compose；影响：会删除相关软件包并中断容器服务。是否继续"; then
 		log_warn "🚫 操作已取消。"
 		return 1
 	fi
@@ -573,7 +573,7 @@ uninstall_docker() {
 	execute_with_spinner "清理残留软件包配置..." run_destructive_with_sudo apt-get purge -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 	execute_with_spinner "自动移除不再需要的依赖..." run_destructive_with_sudo apt-get autoremove -y --purge
 
-	if confirm_action "是否同时删除 Docker 数据目录 (镜像, 容器, 数据卷)? 这是一个【不可逆】操作！"; then
+	if confirm_action "是否同时删除 Docker 数据目录？这是不可逆操作"; then
 		ensure_safe_path "/var/lib/docker"
 		ensure_safe_path "/var/lib/containerd"
 		ensure_safe_path "/etc/docker"
@@ -652,7 +652,7 @@ add_user_to_docker_group() {
 }
 
 install_docker() {
-	if ! confirm_action "是否确定开始安装 Docker?"; then
+	if ! confirm_action "将执行：安装 Docker；影响：会写入软件源、安装依赖并启动服务。是否继续"; then
 		log_warn "操作已取消。"
 		return 1
 	fi
@@ -688,12 +688,16 @@ docker_service_menu() {
 		local status_color="$GREEN"
 		if [ "$DOCKER_SERVICE_STATUS" != "active" ]; then status_color="$RED"; fi
 		local -a content_array=(
-			"当前服务状态: ${status_color}${DOCKER_SERVICE_STATUS}${NC}"
+			"当前状态"
+			"- 服务: ${status_color}${DOCKER_SERVICE_STATUS}${NC}"
 			""
-			"1. 启动 Docker 服务"
-			"2. 停止 Docker 服务"
-			"3. 重启 Docker 服务"
-			"4. 查看服务日志 (实时)"
+			"常用操作"
+			"● 1. 启动 Docker 服务    拉起 Docker 服务"
+			"○ 2. 停止 Docker 服务    停止当前 Docker 服务"
+			"○ 3. 重启 Docker 服务    重新加载 Docker 服务"
+			""
+			"诊断与策略"
+			"○ 4. 查看服务日志        实时查看 Docker 日志"
 		)
 		_render_menu "Docker 服务管理" "${content_array[@]}"
 		local choice
@@ -718,14 +722,10 @@ docker_service_menu() {
 }
 
 docker_prune_system() {
-	log_warn "警告：这是一个有潜在破坏性的操作！"
-	log_warn "此操作将删除所有未使用的 Docker 资源，包括："
-	log_warn "  - 所有已停止的容器"
-	log_warn "  - 所有未被任何容器使用的网络"
-	log_warn "  - 所有悬空镜像 (dangling images)"
-	log_warn "  - 所有构建缓存"
+	log_warn "将执行：清理未使用的 Docker 资源。"
+	log_warn "影响：会删除已停止容器、未使用网络、悬空镜像和构建缓存。"
 
-	if confirm_action "是否同时清理【所有未被使用的数据卷】? 这是最危险的步骤!"; then
+	if confirm_action "是否同时清理未使用的数据卷？这是最危险的一步"; then
 		log_info "正在执行系统清理 (包含未使用的卷)..."
 		run_destructive_with_sudo docker system prune -a -f --volumes
 	else
