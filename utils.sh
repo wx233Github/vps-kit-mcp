@@ -1254,11 +1254,16 @@ ui_render_main_menu_hero() {
 	elif [ -t 1 ]; then
 		cols=$(tput cols 2>/dev/null || stty size 2>/dev/null | awk '{print $2}' || echo 0)
 	fi
-	if ! ui_force_retro_hero_enabled && [ "$cols" -gt 0 ] && [ "$cols" -lt 74 ]; then
-		theme="narrow"
+	local hero_mode="full"
+	if [ "$theme" = "retro-launcher" ] && ! ui_force_retro_hero_enabled; then
+		if [ "$cols" -gt 0 ] && [ "$cols" -lt 44 ]; then
+			hero_mode="plain"
+		elif [ "$cols" -gt 0 ] && [ "$cols" -lt 74 ]; then
+			hero_mode="mobile"
+		fi
 	fi
 
-	if [ "$theme" = "compact" ] || [ "$theme" = "narrow" ]; then
+	if [ "$theme" = "compact" ]; then
 		local -a compact_lines=()
 		ui_append_main_menu_context compact_lines "$subtitle" "$meta_line" "$repo_line"
 		if [ ${#compact_lines[@]} -gt 0 ] && [ ${#lines[@]} -gt 0 ]; then
@@ -1280,8 +1285,37 @@ ui_render_main_menu_hero() {
 		return 0
 	fi
 
-	ui_print_blank_line "$out"
-	ui_print_line "$out" "${GREEN}npx vkm${NC}"
+	if [ "$hero_mode" = "plain" ]; then
+		local -a plain_lines=()
+		ui_append_main_menu_context plain_lines "$subtitle" "$meta_line" "$repo_line"
+		if [ ${#plain_lines[@]} -gt 0 ] && [ ${#lines[@]} -gt 0 ]; then
+			plain_lines+=("")
+		fi
+		plain_lines+=("${lines[@]}")
+		ui_render_plain_menu "$out" "$title" "${plain_lines[@]}"
+		return 0
+	fi
+
+	if [ "$hero_mode" = "mobile" ]; then
+		ui_print_blank_line "$out"
+		ui_print_line "$out" "${GREEN}████╗   ██╗██╗  ██╗███╗   ███╗${NC}"
+		ui_print_line "$out" "${GREEN}██║██╗  ██║██║ ██╔╝████╗ ████║${NC}"
+		ui_print_line "$out" "${GREEN}██║╚██╗ ██║█████╔╝ ██╔████╔██║${NC}"
+		ui_print_line "$out" "${GREEN}██║ ╚██╗██║██╔═██╗ ██║╚██╔╝██║${NC}"
+		ui_print_line "$out" "${GREEN}██║  ╚████║██║  ██╗██║ ╚═╝ ██║${NC}"
+		ui_print_line "$out" "${GREEN}╚═╝   ╚═══╝╚═╝  ╚═╝╚═╝     ╚═╝${NC}"
+		ui_print_blank_line "$out"
+		ui_print_line "$out" "${BOLD}${title}${NC}"
+		ui_print_line "$out" "$subtitle"
+		ui_render_divider "$out" 60
+		ui_print_line "$out" "${GRAY}${meta_line}${NC}"
+		ui_print_line "$out" "${GRAY}${repo_line}${NC}"
+		for line in "${lines[@]}"; do
+			ui_print_line "$out" "$line"
+		done
+		return 0
+	fi
+
 	ui_print_blank_line "$out"
 	ui_print_line "$out" "+--------------------------------------------------------------------------+"
 	ui_print_line "$out" "|                                                                          |"
