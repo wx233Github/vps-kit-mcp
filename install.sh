@@ -869,7 +869,10 @@ migrate_runtime_config_schema() {
 	fi
 	if ! cmp -s "$config_file" "$tmp_file"; then
 		run_with_sudo mv "$tmp_file" "$config_file"
-		log_info "已自动迁移本地菜单配置到最新结构"
+		local migration_log_file="${LOG_FILE:-${DEFAULT_LOG_FILE}}"
+		if [ -n "$migration_log_file" ]; then
+			printf '[%s] [INFO] %s\n' "$(date +'%Y-%m-%d %H:%M:%S')" "已自动迁移本地菜单配置到最新结构" >>"$migration_log_file" 2>/dev/null || true
+		fi
 	else
 		rm -f "$tmp_file" 2>/dev/null || true
 	fi
