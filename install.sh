@@ -2010,6 +2010,10 @@ menu_status_text() {
 		printf '%s' ""
 		return 0
 	fi
+	if [ "$menu_name" = "MAIN_MENU" ]; then
+		printf '%s' "$status_value"
+		return 0
+	fi
 
 	status_label=$(menu_ui_status_label "$menu_name" "$action" "$(menu_status_default_label "$menu_name" "$action")")
 	if [ "$status_label" = "$status_value" ]; then
