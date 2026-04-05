@@ -840,7 +840,7 @@ render_docker_main_menu() {
 			menu_items=(
 				"当前状态"
 				"- ${GREEN}已安装${NC}"
-				"- 服务 ${status_color}${display_status}${NC}"
+				"- 服务：${status_color}${display_status}${NC}"
 				"- Docker 版本: ${DOCKER_VERSION#Docker version }"
 				"- Compose 版本: ${COMPOSE_VERSION}"
 				""
@@ -884,7 +884,7 @@ render_docker_main_menu() {
 	if [ "$DOCKER_INSTALLED" = "true" ]; then
 		if declare -f ui_append_schema_or_fallback_page_block >/dev/null 2>&1; then
 			ui_append_schema_or_fallback_page_block menu_items "DOCKER_MENU" "runtime_overview" "当前状态" \
-				"Docker: ${GREEN}已安装${NC}" \
+				"状态: ${GREEN}已安装${NC}" \
 				"服务: ${status_color}${runtime_status}${NC}" \
 				"Docker 版本: ${DOCKER_VERSION#Docker version }" \
 				"Compose 版本: ${COMPOSE_VERSION:-unknown}"
@@ -899,7 +899,7 @@ render_docker_main_menu() {
 				"$(docker_menu_line "6" "卸载 Docker" "删除当前环境")"
 		else
 			ui_append_manual_page_block menu_items "当前状态" \
-				"Docker: ${GREEN}已安装${NC}" \
+				"状态: ${GREEN}已安装${NC}" \
 				"服务: ${status_color}${runtime_status}${NC}" \
 				"Docker 版本: ${DOCKER_VERSION#Docker version }" \
 				"Compose 版本: ${COMPOSE_VERSION:-unknown}"
