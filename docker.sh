@@ -431,6 +431,19 @@ init_runtime() {
 	sanitize_noninteractive_flag
 }
 
+translate_service_status() {
+	case "${1:-unknown}" in
+	active) printf '%s' "运行中" ;;
+	inactive) printf '%s' "未运行" ;;
+	activating) printf '%s' "启动中" ;;
+	deactivating) printf '%s' "停止中" ;;
+	failed) printf '%s' "异常" ;;
+	not-installed) printf '%s' "未安装" ;;
+	unknown) printf '%s' "未知" ;;
+	*) printf '%s' "$1" ;;
+	esac
+}
+
 get_docker_status() {
 	if command -v docker &>/dev/null; then
 		DOCKER_INSTALLED="true"
@@ -685,10 +698,12 @@ docker_service_menu() {
 		if should_clear_screen "docker:service_menu"; then clear; fi
 		get_docker_status
 		local status_color="$GREEN"
+		local display_status
+		display_status=$(translate_service_status "$DOCKER_SERVICE_STATUS")
 		if [ "$DOCKER_SERVICE_STATUS" != "active" ]; then status_color="$RED"; fi
 		local -a content_array=(
 			"当前状态"
-			"- 服务: ${status_color}${DOCKER_SERVICE_STATUS}${NC}"
+			"- 服务: ${status_color}${display_status}${NC}"
 			""
 			"常用操作"
 			"● 1. 启动 Docker 服务    拉起 Docker 服务"
@@ -820,10 +835,12 @@ render_docker_main_menu() {
 
 		local -a menu_items=()
 		if [ "$DOCKER_INSTALLED" = "true" ]; then
+			local display_status
+			display_status=$(translate_service_status "$DOCKER_SERVICE_STATUS")
 			menu_items=(
 				"当前状态"
 				"- ${GREEN}已安装${NC}"
-				"- 服务 ${status_color}${DOCKER_SERVICE_STATUS}${NC}"
+				"- 服务 ${status_color}${display_status}${NC}"
 				"Docker 版本: ${DOCKER_VERSION}"
 				"Compose 版本: ${COMPOSE_VERSION}"
 				""
@@ -856,7 +873,7 @@ render_docker_main_menu() {
 	local runtime_status="运行中"
 	if [ "$DOCKER_SERVICE_STATUS" != "active" ]; then
 		status_color="$YELLOW"
-		runtime_status="$DOCKER_SERVICE_STATUS"
+		runtime_status="$(translate_service_status "$DOCKER_SERVICE_STATUS")"
 	fi
 	if [ "$DOCKER_INSTALLED" != "true" ]; then
 		status_color="$YELLOW"

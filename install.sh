@@ -878,7 +878,7 @@ migrate_runtime_config_schema() {
               or ((.name // "") != "" and (.name // "") == ($default_item.name // ""))
             ))
           | .[0]) as $current_match
-        | if $current_match == null then $default_item else ($default_item * $current_match) end
+        | if $current_match == null then $default_item else (($default_item * $current_match) | .name = ($default_item.name // .name) | .group = ($default_item.group // .group) | .icon = ($default_item.icon // .icon)) end
       ))
       + (($current // []) | map(
           . as $current_item
