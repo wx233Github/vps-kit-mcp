@@ -1555,13 +1555,9 @@ handle_auto_update_core_restart() {
 		return 0
 	fi
 	if [ "${AUTO_UPDATE_STATE:-}" = "updated_core" ] || [ "${AUTO_UPDATE_UPDATED_CORE:-false}" = "true" ]; then
-		local count="${AUTO_UPDATE_UPDATED_COUNT:-0}"
-		clear_auto_update_worker_state
-		write_auto_update_status "updated" "$count" "false" "core_restarted"
 		AUTO_UPDATE_STATE="updated"
 		AUTO_UPDATE_UPDATED_CORE="false"
-		log_success "主程序更新，重启中"
-		restart_main_script "${@:-}"
+		return 0
 	fi
 }
 
@@ -2251,10 +2247,6 @@ render_secondary_menu() {
 	local index=1
 	local heading=""
 	local group=""
-	ui_append_context_lines lines \
-		"$(secondary_menu_subtitle "$menu_name")" \
-		"$(secondary_menu_meta_line "$menu_name")" \
-		"$(secondary_menu_hint_line "$menu_name")"
 	for group in "${group_order[@]:-}"; do
 		heading=$(submenu_group_heading "$menu_name" "$group")
 		append_grouped_menu_section lines "$heading" "$group" primary_items func_items index func_letters \
