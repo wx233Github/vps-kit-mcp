@@ -1056,7 +1056,7 @@ render_cert_main_menu() {
 	local -a menu_items=()
 	if declare -f ui_append_schema_or_fallback_page_block >/dev/null 2>&1; then
 		ui_append_schema_or_fallback_page_block menu_items "CERT_MENU" "certificate_overview" "当前状态" \
-			"客户端: ${acme_color}${acme_status}${NC}" \
+			"acme.sh: ${acme_color}${acme_status}${NC}" \
 			"自动续期: ${cron_color}${cron_status}${NC}"
 		ui_append_schema_or_fallback_page_block menu_items "CERT_MENU" "issue_renew" "常用操作" \
 			"$(cert_menu_line "1" "申请证书" "申请单域名、泛域名和 DNS 验证证书")" \
@@ -1065,7 +1065,7 @@ render_cert_main_menu() {
 			"$(cert_menu_line "3" "系统设置" "管理续期、升级和自动更新")"
 	else
 		ui_append_manual_page_block menu_items "当前状态" \
-			"客户端: ${acme_color}${acme_status}${NC}" \
+			"acme.sh: ${acme_color}${acme_status}${NC}" \
 			"自动续期: ${cron_color}${cron_status}${NC}"
 		ui_append_manual_page_block menu_items "常用操作" \
 			"$(cert_menu_line "1" "申请证书" "申请单域名、泛域名和 DNS 验证证书")" \
