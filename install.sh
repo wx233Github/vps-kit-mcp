@@ -816,12 +816,12 @@ migrate_runtime_config_schema() {
         "MAIN_MENU": [
           {"type":"item","name":"Docker","icon":"🐳","action":"docker.sh","group":"core","desc":"安装 Docker / Compose 与运行环境管理"},
           {"type":"item","name":"Nginx","icon":"🌐","action":"nginx.sh","group":"core","desc":"反代、TLS、TCP 网关与模板中心"},
-          {"type":"item","name":"证书申请","icon":"📜","action":"cert.sh","group":"core","desc":"证书签发、续期与基础体检"},
+          {"type":"item","name":"证书管理","icon":"📜","action":"cert.sh","group":"core","desc":"证书签发、续期与基础体检"},
           {"type":"submenu","name":"常用工具","icon":"🛠️","action":"TOOLS_MENU","group":"tools","desc":"Watchtower 与 BBR ACE 工具集"},
           {"type":"submenu","name":"MCP","icon":"🧩","action":"MCP_MENU","group":"tools","desc":"PTY 模块与 MCP 辅助工具"},
-          {"type":"submenu","name":"Theme Center","icon":"🎛️","action":"THEME_MENU","group":"system","desc":"切换终端主题与查看当前界面风格"},
-          {"type":"func","name":"更新切换","icon":"🔁","action":"toggle_startup_update_mode","group":"system","desc":"切换启动检查更新模式"},
-          {"type":"func","name":"强制重置","icon":"⚙️","action":"confirm_and_force_update","group":"system","desc":"强制拉取最新脚本并刷新安装"},
+          {"type":"submenu","name":"界面主题","icon":"🎛️","action":"THEME_MENU","group":"system","desc":"切换终端主题与查看当前界面风格"},
+          {"type":"func","name":"启动更新方式","icon":"🔁","action":"toggle_startup_update_mode","group":"system","desc":"切换启动检查更新模式"},
+          {"type":"func","name":"重新拉取脚本","icon":"⚙️","action":"confirm_and_force_update","group":"system","desc":"强制拉取最新脚本并刷新安装"},
           {"type":"func","name":"卸载脚本","icon":"🗑️","action":"uninstall_script","group":"system","desc":"移除安装目录与命令链接"}
         ],
         "TOOLS_MENU": [
@@ -837,6 +837,37 @@ migrate_runtime_config_schema() {
           {"type":"func","name":"Compact","icon":"📦","action":"set_theme_compact","group":"profiles","desc":"更紧凑的工具台布局，适合小终端窗口"},
           {"type":"func","name":"Minimal","icon":"🪶","action":"set_theme_minimal","group":"profiles","desc":"纯文本极简视图，适合日志与兼容性场景"}
         ]
+      };
+    def default_menu_ui:
+      {
+        "MAIN_MENU": {
+          "title": "VPS-Kit MCP",
+          "ui": {
+            "subtitle": "管理 Docker、Nginx、证书、常用工具和 MCP",
+            "repo": "Repo: https://github.com/wx233Github/vps-kit-mcp",
+            "meta_labels": {
+              "version": "版本",
+              "theme": "主题",
+              "update": "更新"
+            },
+            "status_labels": {
+              "docker.sh": "Docker",
+              "nginx.sh": "Nginx",
+              "tools/Watchtower.sh": "Watchtower",
+              "THEME_MENU": "当前",
+              "toggle_startup_update_mode": "方式",
+              "set_theme_retro_launcher": "当前",
+              "set_theme_classic": "当前",
+              "set_theme_compact": "当前",
+              "set_theme_minimal": "当前"
+            },
+            "groups": {
+              "core": "核心功能",
+              "tools": "工具",
+              "system": "系统"
+            }
+          }
+        }
       };
     def merge_menu_items($defaults; $current):
       (($defaults // []) | map(
@@ -863,6 +894,8 @@ migrate_runtime_config_schema() {
         $cfg;
         .menus[$menu].items = merge_menu_items((default_menu_items[$menu] // []); (.menus[$menu].items // []))
       )
+    | .menus.MAIN_MENU.title = (default_menu_ui.MAIN_MENU.title)
+    | .menus.MAIN_MENU.ui = ((.menus.MAIN_MENU.ui // {}) * (default_menu_ui.MAIN_MENU.ui // {}))
   ' "$config_file" >"$tmp_file"; then
 		rm -f "$tmp_file" 2>/dev/null || true
 		return 1
@@ -1908,13 +1941,13 @@ menu_entry_marker_color() {
 
 format_main_menu_primary_line() {
 	local marker
-	marker=$(menu_entry_marker "$2")
+	marker=$(menu_entry_marker "$3")
 	format_menu_entry_line "$1" "$2" "$3" "" "$5" 0 "$marker" "$(menu_entry_marker_color "$marker")"
 }
 
 format_main_menu_func_line() {
 	local marker
-	marker=$(menu_entry_marker "$2")
+	marker=$(menu_entry_marker "$3")
 	format_menu_entry_line "$1" "$2" "$3" "" "$5" 0 "$marker" "$(menu_entry_marker_color "$marker")"
 }
 
@@ -1978,6 +2011,10 @@ menu_status_text() {
 	fi
 
 	status_label=$(menu_ui_status_label "$menu_name" "$action" "$(menu_status_default_label "$menu_name" "$action")")
+	if [ "$status_label" = "$status_value" ]; then
+		printf '%s' "$status_value"
+		return 0
+	fi
 	if [ -n "$status_label" ]; then
 		printf '%s: %s' "$status_label" "$status_value"
 		return 0
