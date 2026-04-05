@@ -22,6 +22,7 @@ AUTO_UPDATE_LAST_HINT=""
 AUTO_UPDATE_LAST_HINT_TS=0
 AUTO_UPDATE_NOTIFIER_PID=""
 JB_FORCE_REFRESH=0
+JB_MAIN_HERO_ONCE_SHOWN=0
 UPDATE_BACKUP_DIR="/opt/vps_install_modules_bak"
 
 # --- 严格模式与环境设定 ---
@@ -2285,7 +2286,18 @@ render_main_menu() {
 			format_main_menu_primary_line format_main_menu_func_line main_menu_status_text || true
 	fi
 
-	ui_render_main_menu_hero "$menu_title" "$subtitle" "$meta_line" "$repo_line" "${lines[@]}"
+	if [ "${JB_MAIN_HERO_ONCE_SHOWN:-0}" = "0" ]; then
+		ui_render_main_menu_hero "$menu_title" "$subtitle" "$meta_line" "$repo_line" "${lines[@]}"
+		JB_MAIN_HERO_ONCE_SHOWN=1
+		return 0
+	fi
+	local -a compact_lines=()
+	ui_append_main_menu_context compact_lines "$subtitle" "$meta_line" "$repo_line"
+	if [ ${#compact_lines[@]} -gt 0 ] && [ ${#lines[@]} -gt 0 ]; then
+		compact_lines+=("")
+	fi
+	compact_lines+=("${lines[@]}")
+	ui_render_plain_menu "$(ui_output_target)" "$menu_title" "${compact_lines[@]}"
 }
 
 show_log_info() {
