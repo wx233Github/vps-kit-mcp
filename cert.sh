@@ -21,10 +21,10 @@ if [ -f "$UTILS_PATH" ]; then
 	source "$UTILS_PATH"
 else
 	echo "警告: 未找到 $UTILS_PATH，样式可能异常。"
-	log_err() { echo "[Error] $*" >&2; }
-	log_info() { echo "[Info] $*"; }
-	log_warn() { echo "[Warn] $*"; }
-	log_success() { echo "[Success] $*"; }
+	log_err() { echo "[错误] $*" >&2; }
+	log_info() { echo "[信息] $*"; }
+	log_warn() { echo "[警告] $*"; }
+	log_success() { echo "[完成] $*"; }
 	generate_line() {
 		local len=${1:-40}
 		printf "%${len}s" "" | sed "s/ /-/g"
@@ -34,7 +34,7 @@ else
 			log_warn "非交互模式：跳过等待"
 			return 0
 		fi
-		read -r -p "Press Enter..." </dev/tty
+		read -r -p "直接回车继续..." </dev/tty
 	}
 	confirm_action() {
 		local prompt="$1"
@@ -102,8 +102,8 @@ else
 	ui_menu_footer_text() {
 		local context="${1:-submenu}"
 		case "$context" in
-		main) printf '%s' 'Type an option and press Enter. Press Enter on empty input to exit.' ;;
-		*) printf '%s' 'Enter a choice. Empty input goes back.' ;;
+		main) printf '%s' '请输入编号，直接回车退出。' ;;
+		*) printf '%s' '请输入编号，直接回车返回。' ;;
 		esac
 	}
 	ui_build_prompt_text() {
@@ -215,26 +215,26 @@ if ! declare -f ui_define_meta_fallback_helpers &>/dev/null; then
 			ui_meta_focus_fallback_line() {
 				local key="${1:-general}"
 				local value="${2:-}"
-				local label="General"
+				local label="通用"
 				case "$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')" in
-				runtime) label="Runtime" ;;
-				scope) label="Scope" ;;
-				service) label="Service" ;;
-				plane) label="Plane" ;;
-				modules) label="Modules" ;;
-				active) label="Active" ;;
-				kernel) label="Kernel" ;;
+				runtime) label="运行状态" ;;
+				scope) label="范围" ;;
+				service) label="服务" ;;
+				plane) label="入口" ;;
+				modules) label="模块" ;;
+				active) label="当前" ;;
+				kernel) label="内核" ;;
 				esac
-				local theme_label="Classic"
+				local theme_label="经典风格"
 				case "${JB_UI_THEME:-${UI_THEME:-classic}}" in
-				retro-launcher) theme_label="Retro Launcher" ;;
-				compact) theme_label="Compact" ;;
-				minimal) theme_label="Minimal" ;;
+				retro-launcher) theme_label="启动器风格" ;;
+				compact) theme_label="紧凑风格" ;;
+				minimal) theme_label="极简风格" ;;
 				esac
 				if [ -n "$value" ]; then
-					printf 'Theme: %s   |   Focus: %s: %s' "$theme_label" "$label" "$value"
+					printf '主题: %s   |   焦点: %s: %s' "$theme_label" "$label" "$value"
 				else
-					printf 'Theme: %s   |   Focus: %s' "$theme_label" "$label"
+					printf '主题: %s   |   焦点: %s' "$theme_label" "$label"
 				fi
 			}
 		fi

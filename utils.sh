@@ -1007,14 +1007,14 @@ ui_define_meta_fallback_helpers() {
 				label=$(ui_meta_focus_label "$key")
 			else
 				case "$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')" in
-				runtime) label="Runtime" ;;
-				service) label="Service" ;;
-				plane) label="Plane" ;;
-				scope) label="Scope" ;;
-				modules) label="Modules" ;;
-				active) label="Active" ;;
-				kernel) label="Kernel" ;;
-				*) label="General" ;;
+				runtime) label="运行状态" ;;
+				service) label="服务" ;;
+				plane) label="入口" ;;
+				scope) label="范围" ;;
+				modules) label="模块" ;;
+				active) label="当前" ;;
+				kernel) label="内核" ;;
+				*) label="通用" ;;
 				esac
 			fi
 
@@ -1022,18 +1022,18 @@ ui_define_meta_fallback_helpers() {
 				theme_label=$(ui_theme_label)
 			else
 				case "${JB_UI_THEME:-${UI_THEME:-classic}}" in
-				retro-launcher) theme_label="Retro Launcher" ;;
-				compact) theme_label="Compact" ;;
-				minimal) theme_label="Minimal" ;;
-				*) theme_label="Classic" ;;
+				retro-launcher) theme_label="启动器风格" ;;
+				compact) theme_label="紧凑风格" ;;
+				minimal) theme_label="极简风格" ;;
+				*) theme_label="经典风格" ;;
 				esac
 			fi
 
 			if [ -n "$value" ]; then
-				printf 'Theme: %s   |   Focus: %s: %s' "$theme_label" "$label" "$value"
+				printf '主题: %s   |   焦点: %s: %s' "$theme_label" "$label" "$value"
 				return 0
 			fi
-			printf 'Theme: %s   |   Focus: %s' "$theme_label" "$label"
+			printf '主题: %s   |   焦点: %s' "$theme_label" "$label"
 		}
 	fi
 }
@@ -1044,15 +1044,15 @@ ui_meta_focus_label() {
 	local key="${1:-general}"
 	key=$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')
 	case "$key" in
-	runtime) printf '%s' "Runtime" ;;
-	service) printf '%s' "Service" ;;
-	plane) printf '%s' "Plane" ;;
-	scope) printf '%s' "Scope" ;;
-	modules) printf '%s' "Modules" ;;
-	active) printf '%s' "Active" ;;
-	kernel) printf '%s' "Kernel" ;;
-	general) printf '%s' "General" ;;
-	*) printf '%s' "General" ;;
+	runtime) printf '%s' "运行状态" ;;
+	service) printf '%s' "服务" ;;
+	plane) printf '%s' "入口" ;;
+	scope) printf '%s' "范围" ;;
+	modules) printf '%s' "模块" ;;
+	active) printf '%s' "当前" ;;
+	kernel) printf '%s' "内核" ;;
+	general) printf '%s' "通用" ;;
+	*) printf '%s' "通用" ;;
 	esac
 }
 
@@ -1066,10 +1066,10 @@ ui_meta_focus_line() {
 	local label
 	label=$(ui_meta_focus_label "$key")
 	if [ -n "$value" ]; then
-		printf 'Theme: %s   |   Focus: %s: %s' "$(ui_theme_label)" "$label" "$value"
+		printf '主题: %s   |   焦点: %s: %s' "$(ui_theme_label)" "$label" "$value"
 		return 0
 	fi
-	printf 'Theme: %s   |   Focus: %s' "$(ui_theme_label)" "$label"
+	printf '主题: %s   |   焦点: %s' "$(ui_theme_label)" "$label"
 }
 
 ui_append_context_lines() {
