@@ -614,7 +614,7 @@ run_doctor_status() {
 		printf 'nginx=%s\n' "$nginx_state"
 		printf 'jq=%s\n' "$jq_state"
 		if [ "$mode" = "doctor" ]; then
-			printf '%s\n' "--- checks ---"
+			printf '%s\n' "─── 检查项 ───"
 			printf 'env=%s\n' "$env_state"
 			printf 'core_dependencies=%s\n' "$deps_state"
 			printf 'config_json=%s\n' "$config_state"

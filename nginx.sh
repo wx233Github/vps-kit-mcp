@@ -1670,9 +1670,9 @@ _view_file_with_tail() {
 		log_message ERROR "文件不存在: $file"
 		return
 	fi
-	printf '%b' "${CYAN}--- 实时日志 (Ctrl+C 退出) ---${NC}\n"
+	printf '%b' "${CYAN}─── 实时日志（Ctrl+C 退出） ───${NC}\n"
 	tail -f -n 50 "$file" || true
-	printf '%b' "\n${CYAN}--- 日志查看结束 ---${NC}\n"
+	printf '%b' "\n${CYAN}─── 日志查看结束 ───${NC}\n"
 }
 _view_acme_log() {
 	local f="$HOME/.acme.sh/acme.sh.log"

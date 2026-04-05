@@ -151,7 +151,7 @@ if ! declare -f _render_menu &>/dev/null; then
 			printf " %s\n" "$@"
 			return 0
 		fi
-		printf '%b\n' "\n${BLUE}--- $title ---${NC}"
+		printf '%b\n' "\n${BLUE}─── $title ───${NC}"
 		printf " %s\n" "$@"
 	}
 fi
@@ -1082,7 +1082,7 @@ _get_ip_address() {
 }
 
 # --- 辅助工具函数 ---
-_print_header() { echo -e "\n${BLUE}--- ${1} ---${NC}"; }
+_print_header() { echo -e "\n${BLUE}─── ${1} ───${NC}"; }
 _format_seconds_to_human() {
 	local total_seconds="$1"
 	if ! [[ "$total_seconds" =~ ^[0-9]+$ ]] || [ "$total_seconds" -le 0 ]; then

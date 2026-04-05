@@ -33,7 +33,8 @@ else
 	_render_menu() {
 		local title="$1"
 		shift
-		echo "--- $title ---"
+		echo "$title"
+		echo "────────────────────────────────────────"
 		printf " %s\n" "$@"
 	}
 	press_enter_to_continue() {

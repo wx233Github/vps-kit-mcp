@@ -113,7 +113,8 @@ else
 		printf '%s\n> ' "$(ui_menu_footer_text "$context") [${numeric_range}]"
 	}
 	_render_menu() {
-		echo "--- $1 ---"
+		echo "$1"
+		echo "────────────────────────────────────────"
 		shift
 		for l in "$@"; do echo "$l"; done
 	}
@@ -448,7 +449,7 @@ _check_dependencies() {
 _apply_for_certificate() {
 	local PRESET_DOMAIN="$1"
 
-	log_info "--- 申请/重新配置证书 ---"
+	log_info "─── 申请/重新配置证书 ───"
 
 	local DOMAIN
 
@@ -813,7 +814,7 @@ _manage_certificates() {
 				local CERT_FILE CONF_FILE
 				_get_cert_files "$SELECTED_DOMAIN"
 				if [ -f "$CERT_FILE" ]; then
-					echo -e "${CYAN}--- 证书详情 ---${NC}"
+					echo -e "${CYAN}─── 证书详情 ───${NC}"
 					openssl x509 -in "$CERT_FILE" -noout -text | grep -E "Issuer:|Not After|Subject:|DNS:"
 					echo -e "${CYAN}────────────────${NC}"
 					log_info "文件路径: $CERT_FILE"
