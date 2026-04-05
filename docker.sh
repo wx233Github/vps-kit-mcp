@@ -866,16 +866,6 @@ render_docker_main_menu() {
 
 	local -a menu_items=()
 	if [ "$DOCKER_INSTALLED" = "true" ]; then
-		if declare -f ui_append_schema_or_fallback_panel_header >/dev/null 2>&1; then
-			ui_append_schema_or_fallback_panel_header menu_items "DOCKER_MENU" "${runtime_status}" "runtime" \
-				"管理 Docker 运行环境、服务状态和清理操作" \
-				"先看当前状态，再选择需要执行的操作。"
-		else
-			ui_append_manual_panel_fallback menu_items \
-				"管理 Docker 运行环境、服务状态和清理操作" \
-				"$(ui_meta_focus_fallback_line "状态" "${runtime_status}")" \
-				"先看当前状态，再选择需要执行的操作。"
-		fi
 		if declare -f ui_append_schema_or_fallback_page_block >/dev/null 2>&1; then
 			ui_append_schema_or_fallback_page_block menu_items "DOCKER_MENU" "runtime_overview" "当前状态" \
 				"Docker: ${GREEN}已安装${NC}" \
@@ -908,16 +898,6 @@ render_docker_main_menu() {
 				"$(docker_menu_line "6" "卸载 Docker" "删除当前环境")"
 		fi
 	else
-		if declare -f ui_append_schema_or_fallback_panel_header >/dev/null 2>&1; then
-			ui_append_schema_or_fallback_panel_header menu_items "DOCKER_BOOTSTRAP_MENU" "${runtime_status}" "runtime" \
-				"当前尚未安装 Docker" \
-				"请先完成安装，再继续使用其他功能。"
-		else
-			ui_append_manual_panel_fallback menu_items \
-				"当前尚未安装 Docker" \
-				"$(ui_meta_focus_fallback_line "状态" "${runtime_status}")" \
-				"请先完成安装，再继续使用其他功能。"
-		fi
 		if declare -f ui_append_schema_or_fallback_page_block >/dev/null 2>&1; then
 			ui_append_schema_or_fallback_page_block menu_items "DOCKER_BOOTSTRAP_MENU" "bootstrap_overview" "当前状态" \
 				"Docker: ${YELLOW}未安装${NC}" \

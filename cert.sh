@@ -1034,21 +1034,10 @@ render_cert_main_menu() {
 	fi
 
 	local -a menu_items=()
-	if declare -f ui_append_schema_or_fallback_panel_header >/dev/null 2>&1; then
-		ui_append_schema_or_fallback_panel_header menu_items "CERT_MENU" "acme.sh ${acme_status}" "service" \
-			"申请证书、续期证书并检查当前状态" \
-			"先看当前状态，再选择申请、管理或系统设置。"
-	else
-		ui_append_manual_panel_fallback menu_items \
-			"申请证书、续期证书并检查当前状态" \
-			"$(ui_meta_focus_fallback_line "服务" "acme.sh ${acme_status}")" \
-			"先看当前状态，再选择申请、管理或系统设置。"
-	fi
 	if declare -f ui_append_schema_or_fallback_page_block >/dev/null 2>&1; then
 		ui_append_schema_or_fallback_page_block menu_items "CERT_MENU" "certificate_overview" "当前状态" \
 			"acme.sh: ${acme_color}${acme_status}${NC}" \
-			"自动续期: ${cron_color}${cron_status}${NC}" \
-			"健康检查: $(basename "$0") --health-check"
+			"自动续期: ${cron_color}${cron_status}${NC}"
 		ui_append_schema_or_fallback_page_block menu_items "CERT_MENU" "issue_renew" "常用操作" \
 			"$(cert_menu_line "1" "申请证书" "申请单域名、泛域名和 DNS 验证证书")" \
 			"$(cert_menu_line "2" "证书管理" "查看详情、续期和重新申请")"
@@ -1057,8 +1046,7 @@ render_cert_main_menu() {
 	else
 		ui_append_manual_page_block menu_items "当前状态" \
 			"acme.sh: ${acme_color}${acme_status}${NC}" \
-			"自动续期: ${cron_color}${cron_status}${NC}" \
-			"健康检查: $(basename "$0") --health-check"
+			"自动续期: ${cron_color}${cron_status}${NC}"
 		ui_append_manual_page_block menu_items "常用操作" \
 			"$(cert_menu_line "1" "申请证书" "申请单域名、泛域名和 DNS 验证证书")" \
 			"$(cert_menu_line "2" "证书管理" "查看详情、续期和重新申请")"

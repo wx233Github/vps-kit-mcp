@@ -46,11 +46,11 @@
           "update": "更新"
         },
         "status_labels": {
-          "docker.sh": "Docker",
-          "nginx.sh": "Nginx",
-          "tools/Watchtower.sh": "Watchtower",
-          "THEME_MENU": "当前",
-          "toggle_startup_update_mode": "模式",
+          "docker.sh": "",
+          "nginx.sh": "",
+          "tools/Watchtower.sh": "",
+          "THEME_MENU": "",
+          "toggle_startup_update_mode": "",
           "set_theme_retro_launcher": "当前",
           "set_theme_classic": "当前",
           "set_theme_compact": "当前",
@@ -78,18 +78,18 @@
       "title": "🛠️ 常用工具",
       "comment_ui": "二级菜单文案、分组名、focus 与状态标签可按需覆盖默认词表",
       "ui": {
-        "subtitle": "Operational add-ons for container updates and network tuning",
-        "hint": "Pick a lane to manage updates, watchdogs or kernel acceleration.",
+        "subtitle": "管理自动更新和网络调优工具",
+        "hint": "请选择要管理的工具。",
         "status_labels": {
-          "tools/Watchtower.sh": "Watchtower"
+          "tools/Watchtower.sh": ""
         },
         "focus": {
           "key": "modules",
           "value": "2"
         },
         "groups": {
-          "automation": "Automation",
-          "network": "Networking"
+          "automation": "自动化",
+          "network": "网络"
         }
       },
       "items": [
@@ -101,15 +101,15 @@
       "title": "🧩 MCP 工具",
       "comment_ui": "未覆盖的字段将自动回退到 install.sh 内置 schema/default registry",
       "ui": {
-        "subtitle": "Runtime helpers for PTY sessions and MCP-side tooling",
-        "hint": "Launch supporting runtimes and diagnostics for MCP workflows.",
+        "subtitle": "管理 PTY 会话和 MCP 相关工具",
+        "hint": "请选择要管理的 PTY 或 MCP 工具。",
         "focus": {
           "key": "runtime",
           "value": "PTY"
         },
         "groups": {
-          "runtime": "Runtime",
-          "tooling": "Tooling"
+          "runtime": "运行状态",
+          "tooling": "工具"
         }
       },
       "items": [
@@ -117,20 +117,20 @@
       ]
     },
     "THEME_MENU": {
-      "title": "🎛️ Theme Center",
+      "title": "🎛️ 界面主题",
       "comment_ui": "主题菜单支持覆盖副标题、状态标记与 focus 来源",
       "ui": {
-        "subtitle": "Switch visual profiles and keep the launcher consistent",
-        "hint": "Choose the profile that best matches your terminal and workflow.",
+        "subtitle": "切换界面样式，选择适合当前终端的显示方式",
+        "hint": "请选择适合当前终端的界面主题。",
         "status_markers": {
-          "current": "Current"
+          "current": "当前"
         },
         "focus": {
           "key": "active",
           "source": "current_theme"
         },
         "groups": {
-          "profiles": "Theme Profiles"
+          "profiles": "主题方案"
         }
       },
       "items": [
