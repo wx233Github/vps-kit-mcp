@@ -185,9 +185,19 @@ main_menu() {
 	while true; do
 		_draw_dashboard
 		JB_MENU_CONTEXT="submenu"
+		local config_status config_reason cert_status cert_reason
+		IFS=$'\t' read -r config_status config_reason < <(_nginx_config_health_status)
+		IFS=$'\t' read -r cert_status cert_reason < <(_nginx_cert_health_status)
+		local config_line="- 配置检查    ${config_status}"
+		local cert_line="- 证书状态    ${cert_status}"
+		[ -n "$config_reason" ] && config_line+="，${config_reason}"
+		[ -n "$cert_reason" ] && cert_line+="，${cert_reason}"
 		if declare -f get_ui_theme >/dev/null 2>&1 && [ "$(get_ui_theme)" != "classic" ]; then
 			local -a menu_lines=()
 			if declare -f ui_append_schema_or_fallback_page_block >/dev/null 2>&1; then
+				ui_append_schema_or_fallback_page_block menu_lines "NGINX_MENU" "runtime_overview" "当前状态" \
+					"${config_line}" \
+					"${cert_line}"
 				ui_append_schema_or_fallback_page_block menu_lines "NGINX_MENU" "transport_routing" "常用操作" \
 					"● 1. 🌐 配置新网站        新建反向代理网站" \
 					"○ 2. 🗂️ 管理网站          查看、修改或删除网站" \
@@ -203,6 +213,9 @@ main_menu() {
 					"○ 11. 🧱 配置模板中心     管理 Block 和 Site 模板" \
 					"! 12. ⬆️ 升级 Nginx       从官方源升级"
 			else
+				ui_append_manual_page_block menu_lines "当前状态" \
+					"${config_line}" \
+					"${cert_line}"
 				ui_append_manual_page_block menu_lines "常用操作" \
 					"● 1. 🌐 配置新网站        新建反向代理网站" \
 					"○ 2. 🗂️ 管理网站          查看、修改或删除网站" \
@@ -220,6 +233,10 @@ main_menu() {
 			fi
 			_render_menu "Nginx 管理" "${menu_lines[@]}"
 		else
+			printf '%b' "${CYAN}当前状态${NC}\n"
+			printf '%b' " ${config_line}\n"
+			printf '%b' " ${cert_line}\n"
+			printf '%b' "\n"
 			printf '%b' "${CYAN}常用操作${NC}\n"
 			printf '%b' " ● 1. 配置新网站\n"
 			printf '%b' " ○ 2. 管理网站\n"

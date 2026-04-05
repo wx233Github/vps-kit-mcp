@@ -455,6 +455,71 @@ _draw_dashboard() {
 	printf '%b' "${GREEN}$(generate_line 68 "─")${NC}\n"
 }
 
+_nginx_config_health_status() {
+	local output=""
+	local rc=0
+	output=$(nginx -t 2>&1) || rc=$?
+	if [ "$rc" -ne 0 ]; then
+		printf '%s\t%s\n' "异常" "nginx -t 未通过"
+		return 0
+	fi
+	if printf '%s' "$output" | grep -qiE 'warn|warning'; then
+		printf '%s\t%s\n' "需关注" "检测到兼容性提醒"
+		return 0
+	fi
+	printf '%s\t%s\n' "正常" ""
+}
+
+_nginx_cert_health_status() {
+	local worst="正常"
+	local reason=""
+	local domain=""
+	local cert_file=""
+	local fail_count="0"
+	local end_date=""
+	local end_ts="0"
+	local now_ts
+	now_ts=$(date +%s)
+
+	if [ ! -f "$PROJECTS_METADATA_FILE" ]; then
+		printf '%s\t%s\n' "正常" ""
+		return 0
+	fi
+
+	while IFS=$'\t' read -r domain cert_file; do
+		[ -z "$domain" ] && continue
+		if [ -n "$cert_file" ] && [ ! -f "$cert_file" ]; then
+			printf '%s\t%s\n' "异常" "${domain} 证书文件缺失"
+			return 0
+		fi
+		if [ -n "$cert_file" ] && [ -f "$cert_file" ]; then
+			end_date=$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | cut -d= -f2-)
+			if [ -z "$end_date" ]; then
+				printf '%s\t%s\n' "异常" "${domain} 证书读取失败"
+				return 0
+			fi
+			end_ts=$(date -d "$end_date" +%s 2>/dev/null || printf '%s' "0")
+			if [ "$end_ts" -le "$now_ts" ]; then
+				printf '%s\t%s\n' "异常" "${domain} 证书已过期"
+				return 0
+			fi
+			if [ $((end_ts - now_ts)) -le $((7 * 86400)) ]; then
+				worst="需关注"
+				reason="${domain} 证书临近到期"
+			fi
+		fi
+		if [ -f "$RENEW_FAIL_DB" ]; then
+			fail_count=$(jq -r --arg d "$domain" '.[$d].count // 0' "$RENEW_FAIL_DB" 2>/dev/null || printf '%s' "0")
+			if [ "$fail_count" -ge "$RENEW_FAIL_THRESHOLD" ]; then
+				worst="需关注"
+				reason="${domain} 存在续期失败记录"
+			fi
+		fi
+	done < <(jq -r '.[] | [(.domain // ""), (.cert_file // "")] | @tsv' "$PROJECTS_METADATA_FILE" 2>/dev/null)
+
+	printf '%s\t%s\n' "$worst" "$reason"
+}
+
 get_vps_ip() {
 	if [ -z "$VPS_IP" ]; then
 		VPS_IP=$(curl -s --connect-timeout 3 https://api.ipify.org || printf '%s' "")
