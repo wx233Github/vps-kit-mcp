@@ -172,7 +172,7 @@ _full_sync_update() {
 		}
 		if merge_config_json "${new_dir}/config.json" "${INSTALL_DIR}/config.json" "$merged_file"; then
 			mv "$merged_file" "${new_dir}/config.json"
-			log_info "已合并本地配置"
+			log_info "已合并本地配置" >&2
 		else
 			log_warn "配置文件合并失败，保留远端配置"
 			rm -f "$merged_file" 2>/dev/null || true

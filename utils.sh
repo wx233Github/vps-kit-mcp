@@ -433,6 +433,10 @@ ui_repeat_char() {
 ui_pad_right() {
 	local text="${1:-}"
 	local width="${2:-0}"
+	if printf '%s' "$text" | LC_ALL=C grep -q '[^ -~]' 2>/dev/null; then
+		printf ''
+		return 0
+	fi
 	local current_width=0
 	current_width=$(_get_visual_width "$text")
 	if [ "$current_width" -ge "$width" ]; then
@@ -1237,8 +1241,10 @@ ui_render_main_menu_hero() {
 	fi
 
 	local cols=0
-	if [ -t 1 ]; then
-		cols=$(tput cols 2>/dev/null || echo 0)
+	if [[ "${COLUMNS:-}" =~ ^[0-9]+$ ]] && [ "${COLUMNS}" -gt 0 ]; then
+		cols="${COLUMNS}"
+	elif [ -t 1 ]; then
+		cols=$(tput cols 2>/dev/null || stty size 2>/dev/null | awk '{print $2}' || echo 0)
 	fi
 	if [ "$cols" -gt 0 ] && [ "$cols" -lt 74 ]; then
 		theme="narrow"
