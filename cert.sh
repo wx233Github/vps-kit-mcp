@@ -939,10 +939,21 @@ cert_menu_line() {
 	local index="$1"
 	local name="$2"
 	local desc="${3:-}"
+	local marker="○"
+	local icon=""
+	case "$name" in
+	"申请证书") marker="●"; icon="📜" ;;
+	"证书管理") icon="🗂️" ;;
+	"系统设置") icon="⚙️" ;;
+	"诊断自动续期") marker="●"; icon="🩺" ;;
+	"升级 acme.sh") icon="⬆️" ;;
+	"开启自动更新") icon="🔁" ;;
+	"关闭自动更新") marker="!"; icon="⏸️" ;;
+	esac
 	if [ -n "$desc" ]; then
-		printf '%s. %s        - %s' "$index" "$name" "$desc"
+		printf '%s %s. %s %s    %s' "$marker" "$index" "$icon" "$name" "$desc"
 	else
-		printf '%s. %s' "$index" "$name"
+		printf '%s %s. %s %s' "$marker" "$index" "$icon" "$name"
 	fi
 }
 
@@ -950,7 +961,12 @@ render_cert_system_maintenance_menu() {
 	local theme="classic"
 	theme="$(cert_menu_theme)"
 	if [ "$theme" = "classic" ]; then
-		local -a sys_menu=("1. 诊断自动续期" "2. 升级 acme.sh" "3. 开启自动更新" "4. 关闭自动更新")
+		local -a sys_menu=(
+			"● 1. 🩺 诊断自动续期    检查 cron 和续期任务"
+			"○ 2. ⬆️ 升级 acme.sh    更新客户端和规则"
+			"○ 3. 🔁 开启自动更新    保持客户端最新"
+			"! 4. ⏸️ 关闭自动更新    固定当前版本"
+		)
 		_render_menu "系统维护" "${sys_menu[@]}"
 		return 0
 	fi
@@ -958,26 +974,26 @@ render_cert_system_maintenance_menu() {
 	local -a sys_menu=()
 	if declare -f ui_append_schema_or_fallback_panel_header >/dev/null 2>&1; then
 		ui_append_schema_or_fallback_panel_header sys_menu "CERT_MAINTENANCE_MENU" "" "scope" \
-			"Issue TLS certificates, inspect renewal health and keep acme workflows reliable" \
-			"Adjust renewal policy, verify cron health and keep acme.sh updated."
+			"检查续期任务、升级 acme.sh 并调整自动更新策略" \
+			"先检查当前状态，再决定是否升级或调整策略。"
 	else
 		ui_append_manual_panel_fallback sys_menu \
-			"Issue TLS certificates, inspect renewal health and keep acme workflows reliable" \
-			"$(ui_meta_focus_fallback_line "scope" "Renewal")" \
-			"Adjust renewal policy, verify cron health and keep acme.sh updated."
+			"检查续期任务、升级 acme.sh 并调整自动更新策略" \
+			"$(ui_meta_focus_fallback_line "范围" "续期")" \
+			"先检查当前状态，再决定是否升级或调整策略。"
 	fi
 	if declare -f ui_append_schema_or_fallback_page_block >/dev/null 2>&1; then
-		ui_append_schema_or_fallback_page_block sys_menu "CERT_MAINTENANCE_MENU" "diagnostics" "Diagnostics" \
+		ui_append_schema_or_fallback_page_block sys_menu "CERT_MAINTENANCE_MENU" "diagnostics" "诊断与升级" \
 			"$(cert_menu_line "1" "诊断自动续期" "检查 cron 与续期任务是否可用")" \
 			"$(cert_menu_line "2" "升级 acme.sh" "拉取最新客户端与规则")"
-		ui_append_schema_or_fallback_page_block sys_menu "CERT_MAINTENANCE_MENU" "policy_control" "Policy Control" \
+		ui_append_schema_or_fallback_page_block sys_menu "CERT_MAINTENANCE_MENU" "policy_control" "策略设置" \
 			"$(cert_menu_line "3" "开启自动更新" "允许 acme.sh 自动保持最新")" \
 			"$(cert_menu_line "4" "关闭自动更新" "固定当前客户端版本")"
 	else
-		ui_append_manual_page_block sys_menu "Diagnostics" \
+		ui_append_manual_page_block sys_menu "诊断与升级" \
 			"$(cert_menu_line "1" "诊断自动续期" "检查 cron 与续期任务是否可用")" \
 			"$(cert_menu_line "2" "升级 acme.sh" "拉取最新客户端与规则")"
-		ui_append_manual_page_block sys_menu "Policy Control" \
+		ui_append_manual_page_block sys_menu "策略设置" \
 			"$(cert_menu_line "3" "开启自动更新" "允许 acme.sh 自动保持最新")" \
 			"$(cert_menu_line "4" "关闭自动更新" "固定当前客户端版本")"
 	fi
@@ -988,58 +1004,68 @@ render_cert_main_menu() {
 	local theme="classic"
 	theme="$(cert_menu_theme)"
 	if [ "$theme" = "classic" ]; then
-		local -a menu_items=("1. 申请证书 (New Certificate)" "2. 证书管理 (Manage Certificates)" "3. 系统设置 (Settings)")
-		_render_menu "🔐 SSL 证书管理 (acme.sh)" "${menu_items[@]}"
+		local -a menu_items=(
+			"当前状态"
+			"- acme.sh $( [ -x "$ACME_BIN" ] && printf '已安装' || printf '未安装' )"
+			""
+			"常用操作"
+			"● 1. 📜 申请证书      申请单域名、泛域名和 DNS 验证证书"
+			"○ 2. 🗂️ 证书管理      查看详情、续期和重新申请"
+			""
+			"诊断与策略"
+			"○ 3. ⚙️ 系统设置      管理续期、升级和自动更新"
+		)
+		_render_menu "证书管理" "${menu_items[@]}"
 		return 0
 	fi
 
-	local acme_status="Missing"
+	local acme_status="未安装"
 	local acme_color="$YELLOW"
 	if [ -x "$ACME_BIN" ]; then
-		acme_status="Ready"
+		acme_status="已安装"
 		acme_color="$GREEN"
 	fi
 
-	local cron_status="Missing"
+	local cron_status="未配置"
 	local cron_color="$YELLOW"
 	if crontab -l 2>/dev/null | grep -q "acme.sh"; then
-		cron_status="Installed"
+		cron_status="已配置"
 		cron_color="$GREEN"
 	fi
 
 	local -a menu_items=()
 	if declare -f ui_append_schema_or_fallback_panel_header >/dev/null 2>&1; then
 		ui_append_schema_or_fallback_panel_header menu_items "CERT_MENU" "acme.sh ${acme_status}" "service" \
-			"Issue TLS certificates, inspect renewal health and keep acme workflows reliable" \
-			"Choose issuance, renewal diagnostics or policy controls for your acme.sh workflow."
+			"申请证书、续期证书并检查当前状态" \
+			"先看当前状态，再选择申请、管理或系统设置。"
 	else
 		ui_append_manual_panel_fallback menu_items \
-			"Issue TLS certificates, inspect renewal health and keep acme workflows reliable" \
-			"$(ui_meta_focus_fallback_line "service" "acme.sh ${acme_status}")" \
-			"Choose issuance, renewal diagnostics or policy controls for your acme.sh workflow."
+			"申请证书、续期证书并检查当前状态" \
+			"$(ui_meta_focus_fallback_line "服务" "acme.sh ${acme_status}")" \
+			"先看当前状态，再选择申请、管理或系统设置。"
 	fi
 	if declare -f ui_append_schema_or_fallback_page_block >/dev/null 2>&1; then
-		ui_append_schema_or_fallback_page_block menu_items "CERT_MENU" "certificate_overview" "Certificate Overview" \
+		ui_append_schema_or_fallback_page_block menu_items "CERT_MENU" "certificate_overview" "当前状态" \
 			"acme.sh: ${acme_color}${acme_status}${NC}" \
-			"Renew Cron: ${cron_color}${cron_status}${NC}" \
-			"Health Check: $(basename "$0") --health-check"
-		ui_append_schema_or_fallback_page_block menu_items "CERT_MENU" "issue_renew" "Issue & Renew" \
-			"$(cert_menu_line "1" "申请证书" "签发单域名、泛域名与 DNS 验证证书")" \
-			"$(cert_menu_line "2" "证书管理" "查看详情、强制续期或重新签发")"
-		ui_append_schema_or_fallback_page_block menu_items "CERT_MENU" "policy_control" "Policy Control" \
-			"$(cert_menu_line "3" "系统设置" "续期诊断、客户端升级与自动更新策略")"
+			"自动续期: ${cron_color}${cron_status}${NC}" \
+			"健康检查: $(basename "$0") --health-check"
+		ui_append_schema_or_fallback_page_block menu_items "CERT_MENU" "issue_renew" "常用操作" \
+			"$(cert_menu_line "1" "申请证书" "申请单域名、泛域名和 DNS 验证证书")" \
+			"$(cert_menu_line "2" "证书管理" "查看详情、续期和重新申请")"
+		ui_append_schema_or_fallback_page_block menu_items "CERT_MENU" "policy_control" "诊断与策略" \
+			"$(cert_menu_line "3" "系统设置" "管理续期、升级和自动更新")"
 	else
-		ui_append_manual_page_block menu_items "Certificate Overview" \
+		ui_append_manual_page_block menu_items "当前状态" \
 			"acme.sh: ${acme_color}${acme_status}${NC}" \
-			"Renew Cron: ${cron_color}${cron_status}${NC}" \
-			"Health Check: $(basename "$0") --health-check"
-		ui_append_manual_page_block menu_items "Issue & Renew" \
-			"$(cert_menu_line "1" "申请证书" "签发单域名、泛域名与 DNS 验证证书")" \
-			"$(cert_menu_line "2" "证书管理" "查看详情、强制续期或重新签发")"
-		ui_append_manual_page_block menu_items "Policy Control" \
-			"$(cert_menu_line "3" "系统设置" "续期诊断、客户端升级与自动更新策略")"
+			"自动续期: ${cron_color}${cron_status}${NC}" \
+			"健康检查: $(basename "$0") --health-check"
+		ui_append_manual_page_block menu_items "常用操作" \
+			"$(cert_menu_line "1" "申请证书" "申请单域名、泛域名和 DNS 验证证书")" \
+			"$(cert_menu_line "2" "证书管理" "查看详情、续期和重新申请")"
+		ui_append_manual_page_block menu_items "诊断与策略" \
+			"$(cert_menu_line "3" "系统设置" "管理续期、升级和自动更新")"
 	fi
-	_render_menu "🔐 SSL 证书管理 (acme.sh)" "${menu_items[@]}"
+	_render_menu "证书管理" "${menu_items[@]}"
 }
 
 main_menu() {
@@ -1072,8 +1098,7 @@ main() {
 	self_elevate_or_die "$@"
 	parse_dry_run_args "$@"
 	init_runtime
-	log_info "SSL 证书管理模块 ${SCRIPT_VERSION}"
-	log_info "模块定位：轻量证书申请/续期工具（复杂反代与防御策略请使用 nginx 模块）。"
+	log_info "进入证书管理模块"
 	_check_dependencies || return 1
 	if [ "${#RUN_ARGS[@]}" -gt 0 ]; then
 		case "${RUN_ARGS[0]}" in
