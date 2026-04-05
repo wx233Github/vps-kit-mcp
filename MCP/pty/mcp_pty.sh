@@ -708,7 +708,7 @@ confirm_run_if_needed() {
 	case "${answer:-Y}" in
 	[nN] | [nN][oO])
 		log_warn "用户取消执行 mcp 流程。"
-		return 10
+		return 0
 		;;
 	*)
 		return 0

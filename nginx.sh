@@ -4845,7 +4845,7 @@ main() {
 	fi
 	menu_rc=$?
 	if [ "$menu_rc" -eq 10 ]; then
-		return 10
+		return 0
 	fi
 	return "$menu_rc"
 }

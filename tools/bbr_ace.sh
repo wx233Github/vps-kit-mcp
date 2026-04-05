@@ -827,9 +827,9 @@ audit_configs() {
 		current_val="$(printf "%s" "${current_val}" | tr -d '[:space:]')"
 
 		if [[ "${current_val}" == "${val}" ]]; then
-			printf "%b[MATCH]%b %-40s = %s\n" "${COLOR_GREEN}" "${COLOR_RESET}" "${key}" "${val}"
+			printf "%b[一致]%b %-40s = %s\n" "${COLOR_GREEN}" "${COLOR_RESET}" "${key}" "${val}"
 		else
-			printf "%b[MISMATCH]%b %-40s | Expected: %s | Current: %s\n" "${COLOR_YELLOW}" "${COLOR_RESET}" "${key}" "${val}" "${current_val}"
+			printf "%b[不一致]%b %-40s | 期望: %s | 当前: %s\n" "${COLOR_YELLOW}" "${COLOR_RESET}" "${key}" "${val}" "${current_val}"
 			mismatches=$((mismatches + 1))
 		fi
 	done <"${SYSCTL_CONF}"
