@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================
-# 🚀 Watchtower 自动更新管理器 (v6.5.7-精简交互版)
+# 🚀 Watchtower 自动更新管理器 (v0.0.1)
 # =============================================================
 # 作者：系统运维组
 # 描述：Docker 容器自动更新管理 (Watchtower) 封装脚本
@@ -23,7 +23,7 @@ readonly ERR_CRYPTO=6
 readonly ERR_RUNTIME=10
 
 # --- 脚本元数据 ---
-readonly SCRIPT_VERSION="v6.5.7"
+readonly SCRIPT_VERSION="v0.0.1"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 readonly CONFIG_FILE="$HOME/.docker-auto-update-watchtower.conf"

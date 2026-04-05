@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# VERSION: 1.4.0
+# VERSION: 0.0.1
 # DESCRIPTION: MCP PTY 本地部署脚本（通过 PyPI pty-mcp 接入，可选关联 opencode 配置）
 # DEPENDENCIES: bash curl cp mktemp mv chmod mkdir dirname flock date（jq: --with-opencode 时必需）
 
@@ -7,7 +7,7 @@ set -euo pipefail
 IFS=$'\n\t'
 export PATH='/usr/local/bin:/usr/bin:/bin'
 
-readonly VERSION="1.4.0"
+readonly VERSION="0.0.1"
 readonly DESCRIPTION="MCP PTY 本地部署脚本（通过 PyPI pty-mcp 接入，可选关联 opencode 配置）"
 readonly DEPENDENCIES="bash curl cp mktemp mv chmod mkdir dirname flock date (jq optional)"
 

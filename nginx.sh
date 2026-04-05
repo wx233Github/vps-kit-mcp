@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================
-# 🚀 Nginx 反向代理 + HTTPS 证书管理助手 (v4.35.0 - Security & Performance)
+# 🚀 Nginx 反向代理 + HTTPS 证书管理助手 (v0.0.1)
 # =============================================================
 # 作者:Shell 脚本专家
 # 描述:自动化管理 Nginx 反代配置与 SSL 证书,支持 TCP 负载均衡、泛域名无代理模式、性能优化与安全日志遮掩
@@ -10,7 +10,7 @@ IFS=$'\n\t'
 umask 077
 export PATH='/usr/local/bin:/usr/bin:/bin'
 
-VERSION="4.35.0"
+VERSION="0.0.1"
 DESCRIPTION="Nginx 反向代理与证书管理助手"
 DEPENDENCIES="nginx curl socat openssl jq idn dnsutils nano coreutils util-linux flock timeout awk sed grep sha256sum"
 NGINX_BIN_CANDIDATES=(
