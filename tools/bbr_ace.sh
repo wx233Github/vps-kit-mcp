@@ -1164,100 +1164,90 @@ show_menu() {
 	[[ "${active_conn}" -lt 0 ]] && active_conn=0
 	current_mode="$(read_current_mode)"
 	if [[ "${USE_UTILS_UI}" -eq 1 ]] && declare -f ui_format_section_heading >/dev/null 2>&1; then
-		runtime_heading=$(ui_format_section_heading "Runtime Overview")
-		profile_heading=$(ui_format_section_heading "Profile Control")
-		policy_heading=$(ui_format_section_heading "Policy Control")
-		recovery_heading=$(ui_format_section_heading "Recovery & Lifecycle")
+		runtime_heading=$(ui_format_section_heading "当前状态")
+		profile_heading=$(ui_format_section_heading "常用操作")
+		policy_heading=$(ui_format_section_heading "网络策略")
+		recovery_heading=$(ui_format_section_heading "维护与恢复")
 	else
-		runtime_heading=$(printf '%b' "${COLOR_CYAN}Runtime Overview${COLOR_RESET}")
-		profile_heading=$(printf '%b' "${COLOR_CYAN}Profile Control${COLOR_RESET}")
-		policy_heading=$(printf '%b' "${COLOR_CYAN}Policy Control${COLOR_RESET}")
-		recovery_heading=$(printf '%b' "${COLOR_CYAN}Recovery & Lifecycle${COLOR_RESET}")
+		runtime_heading=$(printf '%b' "${COLOR_CYAN}当前状态${COLOR_RESET}")
+		profile_heading=$(printf '%b' "${COLOR_CYAN}常用操作${COLOR_RESET}")
+		policy_heading=$(printf '%b' "${COLOR_CYAN}网络策略${COLOR_RESET}")
+		recovery_heading=$(printf '%b' "${COLOR_CYAN}维护与恢复${COLOR_RESET}")
 	fi
 
 	local -a lines=()
-	if [[ "${USE_UTILS_UI}" -eq 1 ]] && declare -f ui_append_schema_or_fallback_panel_header >/dev/null 2>&1; then
-		ui_append_schema_or_fallback_panel_header \
-			lines "BBR_MENU" "${cur_kver}" "kernel" \
-			"${main_subtitle}" "${main_hint}"
-	elif [[ "${USE_UTILS_UI}" -eq 1 ]] && declare -f ui_append_panel_header >/dev/null 2>&1; then
-		ui_append_panel_header lines \
-			"${main_subtitle}" \
-			"kernel" \
-			"${cur_kver}" \
-			"${main_hint}"
-	else
-		ui_append_manual_panel_fallback lines "${main_subtitle}" "${main_meta_line}" "${main_hint}"
-	fi
 	if [[ "${USE_UTILS_UI}" -eq 1 ]] && declare -f ui_append_schema_or_fallback_page_block >/dev/null 2>&1; then
 		local -a runtime_block=(
-			"   内核版本: ${COLOR_CYAN}${cur_kver}${COLOR_RESET}"
-			"   物理内存: ${COLOR_CYAN}${mem_mb} MB${COLOR_RESET}    活跃连接: ${COLOR_GREEN}${active_conn}${COLOR_RESET}"
-			"   拥塞算法: ${COLOR_CYAN}${cur_cc} + ${cur_qdisc}${COLOR_RESET}"
+			"内核版本: ${COLOR_CYAN}${cur_kver}${COLOR_RESET}"
+			"物理内存: ${COLOR_CYAN}${mem_mb} MB${COLOR_RESET}"
+			"活跃连接: ${COLOR_GREEN}${active_conn}${COLOR_RESET}"
+			"当前算法: ${COLOR_CYAN}${cur_cc} + ${cur_qdisc}${COLOR_RESET}"
 		)
 		if [[ -n "${cur_cc_reason}" || -n "${cur_qdisc_reason}" ]]; then
-			runtime_block+=("   读取说明: ${COLOR_YELLOW}${cur_cc_reason:-cc-ok}${COLOR_RESET} | ${COLOR_YELLOW}${cur_qdisc_reason:-qdisc-ok}${COLOR_RESET}")
+			runtime_block+=("读取说明: ${COLOR_YELLOW}${cur_cc_reason:-cc-ok}${COLOR_RESET} | ${COLOR_YELLOW}${cur_qdisc_reason:-qdisc-ok}${COLOR_RESET}")
 		fi
-		runtime_block+=("   当前模式: ${COLOR_BLUE}${current_mode}${COLOR_RESET}")
-		ui_append_schema_or_fallback_page_block lines "BBR_MENU" "runtime_overview" "Runtime Overview" "${runtime_block[@]}"
-		ui_append_schema_or_fallback_page_block lines "BBR_MENU" "profile_control" "Profile Control" \
-			"   1) BBR+FQ 原版参数 [Stock]" \
-			"   2) BBRV1 + FQ + 激进128MB"
-		ui_append_schema_or_fallback_page_block lines "BBR_MENU" "policy_control" "Policy Control" \
-			"   3) 开启 IPv4 强制优先" \
-			"   4) 恢复 IPv6 默认优先级"
-		ui_append_schema_or_fallback_page_block lines "BBR_MENU" "recovery_lifecycle" "Recovery & Lifecycle" \
-			"   5) 内核维护工具 (更新/清理)" \
-			"   6) 从备份恢复配置 (时光机)" \
-			"   7) 审计当前系统配置" \
-			"   8) 彻底卸载/恢复系统默认"
+		runtime_block+=("当前模式: ${COLOR_BLUE}${current_mode}${COLOR_RESET}")
+		ui_append_schema_or_fallback_page_block lines "BBR_MENU" "runtime_overview" "当前状态" "${runtime_block[@]}"
+		ui_append_schema_or_fallback_page_block lines "BBR_MENU" "profile_control" "常用操作" \
+			"● 1. 🚀 BBR+FQ 标准模式      使用稳妥的官方参数" \
+			"○ 2. ⚡ 激进调优模式         提升吞吐并放宽缓冲"
+		ui_append_schema_or_fallback_page_block lines "BBR_MENU" "policy_control" "网络策略" \
+			"○ 3. 🌐 IPv4 优先            调整地址选择顺序" \
+			"○ 4. 🌍 恢复默认优先级       恢复系统默认网络策略"
+		ui_append_schema_or_fallback_page_block lines "BBR_MENU" "recovery_lifecycle" "维护与恢复" \
+			"○ 5. 🧰 内核维护工具         升级、回退和清理内核" \
+			"○ 6. ♻️ 从备份恢复配置       回滚到历史配置" \
+			"○ 7. 🩺 审计当前系统配置     检查现有网络参数" \
+			"! 8. 🗑️ 卸载并恢复默认       删除调优配置并恢复系统默认"
 	elif [[ "${USE_UTILS_UI}" -eq 1 ]] && declare -f ui_append_page_block >/dev/null 2>&1; then
 		local -a runtime_block=(
-			"   内核版本: ${COLOR_CYAN}${cur_kver}${COLOR_RESET}"
-			"   物理内存: ${COLOR_CYAN}${mem_mb} MB${COLOR_RESET}    活跃连接: ${COLOR_GREEN}${active_conn}${COLOR_RESET}"
-			"   拥塞算法: ${COLOR_CYAN}${cur_cc} + ${cur_qdisc}${COLOR_RESET}"
+			"内核版本: ${COLOR_CYAN}${cur_kver}${COLOR_RESET}"
+			"物理内存: ${COLOR_CYAN}${mem_mb} MB${COLOR_RESET}"
+			"活跃连接: ${COLOR_GREEN}${active_conn}${COLOR_RESET}"
+			"当前算法: ${COLOR_CYAN}${cur_cc} + ${cur_qdisc}${COLOR_RESET}"
 		)
 		if [[ -n "${cur_cc_reason}" || -n "${cur_qdisc_reason}" ]]; then
-			runtime_block+=("   读取说明: ${COLOR_YELLOW}${cur_cc_reason:-cc-ok}${COLOR_RESET} | ${COLOR_YELLOW}${cur_qdisc_reason:-qdisc-ok}${COLOR_RESET}")
+			runtime_block+=("读取说明: ${COLOR_YELLOW}${cur_cc_reason:-cc-ok}${COLOR_RESET} | ${COLOR_YELLOW}${cur_qdisc_reason:-qdisc-ok}${COLOR_RESET}")
 		fi
-		runtime_block+=("   当前模式: ${COLOR_BLUE}${current_mode}${COLOR_RESET}")
-		ui_append_page_block lines "Runtime Overview" "${runtime_block[@]}"
-		ui_append_page_block lines "Profile Control" \
-			"   1) BBR+FQ 原版参数 [Stock]" \
-			"   2) BBRV1 + FQ + 激进128MB"
-		ui_append_page_block lines "Policy Control" \
-			"   3) 开启 IPv4 强制优先" \
-			"   4) 恢复 IPv6 默认优先级"
-		ui_append_page_block lines "Recovery & Lifecycle" \
-			"   5) 内核维护工具 (更新/清理)" \
-			"   6) 从备份恢复配置 (时光机)" \
-			"   7) 审计当前系统配置" \
-			"   8) 彻底卸载/恢复系统默认"
+		runtime_block+=("当前模式: ${COLOR_BLUE}${current_mode}${COLOR_RESET}")
+		ui_append_page_block lines "当前状态" "${runtime_block[@]}"
+		ui_append_page_block lines "常用操作" \
+			"● 1. 🚀 BBR+FQ 标准模式      使用稳妥的官方参数" \
+			"○ 2. ⚡ 激进调优模式         提升吞吐并放宽缓冲"
+		ui_append_page_block lines "网络策略" \
+			"○ 3. 🌐 IPv4 优先            调整地址选择顺序" \
+			"○ 4. 🌍 恢复默认优先级       恢复系统默认网络策略"
+		ui_append_page_block lines "维护与恢复" \
+			"○ 5. 🧰 内核维护工具         升级、回退和清理内核" \
+			"○ 6. ♻️ 从备份恢复配置       回滚到历史配置" \
+			"○ 7. 🩺 审计当前系统配置     检查现有网络参数" \
+			"! 8. 🗑️ 卸载并恢复默认       删除调优配置并恢复系统默认"
 	else
 		local -a runtime_block=(
-			"   内核版本: ${COLOR_CYAN}${cur_kver}${COLOR_RESET}"
-			"   物理内存: ${COLOR_CYAN}${mem_mb} MB${COLOR_RESET}    活跃连接: ${COLOR_GREEN}${active_conn}${COLOR_RESET}"
-			"   拥塞算法: ${COLOR_CYAN}${cur_cc} + ${cur_qdisc}${COLOR_RESET}"
+			"内核版本: ${COLOR_CYAN}${cur_kver}${COLOR_RESET}"
+			"物理内存: ${COLOR_CYAN}${mem_mb} MB${COLOR_RESET}"
+			"活跃连接: ${COLOR_GREEN}${active_conn}${COLOR_RESET}"
+			"当前算法: ${COLOR_CYAN}${cur_cc} + ${cur_qdisc}${COLOR_RESET}"
 		)
 		if [[ -n "${cur_cc_reason}" || -n "${cur_qdisc_reason}" ]]; then
-			runtime_block+=("   读取说明: ${COLOR_YELLOW}${cur_cc_reason:-cc-ok}${COLOR_RESET} | ${COLOR_YELLOW}${cur_qdisc_reason:-qdisc-ok}${COLOR_RESET}")
+			runtime_block+=("读取说明: ${COLOR_YELLOW}${cur_cc_reason:-cc-ok}${COLOR_RESET} | ${COLOR_YELLOW}${cur_qdisc_reason:-qdisc-ok}${COLOR_RESET}")
 		fi
-		runtime_block+=("   当前模式: ${COLOR_BLUE}${current_mode}${COLOR_RESET}")
+		runtime_block+=("当前模式: ${COLOR_BLUE}${current_mode}${COLOR_RESET}")
 		ui_append_manual_page_block lines "${runtime_heading}" "${runtime_block[@]}"
 		ui_append_manual_page_block lines "${profile_heading}" \
-			"   1) BBR+FQ 原版参数 [Stock]" \
-			"   2) BBRV1 + FQ + 激进128MB"
+			"● 1. 🚀 BBR+FQ 标准模式      使用稳妥的官方参数" \
+			"○ 2. ⚡ 激进调优模式         提升吞吐并放宽缓冲"
 		ui_append_manual_page_block lines "${policy_heading}" \
-			"   3) 开启 IPv4 强制优先" \
-			"   4) 恢复 IPv6 默认优先级"
+			"○ 3. 🌐 IPv4 优先            调整地址选择顺序" \
+			"○ 4. 🌍 恢复默认优先级       恢复系统默认网络策略"
 		ui_append_manual_page_block lines "${recovery_heading}" \
-			"   5) 内核维护工具 (更新/清理)" \
-			"   6) 从备份恢复配置 (时光机)" \
-			"   7) 审计当前系统配置" \
-			"   8) 彻底卸载/恢复系统默认"
+			"○ 5. 🧰 内核维护工具         升级、回退和清理内核" \
+			"○ 6. ♻️ 从备份恢复配置       回滚到历史配置" \
+			"○ 7. 🩺 审计当前系统配置     检查现有网络参数" \
+			"! 8. 🗑️ 卸载并恢复默认       删除调优配置并恢复系统默认"
 	fi
 
-	ui_render_menu "🚀 BBR ACE 网络调优引擎" "${lines[@]}"
+	ui_render_menu "BBR ACE" "${lines[@]}"
 }
 
 main() {

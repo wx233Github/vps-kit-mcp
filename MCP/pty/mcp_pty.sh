@@ -71,20 +71,22 @@ die() {
 usage() {
 	cat <<'EOF'
 
-MCP PTY Runtime Center
-Provision PTY runner dependencies, optional opencode linkage and clean uninstall workflows.
+MCP PTY
+────────────────────────────────────────
 
-Theme: plain-shell   |   Modes: install / opencode / uninstall
-Choose a mode, confirm execution, then follow the printed next-step checklist.
+当前用途
+1. 安装 PTY 运行环境
+2. 关联 opencode 配置
+3. 卸载本地 PTY 相关文件
 
 用法:
   mcp_pty.sh [选项]
 
 说明:
   单脚本支持三种用途：
-  1) install  : 本地搭建（默认）
-  2) opencode : 本地搭建 + 关联 opencode 配置
-  3) uninstall: 卸载 mcp_pty 相关本地文件与 opencode 关联
+  1) install   本地搭建（默认）
+  2) opencode  本地搭建并关联 opencode 配置
+  3) uninstall 卸载 mcp_pty 相关本地文件与 opencode 关联
 
 选项:
   --mode <install|opencode|uninstall>
