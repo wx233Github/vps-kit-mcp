@@ -761,12 +761,113 @@ merge_config_json() {
 		return 1
 	fi
 	jq -s '
-    (.[0] // {}) as $remote
-    | (.[1] // {}) as $local
-    | ($remote * $local)
-    | .startup_update_mode = ($local.startup_update_mode // .startup_update_mode)
-    | .ui = (($remote.ui // {}) * ($local.ui // {}))
+    def merge_menu_items($remote_items; $local_items):
+      (($remote_items // []) | map(
+        . as $remote_item
+        | ($local_items // []
+          | map(select(
+              ((.action // "") != "" and (.action // "") == ($remote_item.action // ""))
+              or ((.name // "") != "" and (.name // "") == ($remote_item.name // ""))
+            ))
+          | .[0]) as $local_match
+        | if $local_match == null then $remote_item else ($remote_item * $local_match) end
+      ))
+      + (($local_items // []) | map(
+          . as $local_item
+          | select(
+              (($remote_items // []) | any(
+                ((.action // "") != "" and (.action // "") == ($local_item.action // ""))
+                or ((.name // "") != "" and (.name // "") == ($local_item.name // ""))
+              )) | not
+            )
+        ));
+    def merge_menus($remote_menus; $local_menus):
+      (($remote_menus // {}) * ($local_menus // {}))
+      | .MAIN_MENU.items = merge_menu_items(($remote_menus.MAIN_MENU.items // []); ($local_menus.MAIN_MENU.items // []))
+      | .TOOLS_MENU.items = merge_menu_items(($remote_menus.TOOLS_MENU.items // []); ($local_menus.TOOLS_MENU.items // []))
+      | .MCP_MENU.items = merge_menu_items(($remote_menus.MCP_MENU.items // []); ($local_menus.MCP_MENU.items // []))
+      | .THEME_MENU.items = merge_menu_items(($remote_menus.THEME_MENU.items // []); ($local_menus.THEME_MENU.items // []));
+     (.[0] // {}) as $remote
+     | (.[1] // {}) as $local
+      | ($remote * $local)
+      | .menus = merge_menus(($remote.menus // {}); ($local.menus // {}))
+      | .startup_update_mode = ($local.startup_update_mode // .startup_update_mode)
+      | .ui = (($remote.ui // {}) * ($local.ui // {}))
   ' "$remote_file" "$local_file" >"$out_file"
+}
+
+migrate_runtime_config_schema() {
+	local config_file="$1"
+	local tmp_file=""
+	[ -f "$config_file" ] || return 0
+	command -v jq >/dev/null 2>&1 || return 0
+	jq -e . "$config_file" >/dev/null 2>&1 || return 0
+
+	tmp_file=$(create_temp_file) || return 1
+	if ! jq '
+    def default_menu_items:
+      {
+        "MAIN_MENU": [
+          {"type":"item","name":"Docker","icon":"🐳","action":"docker.sh","group":"core","desc":"安装 Docker / Compose 与运行环境管理"},
+          {"type":"item","name":"Nginx","icon":"🌐","action":"nginx.sh","group":"core","desc":"反代、TLS、TCP 网关与模板中心"},
+          {"type":"item","name":"证书申请","icon":"📜","action":"cert.sh","group":"core","desc":"证书签发、续期与基础体检"},
+          {"type":"submenu","name":"常用工具","icon":"🛠️","action":"TOOLS_MENU","group":"tools","desc":"Watchtower 与 BBR ACE 工具集"},
+          {"type":"submenu","name":"MCP","icon":"🧩","action":"MCP_MENU","group":"tools","desc":"PTY 模块与 MCP 辅助工具"},
+          {"type":"submenu","name":"Theme Center","icon":"🎛️","action":"THEME_MENU","group":"system","desc":"切换终端主题与查看当前界面风格"},
+          {"type":"func","name":"更新切换","icon":"🔁","action":"toggle_startup_update_mode","group":"system","desc":"切换启动检查更新模式"},
+          {"type":"func","name":"强制重置","icon":"⚙️","action":"confirm_and_force_update","group":"system","desc":"强制拉取最新脚本并刷新安装"},
+          {"type":"func","name":"卸载脚本","icon":"🗑️","action":"uninstall_script","group":"system","desc":"移除安装目录与命令链接"}
+        ],
+        "TOOLS_MENU": [
+          {"type":"item","name":"Watchtower","icon":"🔄","action":"tools/Watchtower.sh","group":"automation","desc":"容器自动更新、定时巡检与通知联动中心"},
+          {"type":"item","name":"BBR ACE","icon":"⚡","action":"tools/bbr_ace.sh","group":"network","desc":"拥塞控制加速、内核调优与链路优化助手"}
+        ],
+        "MCP_MENU": [
+          {"type":"item","name":"mcp_pty","icon":"🖥️","action":"MCP/pty/mcp_pty.sh","group":"runtime","desc":"PTY 会话部署、守护恢复与运行诊断入口"}
+        ],
+        "THEME_MENU": [
+          {"type":"func","name":"Retro Launcher","icon":"🚀","action":"set_theme_retro_launcher","group":"profiles","desc":"大标题启动器首页 + 分区式产品子页"},
+          {"type":"func","name":"Classic","icon":"🧱","action":"set_theme_classic","group":"profiles","desc":"保留原始框线菜单与旧式脚本操作感"},
+          {"type":"func","name":"Compact","icon":"📦","action":"set_theme_compact","group":"profiles","desc":"更紧凑的工具台布局，适合小终端窗口"},
+          {"type":"func","name":"Minimal","icon":"🪶","action":"set_theme_minimal","group":"profiles","desc":"纯文本极简视图，适合日志与兼容性场景"}
+        ]
+      };
+    def merge_menu_items($defaults; $current):
+      (($defaults // []) | map(
+        . as $default_item
+        | ($current // []
+          | map(select(
+              ((.action // "") != "" and (.action // "") == ($default_item.action // ""))
+              or ((.name // "") != "" and (.name // "") == ($default_item.name // ""))
+            ))
+          | .[0]) as $current_match
+        | if $current_match == null then $default_item else ($default_item * $current_match) end
+      ))
+      + (($current // []) | map(
+          . as $current_item
+          | select(
+              (($defaults // []) | any(
+                ((.action // "") != "" and (.action // "") == ($current_item.action // ""))
+                or ((.name // "") != "" and (.name // "") == ($current_item.name // ""))
+              )) | not
+            )
+        ));
+    . as $cfg
+    | reduce (default_menu_items | keys[]) as $menu (
+        $cfg;
+        .menus[$menu].items = merge_menu_items((default_menu_items[$menu] // []); (.menus[$menu].items // []))
+      )
+  ' "$config_file" >"$tmp_file"; then
+		rm -f "$tmp_file" 2>/dev/null || true
+		return 1
+	fi
+	if ! cmp -s "$config_file" "$tmp_file"; then
+		run_with_sudo mv "$tmp_file" "$config_file"
+		log_info "已自动迁移本地菜单配置到最新结构"
+	else
+		rm -f "$tmp_file" 2>/dev/null || true
+	fi
+	return 0
 }
 
 download_module_to_cache() {
@@ -2361,6 +2462,8 @@ main() {
 	self_elevate_or_die "$@"
 	parse_dry_run_args "$@"
 	set -- "${RUN_ARGS[@]}"
+	load_config "$CONFIG_PATH"
+	migrate_runtime_config_schema "$CONFIG_PATH"
 	load_config "$CONFIG_PATH"
 	export UI_THEME="${UI_THEME:-$(get_ui_theme)}"
 	export JB_UI_THEME="${JB_UI_THEME:-$UI_THEME}"
