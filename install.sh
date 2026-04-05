@@ -484,10 +484,10 @@ if ! declare -f ui_theme_label >/dev/null 2>&1; then
 	ui_theme_label() {
 		local theme="${1:-}"
 		case "$theme" in
-		retro-launcher) printf '%s' "Retro Launcher" ;;
-		classic) printf '%s' "Classic" ;;
-		compact) printf '%s' "Compact" ;;
-		minimal) printf '%s' "Minimal" ;;
+		retro-launcher) printf '%s' "启动器风格" ;;
+		classic) printf '%s' "经典风格" ;;
+		compact) printf '%s' "紧凑风格" ;;
+		minimal) printf '%s' "极简风格" ;;
 		*) printf '%s' "$theme" ;;
 		esac
 	}
@@ -829,13 +829,13 @@ migrate_runtime_config_schema() {
           {"type":"item","name":"BBR ACE","icon":"⚡","action":"tools/bbr_ace.sh","group":"network","desc":"拥塞控制加速、内核调优与链路优化助手"}
         ],
         "MCP_MENU": [
-          {"type":"item","name":"mcp_pty","icon":"🖥️","action":"MCP/pty/mcp_pty.sh","group":"runtime","desc":"PTY 会话部署、守护恢复与运行诊断入口"}
+          {"type":"item","name":"PTY 工具","icon":"🖥️","action":"MCP/pty/mcp_pty.sh","group":"runtime","desc":"PTY 会话部署、守护恢复与运行诊断入口"}
         ],
         "THEME_MENU": [
-          {"type":"func","name":"Retro Launcher","icon":"🚀","action":"set_theme_retro_launcher","group":"profiles","desc":"大标题启动器首页 + 分区式产品子页"},
-          {"type":"func","name":"Classic","icon":"🧱","action":"set_theme_classic","group":"profiles","desc":"保留原始框线菜单与旧式脚本操作感"},
-          {"type":"func","name":"Compact","icon":"📦","action":"set_theme_compact","group":"profiles","desc":"更紧凑的工具台布局，适合小终端窗口"},
-          {"type":"func","name":"Minimal","icon":"🪶","action":"set_theme_minimal","group":"profiles","desc":"纯文本极简视图，适合日志与兼容性场景"}
+          {"type":"func","name":"启动器风格","icon":"🚀","action":"set_theme_retro_launcher","group":"profiles","desc":"大标题启动器首页 + 分区式产品子页"},
+          {"type":"func","name":"经典风格","icon":"🧱","action":"set_theme_classic","group":"profiles","desc":"保留原始框线菜单与旧式脚本操作感"},
+          {"type":"func","name":"紧凑风格","icon":"📦","action":"set_theme_compact","group":"profiles","desc":"更紧凑的工具台布局，适合小终端窗口"},
+          {"type":"func","name":"极简风格","icon":"🪶","action":"set_theme_minimal","group":"profiles","desc":"纯文本极简视图，适合日志与兼容性场景"}
         ]
       };
     def default_menu_ui:
@@ -844,7 +844,7 @@ migrate_runtime_config_schema() {
           "title": "VPS-Kit MCP",
           "ui": {
             "subtitle": "管理 Docker、Nginx、证书、常用工具和 MCP",
-            "repo": "Repo: https://github.com/wx233Github/vps-kit-mcp",
+			"repo": "项目地址: https://github.com/wx233Github/vps-kit-mcp",
             "meta_labels": {
               "version": "版本",
               "theme": "主题",
