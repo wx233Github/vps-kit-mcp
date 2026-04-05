@@ -2150,8 +2150,10 @@ append_menu_entry_lines() {
 render_secondary_menu() {
 	local menu_name="$1"
 	local menu_title="$2"
-	local -a primary_items=("${!3}")
-	local -a func_items=("${!4}")
+	local -n primary_items_ref="$3"
+	local -n func_items_ref="$4"
+	local -a primary_items=("${primary_items_ref[@]}")
+	local -a func_items=("${func_items_ref[@]}")
 	local theme
 	theme=$(get_ui_theme)
 	local -a func_letters=(a b c d e f g h i j k l m n o p q r s t u v w x y z)
@@ -2188,8 +2190,10 @@ render_secondary_menu() {
 render_main_menu() {
 	local _menu_json="$1"
 	local menu_title="$2"
-	local -a primary_items=("${!3}")
-	local -a func_items=("${!4}")
+	local -n primary_items_ref="$3"
+	local -n func_items_ref="$4"
+	local -a primary_items=("${primary_items_ref[@]}")
+	local -a func_items=("${func_items_ref[@]}")
 	local -a lines=()
 	local subtitle
 	subtitle=$(main_menu_subtitle)
@@ -2380,10 +2384,10 @@ display_and_process_menu() {
 		done < <(jq -r '.items[] | [(if (.icon == null or .icon == "") then "NO_ICON" else .icon end), .name // "", .type // "", .action // "", (if (.desc == null or .desc == "") then "NO_DESC" else .desc end), (if (.group == null or .group == "") then "NO_GROUP" else .group end)] | @tsv' <<<"$menu_json" 2>/dev/null || true)
 
 		if [ "$CURRENT_MENU_NAME" = "MAIN_MENU" ]; then
-			render_main_menu "$menu_json" "$menu_title" primary_items[@] func_items[@]
+			render_main_menu "$menu_json" "$menu_title" primary_items func_items
 		else
 			JB_MENU_CONTEXT="submenu"
-			render_secondary_menu "$CURRENT_MENU_NAME" "$menu_title" primary_items[@] func_items[@]
+			render_secondary_menu "$CURRENT_MENU_NAME" "$menu_title" primary_items func_items
 		fi
 
 		local num_choices=${#primary_items[@]}
