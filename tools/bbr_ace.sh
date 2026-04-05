@@ -681,7 +681,7 @@ restore_configs() {
 		fi
 
 		if tar -xzf "${backup_choice}" -C "${temp_dir}"; then
-			log_info "备份文件验证通过，正在应用..."
+			log_info "已确认备份可用，正在恢复配置..."
 			rm -f "${CONFIG_FILES[@]}"
 			cp -rf "${temp_dir}"/* /
 			rm -rf "${temp_dir}"
@@ -690,12 +690,12 @@ restore_configs() {
 				systemctl restart systemd-sysctl 2>/dev/null || true
 				systemctl enable --now nic-optimize.service 2>/dev/null || true
 			fi
-			log_info "配置恢复并已应用。"
+			log_info "已完成：配置已恢复并重新应用。"
 			return 0
 		fi
 
 		rm -rf "${temp_dir}"
-		log_error "备份文件损坏或解压失败，当前配置未受影响。"
+		log_error "操作失败：备份文件损坏或解压失败，当前配置未受影响。"
 		return 1
 	done
 }
@@ -799,10 +799,10 @@ apply_profile() {
 	final_qdisc="$(sysctl -n net.core.default_qdisc 2>/dev/null || printf "unknown")"
 
 	if [[ "${final_cc}" == "${target_cc}" && "${final_qdisc}" == "${target_qdisc}" ]]; then
-		log_info "✅ 模式应用成功: ${target_cc} + ${target_qdisc}"
+		log_info "已完成：模式已应用 (${target_cc} + ${target_qdisc})"
 		printf "%s\n" "${mode_key}" >"${MODE_STATE_FILE}"
 	else
-		log_warn "模式应用后检测不一致，当前: ${final_cc} + ${final_qdisc}"
+		log_warn "需关注：模式应用后检测不一致，当前为 ${final_cc} + ${final_qdisc}"
 	fi
 }
 
@@ -835,9 +835,9 @@ audit_configs() {
 	done <"${SYSCTL_CONF}"
 
 	if [[ "${mismatches}" -eq 0 ]]; then
-		log_info "所有参数均已正确应用。"
+		log_info "已完成：所有参数均已正确应用。"
 	else
-		log_warn "${mismatches} 个参数与配置文件不匹配，可能已被其他进程覆盖。"
+		log_warn "需关注：${mismatches} 个参数与配置文件不匹配，可能已被其他进程覆盖。"
 	fi
 }
 
@@ -878,13 +878,13 @@ update_stock_kernel() {
 		die 1 "暂不支持当前系统的包管理器，请手动更新内核。"
 	fi
 
-	log_info "原版内核更新流程已完成。"
+	log_info "已完成：原版内核更新流程执行完毕。"
 	if read_required_yes "高风险操作：是否立即重启系统以加载新内核? 请输入 yes 继续: "; then
 		log_warn "用户确认重启，正在执行系统重启..."
 		sync
 		systemctl reboot || reboot
 	else
-		log_info "已取消立即重启。请稍后手动重启以使新内核生效。"
+		log_info "已取消：立即重启。请稍后手动重启以使新内核生效。"
 	fi
 }
 
@@ -895,7 +895,7 @@ disable_xanmod_repo() {
 
 	local disabled_repo="${XANMOD_REPO_FILE}.disabled.${TIMESTAMP}"
 	mv -f "${XANMOD_REPO_FILE}" "${disabled_repo}"
-	log_info "已禁用 XanMod 源: ${disabled_repo}"
+	log_info "已完成：已禁用 XanMod 源 (${disabled_repo})"
 }
 
 install_stock_kernel_apt() {

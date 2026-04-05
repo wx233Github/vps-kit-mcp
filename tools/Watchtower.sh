@@ -2249,7 +2249,7 @@ configure_watchtower() {
 	local confirm_choice
 	confirm_choice=$(_prompt_for_menu_choice "")
 	if echo "$confirm_choice" | grep -qE '^[Nn]$'; then
-		log_info "操作已取消。"
+		log_info "已取消：配置修改。"
 		return "${ERR_OK}"
 	fi
 
@@ -2275,21 +2275,20 @@ manage_tasks() {
 		case "$choice" in
 		1)
 			if _watchtower_exists; then
-				echo -e "${RED}警告: 即将停止并移除 Watchtower 容器。${NC}"
-				if confirm_action "确定要继续吗？"; then
+				if confirm_destructive_action "停止并移除 Watchtower 服务" "会删除当前容器并停用自动更新。"; then
 					_remove_watchtower_container
 					WATCHTOWER_ENABLED="false"
 					save_config
-					echo -e "${GREEN}✅ 已移除。${NC}"
+					result_success "Watchtower 服务已移除"
 				fi
-			else echo -e "${YELLOW}ℹ️ Watchtower 未运行。${NC}"; fi
+			else log_warn "Watchtower 未运行。"; fi
 			press_enter_to_continue
 			;;
 		2)
 			if _watchtower_exists; then
-				if confirm_action "确定要重建 Watchtower 吗？"; then _rebuild_watchtower; else log_info "已取消。"; fi
+				if confirm_destructive_action "重建 Watchtower 服务" "会重新创建容器并应用当前配置。"; then _rebuild_watchtower; else log_info "已取消：重建服务。"; fi
 			else
-				echo -e "${YELLOW}ℹ️ Watchtower 未运行，将执行首次部署。${NC}"
+				log_info "Watchtower 未运行，将执行首次部署。"
 				_rebuild_watchtower
 			fi
 			press_enter_to_continue
