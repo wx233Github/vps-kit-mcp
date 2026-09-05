@@ -358,6 +358,14 @@ $(_render_proxy_location_block "^~ ${mcp_path}/" "$proxy_pass_target" "$mcp_toke
 	fi
 	get_vps_ip
 
+	# http2 写法按 nginx 版本自适应：>= 1.25.1 用独立指令，否则用旧 listen 写法；版本未知时回退旧写法（新旧都兼容）
+	local http2_listen_opt="" http2_directive=""
+	if _nginx_supports_http2_directive; then
+		http2_directive="    http2 on;"
+	else
+		http2_listen_opt=" http2"
+	fi
+
 	local temp_conf
 	temp_conf=$(mktemp "${conf}.tmp.XXXXXX")
 	cat >"$temp_conf" <<EOF
@@ -368,8 +376,8 @@ server {
     location / { return 301 https://\$host\$request_uri; }
 }
 server {
-    listen 443 ssl; $([[ -n "$VPS_IPV6" ]] && printf '%s' "listen [::]:443 ssl;")
-    http2 on;
+    listen 443 ssl${http2_listen_opt}; $([[ -n "$VPS_IPV6" ]] && printf '%s' "listen [::]:443 ssl${http2_listen_opt};")
+${http2_directive}
     server_name ${domain};
     ssl_certificate ${cert}; ssl_certificate_key ${key};
     ssl_protocols TLSv1.2 TLSv1.3;
