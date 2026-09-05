@@ -421,6 +421,31 @@ _nginx_http2_warn_line() {
 	printf '%b' "${BRIGHT_RED}⚠ 当前 Nginx 版本不支持 http2 on; 建议升级或改用 listen 443 ssl http2${NC}"
 }
 
+_nginx_latest_upstream_version() {
+	local cache_file="${NGINX_UPSTREAM_VERSION_CACHE:-/tmp/.nginx_latest_version.cache}"
+	local ttl="${NGINX_UPSTREAM_VERSION_TTL:-86400}"
+	local now mtime
+	now=$(date +%s)
+	mtime=$(stat -c %Y "$cache_file" 2>/dev/null || printf '0')
+	if [ -f "$cache_file" ] && [ $((now - mtime)) -lt "$ttl" ]; then
+		cat "$cache_file" 2>/dev/null
+		return 0
+	fi
+	local latest
+	latest=$(curl -fsSL --connect-timeout 5 --max-time 10 https://nginx.org/en/download.html 2>/dev/null | grep -oE 'nginx-[0-9]+\.[0-9]+\.[0-9]+' | head -n1 | cut -d- -f2)
+	if [ -n "$latest" ]; then
+		printf '%s' "$latest" >"$cache_file" 2>/dev/null || true
+		printf '%s' "$latest"
+	fi
+}
+
+_nginx_new_version_line() {
+	local current="${1:-}" latest="${2:-}"
+	if [ -z "$latest" ] || [ -z "$current" ] || [ "$current" = "unknown" ]; then return 0; fi
+	if _version_ge "$current" "$latest"; then return 0; fi
+	printf '%b' "${BRIGHT_YELLOW}⬆ 发现 Nginx 新版本 ${latest}（当前 ${current}），可通过菜单「升级 Nginx」更新${NC}"
+}
+
 _draw_dashboard() {
 	_generate_op_id
 	local nginx_v="unknown"
@@ -444,6 +469,8 @@ _draw_dashboard() {
 	local line2="运行 ${uptime_raw} | HTTP ${count} | TCP ${tcp_count} | 告警 ${warn_count}"
 	local line3=""
 	line3=$(_nginx_http2_warn_line "$nginx_v")
+	local line4=""
+	line4=$(_nginx_new_version_line "$nginx_v" "$(_nginx_latest_upstream_version)")
 
 	printf '%b' "\n"
 	printf '%b' "${BOLD}Nginx${NC}\n"
@@ -451,6 +478,9 @@ _draw_dashboard() {
 	printf '%b' "${line2}\n"
 	if [ -n "$line3" ]; then
 		printf '%b' "${line3}\n"
+	fi
+	if [ -n "$line4" ]; then
+		printf '%b' "${line4}\n"
 	fi
 	printf '%b' "${GREEN}$(generate_line 68 "─")${NC}\n"
 }
