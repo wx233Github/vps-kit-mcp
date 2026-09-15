@@ -212,7 +212,7 @@ main_menu() {
 					"○ 10. 🤖 Telegram 通知    配置机器人通知" \
 					"○ 11. 🧱 配置模板中心     管理 Block 和 Site 模板" \
 					"! 12. ⬆️ 升级 Nginx       从官方源升级" \
-					"○ 13. 🩹 修复目录冲突     归还 Nginx 临时目录权限"
+					"○ 13. 🩹 修复目录冲突     共享组根治多实例权限冲突"
 			else
 				ui_append_manual_page_block menu_lines "当前状态" \
 					"${config_line}" \
@@ -231,7 +231,7 @@ main_menu() {
 					"○ 10. 🤖 Telegram 通知    配置机器人通知" \
 					"○ 11. 🧱 配置模板中心     管理 Block 和 Site 模板" \
 					"! 12. ⬆️ 升级 Nginx       从官方源升级" \
-					"○ 13. 🩹 修复目录冲突     归还 Nginx 临时目录权限"
+					"○ 13. 🩹 修复目录冲突     共享组根治多实例权限冲突"
 			fi
 			_render_menu "Nginx 管理" "${menu_lines[@]}"
 		else

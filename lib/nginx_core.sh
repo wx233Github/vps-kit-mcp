@@ -807,6 +807,9 @@ mkdir() { _dry_run_exec command mkdir "$@"; }
 touch() { _dry_run_exec command touch "$@"; }
 chmod() { _dry_run_exec command chmod "$@"; }
 chown() { _dry_run_exec command chown "$@"; }
+chgrp() { _dry_run_exec command chgrp "$@"; }
+groupadd() { _dry_run_exec command groupadd "$@"; }
+usermod() { _dry_run_exec command usermod "$@"; }
 systemctl() { _dry_run_exec command systemctl "$@"; }
 apt-get() { _dry_run_exec command apt-get "$@"; }
 tar() { _dry_run_exec command tar "$@"; }

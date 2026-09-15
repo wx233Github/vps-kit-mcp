@@ -582,29 +582,37 @@ _nginx_effective_temp_paths() {
 	done
 }
 
-# 判断用户是否可写某目录（== 属主且 u+w，或属组且 g+w）。
+# 判断用户是否可写某目录（root，或属主 u+w，或属组且在用户全部组内且 g+w）。
+# 属组判定必须覆盖「附加组」：`id -g` 只给主组，共享组是附加组时会误判为不可写，
+# 进而把已修好的目录重复改写。全局 IFS 被设为 $'\n\t'，所以按行拆分而非依赖空格。
 _path_writable_by_user() {
 	local dir="${1:-}" user_name="${2:-}"
 	[ -n "$dir" ] && [ -d "$dir" ] && [ -n "$user_name" ] || return 1
-	local owner group mode uid gid
-	owner=$(stat -c '%U' "$dir" 2>/dev/null || true)
-	group=$(stat -c '%G' "$dir" 2>/dev/null || true)
+	local mode=""
 	mode=$(stat -c '%a' "$dir" 2>/dev/null || true)
 	[ -n "$mode" ] || return 1
-	if [ "$owner" = "$user_name" ]; then
-		[ $((8#${mode: -3:1} & 2)) -ne 0 ]
-		return $?
-	fi
+
+	local uid=""
 	uid=$(id -u "$user_name" 2>/dev/null || true)
-	gid=$(id -g "$user_name" 2>/dev/null || true)
-	if [ -n "$uid" ] && [ "$(stat -c '%u' "$dir" 2>/dev/null)" = "$uid" ]; then
+	# root 不受文件权限位限制（CAP_DAC_OVERRIDE）
+	if [ "$uid" = "0" ]; then return 0; fi
+
+	local owner_uid="" dir_gid=""
+	owner_uid=$(stat -c '%u' "$dir" 2>/dev/null || true)
+	dir_gid=$(stat -c '%g' "$dir" 2>/dev/null || true)
+	if [ -n "$uid" ] && [ "$owner_uid" = "$uid" ]; then
 		[ $((8#${mode: -3:1} & 2)) -ne 0 ]
 		return $?
 	fi
-	if [ -n "$gid" ] && [ "$(stat -c '%g' "$dir" 2>/dev/null)" = "$gid" ]; then
-		[ $((8#${mode: -2:1} & 2)) -ne 0 ]
-		return $?
-	fi
+
+	local g=""
+	while IFS= read -r g; do
+		[ -n "$g" ] || continue
+		if [ "$g" = "$dir_gid" ]; then
+			[ $((8#${mode: -2:1} & 2)) -ne 0 ]
+			return $?
+		fi
+	done < <(id -G "$user_name" 2>/dev/null | tr ' ' '\n')
 	return 1
 }
 
@@ -631,8 +639,6 @@ _nginx_multi_instance_conflicts() {
 	local -a pids=() confs=() users=()
 	local m="" cmd="" conf="" user_name="" pid_file=""
 	local -A pidfile_owners=()
-	local -A dir_seen=()
-	local -A dir_user=()
 	local reason_parts=()
 	local bad="false" warn="false"
 
@@ -658,28 +664,33 @@ _nginx_multi_instance_conflicts() {
 		fi
 	done
 
-	# 只有「共用同一目录 + 身份不同」才会互相 chown 打架
-	local i="" tag="" path="" src="" rp=""
+	# 同一目录被多个实例使用时，只有当「有实例确实写不进」才算异常；
+	# 都已可写（例如已挂共享组）就不报警，否则根治后仍会持续误报。
+	local i="" tag="" path="" src="" rp="" du=""
+	local -A dir_path=()
+	local -A dir_users=()
 	for i in "${!pids[@]}"; do
 		while IFS=$'\t' read -r tag path src; do
 			[ -n "$path" ] || continue
 			[ -d "$path" ] || continue
 			rp=$(_nginx_realpath "$path")
-			if [ -n "${dir_user[$rp]:-}" ] && [ "${dir_user[$rp]}" != "${users[$i]}" ]; then
-				warn="true"
-				reason_parts+=("实例 ${pids[$i]}(${users[$i]}) 与 ${dir_user[$rp]} 共用临时目录 ${path}")
-			fi
-			if [ -z "${dir_user[$rp]:-}" ]; then
-				dir_user["$rp"]="${users[$i]}"
-			fi
-			if [ "${dir_seen[$rp]:-}" != "checked" ]; then
-				dir_seen["$rp"]="checked"
-				if ! _path_writable_by_user "$path" "${users[$i]}"; then
-					bad="true"
-					reason_parts+=("${users[$i]} 无权写入 ${path}（当前 $(stat -c '%U:%G %a' "$path" 2>/dev/null)）")
-				fi
-			fi
+			dir_path["$rp"]="$path"
+			case "${dir_users[$rp]:-}" in
+			*"${users[$i]}"*) ;;
+			*) dir_users["$rp"]="${dir_users[$rp]:-}${users[$i]}"$'\n' ;;
+			esac
 		done < <(_nginx_effective_temp_paths "${confs[$i]}")
+	done
+
+	for rp in "${!dir_path[@]}"; do
+		path="${dir_path[$rp]}"
+		while IFS= read -r du; do
+			[ -n "$du" ] || continue
+			if ! _path_writable_by_user "$path" "$du"; then
+				bad="true"
+				reason_parts+=("${du} 无权写入 ${path}（当前 $(stat -c '%U:%G %a' "$path" 2>/dev/null)）")
+			fi
+		done < <(printf '%s' "${dir_users[$rp]}")
 	done
 
 	local reason=""
@@ -750,8 +761,43 @@ _nginx_temp_path_allowed() {
 	return 1
 }
 
-# 修复：把冲突的临时目录归属还给写不进去的那个 worker 用户。
-# 只 chown/chmod 目录本身（不递归），且仅在「当前身份确实写不进」时执行。
+# 共享组名：多个 nginx 实例的 worker 用户都加入它，临时目录挂到它并给组写权限。
+# 这样无论哪个实例把自己的 worker 身份 chown 上来，其余实例仍能通过属组写入。
+_nginx_shared_group_name() {
+	printf '%s\n' "${NGINX_SHARED_GROUP:-nginx-shared}"
+}
+
+# 取系统管理命令的绝对路径。脚本顶部把 PATH 固定为不含 /usr/sbin 的值，
+# 而 groupadd/usermod 在多数发行版上只装到 /usr/sbin，直接调用会 command not found。
+_nginx_sysbin() {
+	local name="${1:-}"
+	[ -n "$name" ] || return 1
+	local p=""
+	for p in /usr/sbin/"$name" /sbin/"$name" /usr/bin/"$name" /bin/"$name"; do
+		if [ -x "$p" ]; then printf '%s\n' "$p"; return 0; fi
+	done
+	return 1
+}
+
+# 找出拉起某个 master 的 systemd 服务（如 sing-box.service），找不到返回 1。
+_nginx_master_owning_service() {
+	local conf_path="${1:-}"
+	[ -n "$conf_path" ] || return 1
+	command -v systemctl >/dev/null 2>&1 || return 1
+	local unit="" pres=""
+	while read -r unit; do
+		[ -n "$unit" ] || continue
+		pres=$(systemctl show -p ExecStartPre --value "$unit" 2>/dev/null || true)
+		case "$pres" in
+		*"$conf_path"*) printf '%s\n' "$unit"; return 0 ;;
+		esac
+	done < <(systemctl list-units --type=service --plain --no-legend --all 2>/dev/null | awk '{print $1}')
+	return 1
+}
+
+# 根治：不再"把属主抢回来"，而是让所有实例的 worker 用户共享一个组，
+# 目录 chgrp 到该组 + 2770（setgid）。nginx 只 chown 属主、从不改属组，
+# 因此竞争对象被移除，不需要反复修复，也不会被上游升级还原 user 指令后复发。
 _fix_nginx_temp_path_conflicts() {
 	local -a masters=()
 	local master=""
@@ -764,10 +810,10 @@ _fix_nginx_temp_path_conflicts() {
 		return 1
 	fi
 
-	local m="" cmd="" conf="" user_name="" tag="" path="" src=""
-	local -A target_user=()
-	local -A repair=()
-	local -A reason=()
+	local m="" cmd="" conf="" user_name="" tag="" path="" src="" rp=""
+	local -A dir_path=()
+	local -A dir_users=()
+	local -A user_conf=()
 
 	for m in "${masters[@]}"; do
 		cmd=$(_read_proc_cmdline "$m")
@@ -775,59 +821,125 @@ _fix_nginx_temp_path_conflicts() {
 		[ -n "$conf" ] || conf="/etc/nginx/nginx.conf"
 		user_name=$(_nginx_effective_worker_user "$m" "$conf" 2>/dev/null || true)
 		[ -n "$user_name" ] || continue
+		user_conf["$user_name"]="$conf"
 		while IFS=$'\t' read -r tag path src; do
 			[ -n "$path" ] || continue
 			[ -d "$path" ] || continue
-			local rp=""
 			rp=$(_nginx_realpath "$path")
-			# 同一目录被不同身份的实例共用时无法两端同时满足，交由用户决策
-			if [ -n "${target_user[$rp]:-}" ] && [ "${target_user[$rp]}" != "$user_name" ]; then
-				reason[$rp]="多实例共用（${target_user[$rp]} / ${user_name}），无法自动修复"
-				repair[$rp]="skip"
-				continue
-			fi
-			target_user[$rp]="$user_name"
-			if ! _path_writable_by_user "$path" "$user_name"; then
-				repair[$rp]="fix"
-				reason[$rp]="${user_name} 无权写入（当前 $(stat -c '%U:%G %a' "$path" 2>/dev/null)）"
-			fi
+			dir_path["$rp"]="$path"
+			case "${dir_users[$rp]:-}" in
+			*"${user_name}"*) ;;
+			*) dir_users["$rp"]="${dir_users[$rp]:-}${user_name}"$'\n' ;;
+			esac
 		done < <(_nginx_effective_temp_paths "$conf")
 	done
 
-	local rp="" acted=0 skipped=0
-	for rp in "${!repair[@]}"; do
-		case "${repair[$rp]}" in
-		fix)
-			if _nginx_temp_path_allowed "$rp"; then
-				if chown "${target_user[$rp]}" "$rp" 2>/dev/null; then
-					chmod u+rwx "$rp" 2>/dev/null || true
-					log_message SUCCESS "已修复临时目录归属: ${rp} -> ${target_user[$rp]}"
-					acted=$((acted + 1))
-				else
-					log_message ERROR "修改归属失败: ${rp}"
-					skipped=$((skipped + 1))
-				fi
-			else
-				log_message ERROR "该路径不在任何 Nginx 主配置的 temp_path 声明中，已跳过: ${rp}"
-				skipped=$((skipped + 1))
-			fi
-			;;
-		skip)
-			log_message WARN "需人工处理 (${reason[$rp]}): ${rp}"
-			skipped=$((skipped + 1))
-			;;
-		esac
-	done
-
-	if [ "$acted" -eq 0 ] && [ "$skipped" -eq 0 ]; then
-		log_message INFO "临时目录权限均正常，无需修复。"
+	if [ "${#dir_path[@]}" -eq 0 ]; then
+		log_message INFO "未发现任何生效的临时目录，无需修复。"
 		return 0
 	fi
-	if [ "$skipped" -gt 0 ]; then
+
+	local group=""
+	group=$(_nginx_shared_group_name)
+	local bin_groupadd="" bin_usermod=""
+	bin_groupadd=$(_nginx_sysbin groupadd 2>/dev/null || true)
+	bin_usermod=$(_nginx_sysbin usermod 2>/dev/null || true)
+	if ! getent group "$group" >/dev/null 2>&1; then
+		if [ -z "$bin_groupadd" ]; then
+			log_message ERROR "找不到 groupadd，无法创建共享组 ${group}"
+			return 1
+		fi
+		if ! "$bin_groupadd" -r "$group" 2>/dev/null; then
+			log_message ERROR "创建共享组失败: ${group}"
+			return 1
+		fi
+		log_message SUCCESS "已创建共享组: ${group}"
+	fi
+
+	# 收集需要入组的非 root 用户（root 不受权限位限制）
+	local need_restart="false" u=""
+	for u in "${!user_conf[@]}"; do
+		[ "$(id -u "$u" 2>/dev/null || printf x)" = "0" ] && continue
+		if id -nG "$u" 2>/dev/null | tr ' ' '\n' | grep -qx "$group"; then continue; fi
+		if [ -z "$bin_usermod" ]; then
+			log_message ERROR "找不到 usermod，无法将 ${u} 加入共享组"
+			continue
+		fi
+		if "$bin_usermod" -aG "$group" "$u" 2>/dev/null; then
+			log_message SUCCESS "已将 ${u} 加入共享组 ${group}（需重启对应服务才生效）"
+			need_restart="true"
+		else
+			log_message ERROR "将 ${u} 加入共享组失败"
+		fi
+	done
+
+	local acted=0 skipped=0 cur_group="" cur_mode=""
+	for rp in "${!dir_path[@]}"; do
+		path="${dir_path[$rp]}"
+		if ! _nginx_temp_path_allowed "$rp"; then
+			log_message ERROR "该路径不在任何 Nginx 主配置的 temp_path 声明中，已跳过: ${rp}"
+			skipped=$((skipped + 1))
+			continue
+		fi
+		# 注意：不能额外用 _require_safe_path 把关——SAFE_PATH_ROOTS 不含
+		# /var/lib/nginx，会把这里全部挡住，使修复静默无效。
+		# 授权边界由 _nginx_temp_path_allowed（只接受主配置真实声明的路径）承担。
+		cur_group=$(stat -c '%G' "$path" 2>/dev/null || true)
+		cur_mode=$(stat -c '%a' "$path" 2>/dev/null || true)
+		if [ "$cur_group" = "$group" ] && [ "$cur_mode" = "2770" ]; then
+			continue
+		fi
+		if chgrp "$group" "$path" 2>/dev/null && chmod 2770 "$path" 2>/dev/null; then
+			log_message SUCCESS "已挂共享组: ${path} （${cur_group}:${cur_mode} -> ${group}:2770）"
+			acted=$((acted + 1))
+		else
+			log_message ERROR "设置共享组失败: ${path}"
+			skipped=$((skipped + 1))
+		fi
+	done
+
+	# 入组后运行中的 worker 不会自动获得新附加组，必须重启才能生效
+	if [ "$need_restart" = "true" ]; then
+		if systemctl restart nginx 2>/dev/null; then
+			log_message SUCCESS "已重启 nginx 以应用新附加组。"
+		else
+			log_message WARN "nginx 重启失败，请手动执行 systemctl restart nginx。"
+		fi
+	fi
+
+	# 其他 master 的 worker 也要拿到新组；它们的 master 由别的服务拉起，需要重启那个服务
+	local svc=""
+	for u in "${!user_conf[@]}"; do
+		[ "$(id -u "$u" 2>/dev/null || printf x)" = "0" ] && continue
+		conf="${user_conf[$u]}"
+		[ "$conf" = "/etc/nginx/nginx.conf" ] && continue
+		svc=$(_nginx_master_owning_service "$conf" 2>/dev/null || true)
+		if [ -n "$svc" ]; then
+			log_message WARN "${u} 还被 ${svc} 的实例使用（配置 ${conf}），需重启它才能应用新附加组。"
+		else
+			log_message WARN "${u} 还被配置 ${conf} 的实例使用，请重启对应服务以应用新附加组。"
+		fi
+	done
+
+	# 复核：每个目录对每个使用者都应可写
+	local bad=0
+	for rp in "${!dir_path[@]}"; do
+		while IFS= read -r u; do
+			[ -n "$u" ] || continue
+			_path_writable_by_user "${dir_path[$rp]}" "$u" || {
+				log_message ERROR "仍不可写: ${dir_path[$rp]} <- ${u}（当前 $(stat -c '%U:%G %a' "${dir_path[$rp]}" 2>/dev/null)）"
+				bad=$((bad + 1))
+			}
+		done < <(printf '%s' "${dir_users[$rp]}")
+	done
+
+	if [ "$acted" -eq 0 ] && [ "$skipped" -eq 0 ] && [ "$need_restart" = "false" ]; then
+		log_message INFO "临时目录已挂共享组，无需变更。"
+	fi
+	if [ "$skipped" -gt 0 ] || [ "$bad" -gt 0 ]; then
 		return 1
 	fi
-	# 目录归属变更对已 fork 的 worker 立即生效（每次落盘重新 open），无需 reload
-	log_message INFO "修复完成：处理 ${acted} 项。目录归属变更即时生效，无需重载 Nginx。"
+	log_message INFO "修复完成：调整 ${acted} 个目录，共享组 ${group}。"
 	return 0
 }
 
