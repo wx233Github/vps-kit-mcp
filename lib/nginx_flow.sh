@@ -211,7 +211,8 @@ main_menu() {
 					"○ 9. 💾 备份与恢复        备份、还原和配置重建" \
 					"○ 10. 🤖 Telegram 通知    配置机器人通知" \
 					"○ 11. 🧱 配置模板中心     管理 Block 和 Site 模板" \
-					"! 12. ⬆️ 升级 Nginx       从官方源升级"
+					"! 12. ⬆️ 升级 Nginx       从官方源升级" \
+					"○ 13. 🩹 修复目录冲突     归还 Nginx 临时目录权限"
 			else
 				ui_append_manual_page_block menu_lines "当前状态" \
 					"${config_line}" \
@@ -229,7 +230,8 @@ main_menu() {
 					"○ 9. 💾 备份与恢复        备份、还原和配置重建" \
 					"○ 10. 🤖 Telegram 通知    配置机器人通知" \
 					"○ 11. 🧱 配置模板中心     管理 Block 和 Site 模板" \
-					"! 12. ⬆️ 升级 Nginx       从官方源升级"
+					"! 12. ⬆️ 升级 Nginx       从官方源升级" \
+					"○ 13. 🩹 修复目录冲突     归还 Nginx 临时目录权限"
 			fi
 			_render_menu "Nginx 管理" "${menu_lines[@]}"
 		else
@@ -252,10 +254,11 @@ main_menu() {
 			printf '%b' " ○ 10. Telegram 通知\n"
 			printf '%b' " ○ 11. 配置模板中心\n"
 			printf '%b' " ! 12. 升级 Nginx\n"
+			printf '%b' " ○ 13. 修复目录冲突\n"
 			printf '%b' "\n"
 		fi
 		local c
-		if ! c=$(prompt_menu_choice "1-12" "true"); then
+		if ! c=$(prompt_menu_choice "1-13" "true"); then
 			exit 10
 		fi
 		case "$c" in
@@ -298,6 +301,10 @@ main_menu() {
 		11) _manage_nginx_template_center ;;
 		12)
 			upgrade_nginx_official_repo
+			press_enter_to_continue
+			;;
+		13)
+			_fix_nginx_temp_path_conflicts
 			press_enter_to_continue
 			;;
 		"") exit 10 ;;

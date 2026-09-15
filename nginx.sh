@@ -471,6 +471,8 @@ _draw_dashboard() {
 	line3=$(_nginx_http2_warn_line "$nginx_v")
 	local line4=""
 	line4=$(_nginx_new_version_line "$nginx_v" "$(_nginx_latest_upstream_version)")
+	local line5=""
+	line5=$(_nginx_multi_instance_line)
 
 	printf '%b' "\n"
 	printf '%b' "${BOLD}Nginx${NC}\n"
@@ -482,7 +484,351 @@ _draw_dashboard() {
 	if [ -n "$line4" ]; then
 		printf '%b' "${line4}\n"
 	fi
+	if [ -n "$line5" ]; then
+		printf '%b' "${line5}\n"
+	fi
 	printf '%b' "${GREEN}$(generate_line 68 "─")${NC}\n"
+}
+
+# --- 多实例体检 ---------------------------------------------------------------
+# 背景：nginx 启动/reload 时会把配置里各 temp_path 目录 chown 成 `user` 指令指定的
+# 用户。若同机存在多个 master（例如 sing-box 自带一份），且它们共用同一 pid 文件或
+# 同一批 temp_path，后 reload 的一方会把目录改成自己的身份，另一方的 worker 随即
+# 无法落盘请求体，表现为 >8KB 的 POST/PUT 返回 nginx 自带的 HTML 500。
+# 本组函数只做「检测与报告」，不修改任何系统状态。
+
+_list_nginx_master_pids() {
+	local pid="" cmd=""
+	for pid in $(pgrep -x nginx 2>/dev/null || true); do
+		cmd=$(_read_proc_cmdline "$pid")
+		case "$cmd" in
+		*"nginx: master process"*) printf '%s\n' "$pid" ;;
+		esac
+	done
+}
+
+# 读进程 cmdline 为单行。进程已退出时返回空且不产生任何 stderr：
+# 直接 `< /proc/PID/cmdline` 在重定向阶段就报错，而 `cat` 会把 NUL 字节
+# 带进命令替换触发 bash 警告，因此统一用 tr 并整组抑制 stderr。
+_read_proc_cmdline() {
+	local pid="${1:-}"
+	[ -n "$pid" ] || return 0
+	{ tr '\0' ' ' <"/proc/${pid}/cmdline"; } 2>/dev/null || true
+}
+
+# 取某个 master 的实际 worker 用户：优先读子进程真实 uid，读不到再回退解析配置。
+_nginx_effective_worker_user() {
+	local master_pid="${1:-}" conf="${2:-}"
+	local worker="" uid=""
+	for worker in $(pgrep -P "$master_pid" 2>/dev/null || true); do
+		uid=$(awk '/^Uid:/{print $2}' "/proc/${worker}/status" 2>/dev/null || true)
+		if [ -n "$uid" ]; then
+			id -nu "$uid" 2>/dev/null || printf '%s' "$uid"
+			return 0
+		fi
+	done
+	# 无 worker（尚未 fork/已在退出）时回退到配置解析
+	if [ -n "$conf" ] && [ -f "$conf" ]; then
+		local u=""
+		u=$(awk '{ line=$0; sub(/#.*/, "", line); if (match(line, /^[[:space:]]*user[[:space:]]+[^;]+;/)) { sub(/^[[:space:]]*user[[:space:]]+/, "", line); sub(/;.*/, "", line); sub(/[[:space:]].*/, "", line); print line; exit } }' "$conf" 2>/dev/null || true)
+		if [ -n "$u" ]; then printf '%s\n' "$u"; return 0; fi
+	fi
+	return 1
+}
+
+# 注意：脚本顶部会把 PATH 固定为不含 /usr/sbin 的值，所以这里必须走 _find_nginx_bin。
+_nginx_bin_or_empty() {
+	local bin=""
+	bin=$(_find_nginx_bin 2>/dev/null || true)
+	if [ -z "$bin" ]; then
+		bin=$(command -v nginx 2>/dev/null || true)
+	fi
+	if [ -n "$bin" ] && [ -x "$bin" ]; then printf '%s\n' "$bin"; fi
+}
+
+_nginx_compiled_temp_paths() {
+	local bin=""
+	bin=$(_nginx_bin_or_empty)
+	[ -n "$bin" ] || return 0
+	"$bin" -V 2>&1 | tr ' ' '\n' | awk -F= '/^--http-.*-temp-path=/{ name=$1; sub(/^--http-/, "", name); sub(/-temp-path$/, "", name); gsub(/-/, "_", name); print name "\t" $2 }'
+}
+
+# 输出 "tag<TAB>路径<TAB>来源(explicit|compiled)"。
+# 遍历编译默认值与显式配置的并集：两者都可能单独缺失（不同发行版的 -V 输出
+# 未必带 --http-*-temp-path，而配置里也可能只写了其中几个），只按其中一个
+# 列表驱动会漏报路径。
+_nginx_effective_temp_paths() {
+	local conf="${1:-}" directive="" name="" value=""
+	local -A explicit=()
+	local -A emitted=()
+	if [ -n "$conf" ] && [ -f "$conf" ]; then
+		while IFS=$'\t' read -r directive value; do
+			[ -n "$directive" ] || continue
+			explicit["${directive%_temp_path}"]="${value%/}"
+		done < <(awk '{ line=$0; sub(/#.*/, "", line); if (match(line, /^[[:space:]]*[a-z_]*_temp_path[[:space:]]+[^;]+;/)) { sub(/^[[:space:]]*/, "", line); sub(/;.*/, "", line); gsub(/[[:space:]]+/, " ", line); p=index(line, " "); if (p>0) print substr(line,1,p-1) "\t" substr(line,p+1) } }' "$conf" 2>/dev/null || true)
+	fi
+	while IFS=$'\t' read -r name value; do
+		[ -n "$name" ] || continue
+		emitted["$name"]="1"
+		if [ -n "${explicit[$name]:-}" ]; then
+			printf '%s\t%s\t%s\n' "$name" "${explicit[$name]}" "explicit"
+		else
+			printf '%s\t%s\t%s\n' "$name" "${value%/}" "compiled"
+		fi
+	done < <(_nginx_compiled_temp_paths)
+	for name in "${!explicit[@]}"; do
+		[ -n "${emitted[$name]:-}" ] && continue
+		printf '%s\t%s\t%s\n' "$name" "${explicit[$name]}" "explicit"
+	done
+}
+
+# 判断用户是否可写某目录（== 属主且 u+w，或属组且 g+w）。
+_path_writable_by_user() {
+	local dir="${1:-}" user_name="${2:-}"
+	[ -n "$dir" ] && [ -d "$dir" ] && [ -n "$user_name" ] || return 1
+	local owner group mode uid gid
+	owner=$(stat -c '%U' "$dir" 2>/dev/null || true)
+	group=$(stat -c '%G' "$dir" 2>/dev/null || true)
+	mode=$(stat -c '%a' "$dir" 2>/dev/null || true)
+	[ -n "$mode" ] || return 1
+	if [ "$owner" = "$user_name" ]; then
+		[ $((8#${mode: -3:1} & 2)) -ne 0 ]
+		return $?
+	fi
+	uid=$(id -u "$user_name" 2>/dev/null || true)
+	gid=$(id -g "$user_name" 2>/dev/null || true)
+	if [ -n "$uid" ] && [ "$(stat -c '%u' "$dir" 2>/dev/null)" = "$uid" ]; then
+		[ $((8#${mode: -3:1} & 2)) -ne 0 ]
+		return $?
+	fi
+	if [ -n "$gid" ] && [ "$(stat -c '%g' "$dir" 2>/dev/null)" = "$gid" ]; then
+		[ $((8#${mode: -2:1} & 2)) -ne 0 ]
+		return $?
+	fi
+	return 1
+}
+
+_nginx_realpath() {
+	local p="${1:-}"
+	[ -n "$p" ] || return 1
+	realpath -m "$p" 2>/dev/null || printf '%s\n' "$p"
+}
+
+# 输出 "异常|需关注|正常" <TAB> 原因。无 <8KB 用户请求体上传的场景不会立刻暴露，
+# 因此这里按「写不通=异常、共用=需关注」分级。
+_nginx_multi_instance_conflicts() {
+	local -a masters=()
+	local master=""
+	while IFS= read -r master; do
+		[ -n "$master" ] && masters+=("$master")
+	done < <(_list_nginx_master_pids)
+
+	if [ "${#masters[@]}" -eq 0 ]; then
+		printf '%s\t%s\n' "正常" ""
+		return 0
+	fi
+
+	local -a pids=() confs=() users=()
+	local m="" cmd="" conf="" user_name="" pid_file=""
+	local -A pidfile_owners=()
+	local -A dir_seen=()
+	local -A dir_user=()
+	local reason_parts=()
+	local bad="false" warn="false"
+
+	for m in "${masters[@]}"; do
+		cmd=$(_read_proc_cmdline "$m")
+		conf=$(_extract_nginx_conf_from_master_cmd "$cmd" 2>/dev/null || true)
+		if [ -z "$conf" ]; then
+			# 未显式 -c 时的编译期默认值，与 `nginx -T` 的实际行为一致
+			conf="/etc/nginx/nginx.conf"
+		fi
+		user_name=$(_nginx_effective_worker_user "$m" "$conf" 2>/dev/null || true)
+		[ -n "$user_name" ] || user_name="(未知)"
+		pid_file=$(_get_nginx_pid_file_from_conf "$conf" 2>/dev/null || true)
+		[ -n "$pid_file" ] || pid_file="/run/nginx.pid"
+		pids+=("$m"); confs+=("$conf"); users+=("$user_name")
+		local rp=""
+		rp=$(_nginx_realpath "$pid_file")
+		if [ -n "${pidfile_owners[$rp]:-}" ]; then
+			warn="true"
+			reason_parts+=("多个实例共用 pid 文件 ${rp}（${pidfile_owners[$rp]} 与 ${m}）")
+		else
+			pidfile_owners["$rp"]="$m"
+		fi
+	done
+
+	# 只有「共用同一目录 + 身份不同」才会互相 chown 打架
+	local i="" tag="" path="" src="" rp=""
+	for i in "${!pids[@]}"; do
+		while IFS=$'\t' read -r tag path src; do
+			[ -n "$path" ] || continue
+			[ -d "$path" ] || continue
+			rp=$(_nginx_realpath "$path")
+			if [ -n "${dir_user[$rp]:-}" ] && [ "${dir_user[$rp]}" != "${users[$i]}" ]; then
+				warn="true"
+				reason_parts+=("实例 ${pids[$i]}(${users[$i]}) 与 ${dir_user[$rp]} 共用临时目录 ${path}")
+			fi
+			if [ -z "${dir_user[$rp]:-}" ]; then
+				dir_user["$rp"]="${users[$i]}"
+			fi
+			if [ "${dir_seen[$rp]:-}" != "checked" ]; then
+				dir_seen["$rp"]="checked"
+				if ! _path_writable_by_user "$path" "${users[$i]}"; then
+					bad="true"
+					reason_parts+=("${users[$i]} 无权写入 ${path}（当前 $(stat -c '%U:%G %a' "$path" 2>/dev/null)）")
+				fi
+			fi
+		done < <(_nginx_effective_temp_paths "${confs[$i]}")
+	done
+
+	local reason=""
+	if [ "${#reason_parts[@]}" -gt 0 ]; then
+		local total="${#reason_parts[@]}" shown=()
+		local p=""
+		for p in "${reason_parts[@]}"; do
+			[ "${#shown[@]}" -ge 3 ] && break
+			shown+=("$p")
+		done
+		reason=$(printf '%s；' "${shown[@]}")
+		reason="${reason%；}"
+		if [ "$total" -gt "${#shown[@]}" ]; then
+			reason="${reason}；等共 ${total} 项"
+		fi
+	fi
+	if [ "$bad" = "true" ]; then
+		printf '%s\t%s\n' "异常" "$reason"
+		return 0
+	fi
+	if [ "$warn" = "true" ]; then
+		printf '%s\t%s\n' "需关注" "$reason"
+		return 0
+	fi
+	printf '%s\t%s\n' "正常" "${#masters[@]} 个实例，无共用冲突"
+}
+
+# 汇总「有则提示」的一行，供仪表盘/菜单使用；无问题时为空。
+_nginx_multi_instance_line() {
+	local status="" reason=""
+	IFS=$'\t' read -r status reason < <(_nginx_multi_instance_conflicts)
+	if [ "$status" = "异常" ]; then
+		printf '%b' "${BRIGHT_RED}⚠ Nginx 多实例冲突：${reason}${NC}"
+	elif [ "$status" = "需关注" ]; then
+		printf '%b' "${BRIGHT_YELLOW}⚠ Nginx 多实例需关注：${reason}${NC}"
+	fi
+}
+
+_nginx_temp_path_allowed() {
+	# temp_path 可以落在任意位置（编译默认值、自定义主配置都可能指向 /tmp 或
+	# 其它挂载点），所以不能沿用 SAFE_PATH_ROOTS。这里的边界是：只接受
+	# 本机 nginx 主配置里真实出现过的 temp_path 目录，不接受任意输入。
+	local target="${1:-}"
+	[ -n "$target" ] || return 1
+	if ! _is_safe_path "$target"; then return 1; fi
+	local real_target=""
+	real_target=$(realpath -m "$target" 2>/dev/null || true)
+	[ -n "$real_target" ] || return 1
+
+	local -a masters=()
+	local master=""
+	while IFS= read -r master; do
+		[ -n "$master" ] && masters+=("$master")
+	done < <(_list_nginx_master_pids)
+
+	local m="" cmd="" conf="" tag="" path="" src="" real_path=""
+	for m in "${masters[@]}"; do
+		cmd=$(_read_proc_cmdline "$m")
+		conf=$(_extract_nginx_conf_from_master_cmd "$cmd" 2>/dev/null || true)
+		[ -n "$conf" ] || conf="/etc/nginx/nginx.conf"
+		while IFS=$'\t' read -r tag path src; do
+			[ -n "$path" ] || continue
+			real_path=$(realpath -m "$path" 2>/dev/null || true)
+			[ -n "$real_path" ] || continue
+			if [ "$real_path" = "$real_target" ]; then return 0; fi
+	done < <(_nginx_effective_temp_paths "$conf")
+	done
+	return 1
+}
+
+# 修复：把冲突的临时目录归属还给写不进去的那个 worker 用户。
+# 只 chown/chmod 目录本身（不递归），且仅在「当前身份确实写不进」时执行。
+_fix_nginx_temp_path_conflicts() {
+	local -a masters=()
+	local master=""
+	while IFS= read -r master; do
+		[ -n "$master" ] && masters+=("$master")
+	done < <(_list_nginx_master_pids)
+
+	if [ "${#masters[@]}" -lt 1 ]; then
+		log_message WARN "未找到 Nginx master 进程，无可修复项。"
+		return 1
+	fi
+
+	local m="" cmd="" conf="" user_name="" tag="" path="" src=""
+	local -A target_user=()
+	local -A repair=()
+	local -A reason=()
+
+	for m in "${masters[@]}"; do
+		cmd=$(_read_proc_cmdline "$m")
+		conf=$(_extract_nginx_conf_from_master_cmd "$cmd" 2>/dev/null || true)
+		[ -n "$conf" ] || conf="/etc/nginx/nginx.conf"
+		user_name=$(_nginx_effective_worker_user "$m" "$conf" 2>/dev/null || true)
+		[ -n "$user_name" ] || continue
+		while IFS=$'\t' read -r tag path src; do
+			[ -n "$path" ] || continue
+			[ -d "$path" ] || continue
+			local rp=""
+			rp=$(_nginx_realpath "$path")
+			# 同一目录被不同身份的实例共用时无法两端同时满足，交由用户决策
+			if [ -n "${target_user[$rp]:-}" ] && [ "${target_user[$rp]}" != "$user_name" ]; then
+				reason[$rp]="多实例共用（${target_user[$rp]} / ${user_name}），无法自动修复"
+				repair[$rp]="skip"
+				continue
+			fi
+			target_user[$rp]="$user_name"
+			if ! _path_writable_by_user "$path" "$user_name"; then
+				repair[$rp]="fix"
+				reason[$rp]="${user_name} 无权写入（当前 $(stat -c '%U:%G %a' "$path" 2>/dev/null)）"
+			fi
+		done < <(_nginx_effective_temp_paths "$conf")
+	done
+
+	local rp="" acted=0 skipped=0
+	for rp in "${!repair[@]}"; do
+		case "${repair[$rp]}" in
+		fix)
+			if _nginx_temp_path_allowed "$rp"; then
+				if chown "${target_user[$rp]}" "$rp" 2>/dev/null; then
+					chmod u+rwx "$rp" 2>/dev/null || true
+					log_message SUCCESS "已修复临时目录归属: ${rp} -> ${target_user[$rp]}"
+					acted=$((acted + 1))
+				else
+					log_message ERROR "修改归属失败: ${rp}"
+					skipped=$((skipped + 1))
+				fi
+			else
+				log_message ERROR "该路径不在任何 Nginx 主配置的 temp_path 声明中，已跳过: ${rp}"
+				skipped=$((skipped + 1))
+			fi
+			;;
+		skip)
+			log_message WARN "需人工处理 (${reason[$rp]}): ${rp}"
+			skipped=$((skipped + 1))
+			;;
+		esac
+	done
+
+	if [ "$acted" -eq 0 ] && [ "$skipped" -eq 0 ]; then
+		log_message INFO "临时目录权限均正常，无需修复。"
+		return 0
+	fi
+	if [ "$skipped" -gt 0 ]; then
+		return 1
+	fi
+	# 目录归属变更对已 fork 的 worker 立即生效（每次落盘重新 open），无需 reload
+	log_message INFO "修复完成：处理 ${acted} 项。目录归属变更即时生效，无需重载 Nginx。"
+	return 0
 }
 
 _nginx_config_health_status() {
@@ -495,6 +841,16 @@ _nginx_config_health_status() {
 	fi
 	if printf '%s' "$output" | grep -qiE 'warn|warning'; then
 		printf '%s\t%s\n' "需关注" "检测到兼容性提醒"
+		return 0
+	fi
+	local multi_status="" multi_reason=""
+	IFS=$'\t' read -r multi_status multi_reason < <(_nginx_multi_instance_conflicts)
+	if [ "$multi_status" = "异常" ]; then
+		printf '%s\t%s\n' "异常" "${multi_reason}"
+		return 0
+	fi
+	if [ "$multi_status" = "需关注" ]; then
+		printf '%s\t%s\n' "需关注" "${multi_reason}"
 		return 0
 	fi
 	printf '%s\t%s\n' "正常" ""

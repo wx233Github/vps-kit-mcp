@@ -26,6 +26,13 @@ run_diagnostics() {
   check_dependencies || true
   _check_dns_tools || true
   _check_nginx_config || true
+  local _multi_status="" _multi_reason=""
+  IFS=$'\t' read -r _multi_status _multi_reason < <(_nginx_multi_instance_conflicts)
+  if [ "$_multi_status" = "异常" ]; then
+    log_error "Nginx 多实例冲突: ${_multi_reason}"
+  elif [ "$_multi_status" = "需关注" ]; then
+    log_warn "Nginx 多实例需关注: ${_multi_reason}"
+  fi
   if [ -f "$PROJECTS_METADATA_FILE" ]; then jq -e . "$PROJECTS_METADATA_FILE" >/dev/null 2>&1 || log_error "projects.json 格式异常"; fi
   if [ -f "$TCP_PROJECTS_METADATA_FILE" ]; then jq -e . "$TCP_PROJECTS_METADATA_FILE" >/dev/null 2>&1 || log_error "tcp_projects.json 格式异常"; fi
   log_info "自检完成"
