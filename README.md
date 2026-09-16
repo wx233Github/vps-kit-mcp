@@ -239,6 +239,17 @@ sudo bash -x /opt/vps_install_modules/install.sh
 
 `cert.sh --dry-run` 与 `docker.sh --dry-run` 为 dry-run 模式开关：会进入原有流程，但不会真正执行破坏性操作。
 
+#### Docker 安装的非交互行为
+
+首次安装 Docker 时，安装步骤在后台执行并只显示转圈进度。若 `apt`/`dpkg`/`needrestart` 在此过程中弹出交互提问，提问会被写入日志而无人应答，界面看起来就是“卡住不动”，按 Ctrl+C 中断后却发现其实已经装好。现在调整为：
+
+- 所有 `apt-get`/`dpkg` 调用统一注入非交互环境（`DEBIAN_FRONTEND=noninteractive`、`APT_LISTCHANGES_FRONTEND=none`、`NEEDRESTART_MODE=a`）并带上 `Dpkg::Options::=--force-confdef/--force-confold`。其中 `NEEDRESTART_MODE` 专门解决 Ubuntu 上 `needrestart` 在 `DPkg::Post-Invoke` 阶段的交互提问。
+- 整个安装流程不再有隐藏的交互确认；缺失依赖的安装改为安装前显式询问（原本询问发生在依赖安装之后，已失去意义）。
+- 每次安装前先执行 `dpkg --configure -a`，自动修复上一次中断留下的未配置状态。
+- 后台步骤的 stdin 指向 `/dev/null`，步骤一旦尝试交互会立即失败并给出日志，而不是无限等待。
+- 超时看护（默认 1800 秒，可用 `DOCKER_SPINNER_TIMEOUT` 调整）在失败或超时时会回收子进程并打印诊断，避免残留 `dpkg` 进程继续持锁。
+- `hello-world` 功能测试在服务未就绪时跳过，且带可配置超时（`DOCKER_HELLO_WORLD_TIMEOUT`，默认 180 秒），失败仅告警、不影响安装结果。
+
 ### 重置安装目录与命令链接
 
 ```bash

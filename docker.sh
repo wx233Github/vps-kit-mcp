@@ -230,6 +230,14 @@ fi
 ui_define_manual_fallback_helpers
 ui_define_meta_fallback_helpers
 
+# utils.sh 缺失时补齐结果提示函数，避免脚本运行到一半以 127 中断。
+if ! declare -f result_success &>/dev/null; then
+	result_success() { log_success "已完成：${1:-操作完成。}"; }
+fi
+if ! declare -f result_failure &>/dev/null; then
+	result_failure() { log_err "操作失败：${1:-操作失败。}"; }
+fi
+
 ensure_safe_path() {
 	local target="$1"
 	if [ -z "${target}" ] || [ "${target}" = "/" ]; then
@@ -258,6 +266,41 @@ run_destructive_with_sudo() {
 	if [ "$DRY_RUN" = "true" ]; then
 		log_info "[DRY-RUN] sudo $*"
 		return 0
+	fi
+	run_with_sudo "$@"
+}
+
+# --- APT 非交互执行助手 ---
+# 说明: 安装步骤在后台执行（execute_with_spinner），一旦 apt/dpkg、debconf 或
+# needrestart 弹出交互提示，提示内容会被重定向进日志文件，用户只能看到转圈而
+# 无法作答，表现为“首次安装 Docker 卡住、Ctrl+C 后却发现已装好”。这里统一注入
+# 非交互环境（与 lib/nginx_upgrade.sh、nginx.sh 的既有做法一致），并在安装前修复
+# 上一次被中断的 dpkg 状态。
+declare -a DOCKER_APT_ENV=(env DEBIAN_FRONTEND=noninteractive APT_LISTCHANGES_FRONTEND=none NEEDRESTART_MODE=a)
+declare -a DOCKER_DPKG_OPTS=(-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+
+apt_get_noninteractive() {
+	run_with_sudo "${DOCKER_APT_ENV[@]}" apt-get "$@"
+}
+
+apt_get_install_noninteractive() {
+	run_with_sudo "${DOCKER_APT_ENV[@]}" apt-get install -y "${DOCKER_DPKG_OPTS[@]}" "$@"
+}
+
+apt_get_destructive_noninteractive() {
+	run_destructive_with_sudo "${DOCKER_APT_ENV[@]}" apt-get "$@"
+}
+
+dpkg_configure_pending() {
+	run_with_sudo "${DOCKER_APT_ENV[@]}" dpkg --configure -a
+}
+
+run_with_sudo_timeout() {
+	local seconds="$1"
+	shift
+	if command -v timeout >/dev/null 2>&1; then
+		run_with_sudo timeout "$seconds" "$@"
+		return $?
 	fi
 	run_with_sudo "$@"
 }
@@ -329,6 +372,9 @@ readonly DOCKER_URL_MIRROR="https://mirrors.ustc.edu.cn/docker-ce"
 
 # --- 核心辅助函数 ---
 
+# 后台步骤硬超时上限（秒）。0/未设置表示不启用，避免正常慢速下载被误杀。
+DOCKER_SPINNER_TIMEOUT="${DOCKER_SPINNER_TIMEOUT:-1800}"
+
 execute_with_spinner() {
 	local message="$1"
 	shift
@@ -345,19 +391,47 @@ execute_with_spinner() {
 	else
 		printf '%s\n' "- ${message}"
 	fi
-	"${command_to_run[@]}" >"$LOG_FILE" 2>&1 &
+	# 步骤以 stdin 指向 /dev/null 运行：apt/dpkg 等命令一旦尝试交互式提问，会立刻
+	# 读到 EOF 并报错，而不是把提问写进日志后无限期等待输入（界面只剩转圈）。
+	# 注意: 不要用 setsid/timeout 包装步骤——它们会派生新进程，使 shell 函数
+	# 因“命令未找到”以 127 失败，而步骤大多是本脚本内的函数。
+	local spinner_timeout=0
+	if [[ "${DOCKER_SPINNER_TIMEOUT:-0}" =~ ^[0-9]+$ ]]; then
+		spinner_timeout="${DOCKER_SPINNER_TIMEOUT:-0}"
+	fi
+	"${command_to_run[@]}" </dev/null >"$LOG_FILE" 2>&1 &
 	local pid=$!
 	local -a frames=("|" "/" "-" "\\")
 	local frame_idx=0
+	local waited_tenths=0
+	local timed_out="false"
 	while ps -p "$pid" >/dev/null 2>&1; do
 		if [ "$spinner_enabled" = "true" ]; then
 			printf '%b' "\r\033[2K- ${message} [${frames[$frame_idx]}]"
 			frame_idx=$(((frame_idx + 1) % ${#frames[@]}))
 		fi
 		sleep 0.1
+		if [ "$spinner_timeout" -gt 0 ]; then
+			waited_tenths=$((waited_tenths + 1))
+			if [ "$waited_tenths" -ge $((spinner_timeout * 10)) ]; then
+				timed_out="true"
+				# 先终止子进程再终止步骤本身，尽量避免 apt/dpkg 子进程残留并继续持锁。
+				# 这里只按父进程关系回收，不使用进程组：后台步骤与主脚本同属一个
+				# 进程组，kill 整个组会把脚本自己一起杀掉。
+				pkill -TERM -P "$pid" 2>/dev/null || true
+				kill -TERM "$pid" 2>/dev/null || true
+				sleep 1
+				pkill -KILL -P "$pid" 2>/dev/null || true
+				kill -KILL "$pid" 2>/dev/null || true
+				break
+			fi
+		fi
 	done
-	wait "$pid"
-	local rc=$?
+	# 注意: 脚本启用了 set -e，裸的 `wait` 在步骤失败时会立即终止脚本，
+	# 导致下面的失败日志与诊断全部丢失（界面只会停在转圈那一行）。
+	# 这里显式捕获退出码，保证失败一定可见、可诊断。
+	local rc=0
+	wait "$pid" || rc=$?
 	if [ "$rc" -eq 0 ]; then
 		if [ "$spinner_enabled" = "true" ]; then
 			printf '%b\n' "\r\033[2K- ${message} ${GREEN}✓ 完成${NC}"
@@ -373,6 +447,12 @@ execute_with_spinner() {
 		echo "──────────────────── 错误日志 ────────────────────"
 		cat "$LOG_FILE"
 		echo "──────────────────────────────────────────────────"
+		if [ "$timed_out" = "true" ] || [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+			log_err "步骤超时（>${spinner_timeout}s）已被终止，常见原因：网络过慢或 apt/dpkg 被其他进程占用。"
+		fi
+		if grep -qE 'Could not get lock|Unable to acquire the dpkg frontend lock|dpkg was interrupted' "$LOG_FILE" 2>/dev/null; then
+			log_err "检测到 APT/dpkg 锁或上次中断残留，可执行 'apt-get update' 或 'dpkg --configure -a' 后重试。"
+		fi
 		log_err "操作失败，脚本已终止。请检查上述错误日志。"
 		rm -f "$LOG_FILE"
 		exit 1
@@ -400,10 +480,52 @@ install_docker_gpg_key() {
 	local gpg_url="$1"
 	local output_file="$2"
 	local tmp_file
+	if ! command -v gpg >/dev/null 2>&1; then
+		log_warn "系统缺少 gpg，正在尝试安装..."
+		apt_get_install_noninteractive gnupg >/dev/null 2>&1 || true
+	fi
 	tmp_file=$(mktemp "/tmp/docker_gpg_XXXXXX")
-	curl -fsSL "$gpg_url" -o "$tmp_file"
-	run_with_sudo gpg --dearmor --yes -o "$output_file" "$tmp_file"
+	# --retry 应对安装源偶发抖动；下载不完整时 curl 以非 0 退出，交给上层报错而不是
+	# 生成一个空的密钥文件让后续 apt-get update 报出难以定位的 GPG 错误。
+	if ! curl -fsSL --retry 3 --retry-delay 2 --connect-timeout 10 --max-time 60 "$gpg_url" -o "$tmp_file"; then
+		rm -f "$tmp_file"
+		log_err "Docker GPG 密钥下载失败: $gpg_url"
+		return 1
+	fi
+	if [ ! -s "$tmp_file" ]; then
+		rm -f "$tmp_file"
+		log_err "Docker GPG 密钥下载内容为空: $gpg_url"
+		return 1
+	fi
+	if ! run_with_sudo gpg --dearmor --yes -o "$output_file" "$tmp_file"; then
+		rm -f "$tmp_file"
+		log_err "Docker GPG 密钥导入失败: $output_file"
+		return 1
+	fi
 	rm -f "$tmp_file"
+}
+
+# 校验 Docker 软件包在已就绪的源中确实可见。避免源未同步/架构不匹配时，
+# apt-get install 长时间等待或给出含糊错误。
+verify_docker_packages_available() {
+	local -a pkgs=(docker-ce docker-ce-cli containerd.io docker-compose-plugin)
+	local pkg
+	local -a missing=()
+	local policy_output
+	policy_output=$(run_with_sudo "${DOCKER_APT_ENV[@]}" apt-cache policy "${pkgs[@]}" 2>/dev/null || true)
+	local candidate
+	for pkg in "${pkgs[@]}"; do
+		candidate=$(printf '%s\n' "$policy_output" | awk -v p="$pkg" '$0 ~ "^"p":" {found=1; next} found && /Candidate:/ {sub(/^[[:space:]]*Candidate:[[:space:]]*/, ""); print; exit}')
+		if [ -z "$candidate" ] || [ "$candidate" = "(none)" ]; then
+			missing+=("$pkg")
+		fi
+	done
+	if [ ${#missing[@]} -gt 0 ]; then
+		log_warn "以下软件包在当前源中不可用: ${missing[*]}"
+		log_warn "请检查网络、Docker 源地址 (${DOCKER_INSTALL_URL}) 与系统架构后重试。"
+		return 1
+	fi
+	return 0
 }
 
 write_docker_apt_source() {
@@ -422,9 +544,21 @@ pre_check_dependencies() {
 	if ! command -v jq &>/dev/null; then missing_deps+=("jq"); fi
 
 	if [ ${#missing_deps[@]} -gt 0 ]; then
-		log_warn "核心依赖 '${missing_deps[*]}' 未找到，正在尝试自动安装..."
-		execute_with_spinner "更新软件源..." run_with_sudo apt-get update -qq
-		execute_with_spinner "安装缺失的依赖: ${missing_deps[*]}..." run_with_sudo apt-get install -y "${missing_deps[@]}"
+		log_warn "缺失依赖 '${missing_deps[*]}' 需要先安装，完成后将自动继续。"
+		if [ "${JB_NONINTERACTIVE:-false}" = "true" ]; then
+			log_err "非交互模式禁止自动安装依赖，请手动安装 '${missing_deps[*]}' 后重试。"
+			return 1
+		fi
+		local reply
+		read -r -p "确认安装缺失依赖 '${missing_deps[*]}'? ([y]/n): " reply </dev/tty || reply="y"
+		case "$reply" in
+		n | N)
+			log_err "用户取消安装依赖，脚本无法继续。"
+			return 1
+			;;
+		esac
+		execute_with_spinner "更新软件源..." apt_get_noninteractive update -qq
+		execute_with_spinner "安装缺失的依赖: ${missing_deps[*]}..." apt_get_install_noninteractive "${missing_deps[@]}"
 	fi
 }
 
@@ -542,7 +676,7 @@ remove_legacy_docker_packages() {
 		log_info "未发现需清理的旧版 Docker 包。"
 		return 0
 	fi
-	run_destructive_with_sudo apt-get remove -y "${installed_pkgs[@]}"
+	apt_get_destructive_noninteractive remove -y "${installed_pkgs[@]}"
 }
 
 resolve_docker_repo_codename() {
@@ -557,7 +691,7 @@ write_docker_repo_and_update() {
 	local docker_list_content
 	docker_list_content="deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] ${DOCKER_INSTALL_URL}/linux/${DISTRO} ${DOCKER_REPO_CODENAME} stable"
 	execute_with_spinner "添加 Docker 软件源 (${DISTRO}/${DOCKER_REPO_CODENAME})..." write_docker_apt_source "$docker_list_content" "/etc/apt/sources.list.d/docker.list"
-	execute_with_spinner "再次更新软件源..." run_with_sudo apt-get update -qq
+	execute_with_spinner "再次更新软件源..." apt_get_noninteractive update -qq
 }
 
 ensure_docker_repo_ready() {
@@ -583,9 +717,9 @@ uninstall_docker() {
 
 	log_info "🧹 开始卸载..."
 	execute_with_spinner "停止 Docker 服务..." run_destructive_with_sudo systemctl stop docker.service docker.socket
-	execute_with_spinner "卸载 Docker 和 Compose 软件包..." run_destructive_with_sudo apt-get remove -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-	execute_with_spinner "清理残留软件包配置..." run_destructive_with_sudo apt-get purge -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-	execute_with_spinner "自动移除不再需要的依赖..." run_destructive_with_sudo apt-get autoremove -y --purge
+	execute_with_spinner "卸载 Docker 和 Compose 软件包..." apt_get_destructive_noninteractive remove -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+	execute_with_spinner "清理残留软件包配置..." apt_get_destructive_noninteractive purge -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+	execute_with_spinner "自动移除不再需要的依赖..." apt_get_destructive_noninteractive autoremove -y --purge
 
 	if confirm_action "是否同时删除 Docker 数据目录？这是不可逆操作"; then
 		ensure_safe_path "/var/lib/docker"
@@ -677,15 +811,33 @@ install_docker() {
 	log_success "✅ 系统: $DISTRO ($CODENAME)，安装源已确定，准备就绪！"
 	execute_with_spinner "清理历史 Docker APT 源 (防止版本冲突)..." cleanup_docker_apt_source
 	execute_with_spinner "清理旧版本 Docker (如有)..." remove_legacy_docker_packages
-	execute_with_spinner "更新软件源..." run_with_sudo apt-get update -qq
+	execute_with_spinner "修复可能被中断的 dpkg 状态..." dpkg_configure_pending
+	execute_with_spinner "更新软件源..." apt_get_noninteractive update -qq
 	execute_with_spinner "创建 APT 密钥环目录..." run_with_sudo install -m 0755 -d /etc/apt/keyrings
 	execute_with_spinner "添加 Docker GPG 密钥..." install_docker_gpg_key "${DOCKER_URL_OFFICIAL}/linux/${DISTRO}/gpg" "/etc/apt/keyrings/docker.gpg"
 	execute_with_spinner "设置 Docker GPG 密钥权限..." run_with_sudo chmod a+r /etc/apt/keyrings/docker.gpg
 	ensure_docker_repo_ready
-	execute_with_spinner "安装 Docker 引擎和 Compose 插件..." run_with_sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+	# 根据已就绪的软件源校验待安装版本，源尚未同步时给出明确诊断而不是静默等待。
+	execute_with_spinner "校验 Docker 软件包版本..." verify_docker_packages_available
+	execute_with_spinner "安装 Docker 引擎和 Compose 插件..." apt_get_install_noninteractive docker-ce docker-ce-cli containerd.io docker-compose-plugin
 	execute_with_spinner "启动 Docker 并设置开机自启..." run_with_sudo systemctl enable --now docker
-	execute_with_spinner "运行 hello-world 容器进行功能测试..." run_with_sudo docker run --rm hello-world
-	execute_with_spinner "清理测试镜像..." run_with_sudo docker image rm hello-world
+	# 服务未就绪时不再阻塞在 hello-world 上：先确认服务状态，再决定是否做功能测试。
+	local docker_active="false"
+	if systemctl is-active --quiet docker.service 2>/dev/null; then
+		docker_active="true"
+	fi
+	if [ "$docker_active" = "true" ]; then
+		# hello-world 需要联网拉取镜像，在部分网络下可能很慢：给它一个可配置的上限，
+		# 超时只告警、不影响安装结果，避免安装流程卡在这一步。
+		if run_with_sudo_timeout "${DOCKER_HELLO_WORLD_TIMEOUT:-180}" docker run --rm hello-world >/dev/null 2>&1; then
+			log_info "✅ hello-world 功能测试通过。"
+		else
+			log_warn "⚠️ hello-world 功能测试未通过（可能受网络限制），Docker 本体已安装，可在“服务控制”中重试。"
+		fi
+		run_with_sudo docker image rm hello-world >/dev/null 2>&1 || true
+	else
+		log_warn "⚠️ Docker 服务尚未处于运行状态，已跳过 hello-world 功能测试。"
+	fi
 	result_success "Docker 安装成功"
 	get_docker_status
 	printf "   Docker 版本: %s\n   Compose 版本: %s\n\n" "$DOCKER_VERSION" "$COMPOSE_VERSION"
