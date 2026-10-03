@@ -28,7 +28,7 @@ UPDATE_BACKUP_DIR="/opt/vps_install_modules_bak"
 # --- 严格模式与环境设定 ---
 set -euo pipefail
 IFS=$'\n\t'
-export PATH='/usr/local/bin:/usr/bin:/bin'
+export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
 export LANG="${LANG:-en_US.UTF_8}"
 export LC_ALL="${LC_ALL:-C.UTF-8}"
 

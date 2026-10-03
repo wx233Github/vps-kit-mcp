@@ -8,7 +8,7 @@
 # --- 严格模式 ---
 set -euo pipefail
 IFS=$'\n\t'
-export PATH='/usr/local/bin:/usr/bin:/bin'
+export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
 
 # --- 默认配置 ---
 DEFAULT_BASE_URL="https://raw.githubusercontent.com/wx233Github/vps-kit-mcp/main"

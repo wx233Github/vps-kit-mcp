@@ -8,7 +8,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 umask 077
-export PATH='/usr/local/bin:/usr/bin:/bin'
+export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
 
 VERSION="0.0.1"
 DESCRIPTION="Nginx 反向代理与证书管理助手"

@@ -5,7 +5,7 @@
 
 set -euo pipefail
 IFS=$'\n\t'
-export PATH='/usr/local/bin:/usr/bin:/bin'
+export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
 
 readonly VERSION="0.0.1"
 readonly DESCRIPTION="MCP PTY 本地部署脚本（通过 PyPI pty-mcp 接入，可选关联 opencode 配置）"
