@@ -485,7 +485,8 @@ _draw_dashboard() {
 		printf '%b' "${line4}\n"
 	fi
 	if [ -n "$line5" ]; then
-		printf '%b' "${line5}\n"
+		# line5 自带换行，去掉尾换行再补一个，避免多出空行
+		printf '%s\n' "${line5%$'\n'}"
 	fi
 	printf '%b' "${GREEN}$(generate_line 68 "─")${NC}\n"
 }
@@ -622,8 +623,12 @@ _nginx_realpath() {
 	realpath -m "$p" 2>/dev/null || printf '%s\n' "$p"
 }
 
-# 输出 "异常|需关注|正常" <TAB> 原因。无 <8KB 用户请求体上传的场景不会立刻暴露，
-# 因此这里按「写不通=异常、共用=需关注」分级。
+# 输出四个 0x1f 分隔字段：状态、来源、pid 原因、权限原因。
+# 分隔符不用 tab 是因为 tab 属于 IFS 空白字符，连续两个 tab 会被 read 折叠成一个，
+# 空字段就吞掉了；0x1f 不是空白，空字段能原样保留。
+# 状态取 异常|需关注|正常；来源为 pid、perm 或 "pid,perm"，无问题时两者皆空。
+# 两类原因分开返回，是因为只有权限问题能靠菜单 13 修；混成一串调用方就没法给出准确出口。
+# 无 <8KB 用户请求体上传的场景不会立刻暴露，因此这里按「写不通=异常、共用=需关注」分级。
 _nginx_multi_instance_conflicts() {
 	local -a masters=()
 	local master=""
@@ -632,14 +637,14 @@ _nginx_multi_instance_conflicts() {
 	done < <(_list_nginx_master_pids)
 
 	if [ "${#masters[@]}" -eq 0 ]; then
-		printf '%s\t%s\n' "正常" ""
+		printf '%s\x1f\x1f\x1f\n' "正常"
 		return 0
 	fi
 
 	local -a pids=() confs=() users=()
 	local m="" cmd="" conf="" user_name="" pid_file=""
 	local -A pidfile_owners=()
-	local reason_parts=()
+	local -a pid_parts=() perm_parts=()
 	local bad="false" warn="false"
 
 	for m in "${masters[@]}"; do
@@ -658,7 +663,7 @@ _nginx_multi_instance_conflicts() {
 		rp=$(_nginx_realpath "$pid_file")
 		if [ -n "${pidfile_owners[$rp]:-}" ]; then
 			warn="true"
-			reason_parts+=("多个实例共用 pid 文件 ${rp}（${pidfile_owners[$rp]} 与 ${m}）")
+			pid_parts+=("${rp}（${pidfile_owners[$rp]} 与 ${m}）")
 		else
 			pidfile_owners["$rp"]="$m"
 		fi
@@ -688,44 +693,82 @@ _nginx_multi_instance_conflicts() {
 			[ -n "$du" ] || continue
 			if ! _path_writable_by_user "$path" "$du"; then
 				bad="true"
-				reason_parts+=("${du} 无权写入 ${path}（当前 $(stat -c '%U:%G %a' "$path" 2>/dev/null)）")
+				perm_parts+=("${du} 无权写入 ${path}（当前 $(stat -c '%U:%G %a' "$path" 2>/dev/null)）")
 			fi
 		done < <(printf '%s' "${dir_users[$rp]}")
 	done
 
-	local reason=""
-	if [ "${#reason_parts[@]}" -gt 0 ]; then
-		local total="${#reason_parts[@]}" shown=()
-		local p=""
-		for p in "${reason_parts[@]}"; do
-			[ "${#shown[@]}" -ge 3 ] && break
-			shown+=("$p")
-		done
-		reason=$(printf '%s；' "${shown[@]}")
-		reason="${reason%；}"
-		if [ "$total" -gt "${#shown[@]}" ]; then
-			reason="${reason}；等共 ${total} 项"
-		fi
+	local pid_text="" perm_text="" scope="" status="正常"
+	if [ "${#pid_parts[@]}" -gt 0 ]; then
+		pid_text=$(_nginx_join_reasons "${pid_parts[@]}")
 	fi
+	if [ "${#perm_parts[@]}" -gt 0 ]; then
+		perm_text=$(_nginx_join_reasons "${perm_parts[@]}")
+	fi
+	if [ "${#pid_parts[@]}" -gt 0 ]; then scope="pid"; fi
+	if [ "${#perm_parts[@]}" -gt 0 ]; then scope="${scope:+$scope,}perm"; fi
 	if [ "$bad" = "true" ]; then
-		printf '%s\t%s\n' "异常" "$reason"
-		return 0
+		status="异常"
+	elif [ "$warn" = "true" ]; then
+		status="需关注"
 	fi
-	if [ "$warn" = "true" ]; then
-		printf '%s\t%s\n' "需关注" "$reason"
-		return 0
-	fi
-	printf '%s\t%s\n' "正常" "${#masters[@]} 个实例，无共用冲突"
+	printf '%s\x1f%s\x1f%s\x1f%s\n' "$status" "$scope" "$pid_text" "$perm_text"
 }
 
-# 汇总「有则提示」的一行，供仪表盘/菜单使用；无问题时为空。
+# 把多项原因压成一行：最多显示 3 项，其余折成「等共 N 项」。
+_nginx_join_reasons() {
+	local -a shown=()
+	local p="" out=""
+	for p in "$@"; do
+		[ "${#shown[@]}" -ge 3 ] && break
+		shown+=("$p")
+	done
+	[ "${#shown[@]}" -gt 0 ] || return 0
+	out=$(printf '%s；' "${shown[@]}")
+	out="${out%；}"
+	if [ "$#" -gt "${#shown[@]}" ]; then
+		out="${out}；等共 $# 项"
+	fi
+	printf '%s' "$out"
+}
+
+# 汇总「有则提示」的一段，供仪表盘/菜单使用；无问题时为空。
+# 权限项与 pid 共用分开渲染：只有权限项能靠菜单 13 解决，混成一行会让人以为修完就没事。
 _nginx_multi_instance_line() {
-	local status="" reason=""
-	IFS=$'\t' read -r status reason < <(_nginx_multi_instance_conflicts)
+	local status="" scope="" pid_text="" perm_text=""
+	IFS=$'\x1f' read -r status scope pid_text perm_text < <(_nginx_multi_instance_conflicts)
+	case "$status" in
+	异常 | 需关注) ;;
+	*) return 0 ;;
+	esac
+	local color="${BRIGHT_YELLOW}" head="⚠ Nginx 多实例需关注"
 	if [ "$status" = "异常" ]; then
-		printf '%b' "${BRIGHT_RED}⚠ Nginx 多实例冲突：${reason}${NC}"
-	elif [ "$status" = "需关注" ]; then
-		printf '%b' "${BRIGHT_YELLOW}⚠ Nginx 多实例需关注：${reason}${NC}"
+		color="${BRIGHT_RED}"
+		head="⚠ Nginx 多实例冲突"
+	fi
+	if [ -z "$scope" ]; then
+		# 来源未知（旧调用方只给两列）时退回单行渲染，避免把来源字段当成原因显示
+		local legacy=""
+		legacy=$(printf '%s；%s' "$pid_text" "$perm_text" | sed 's/^；//; s/；$//')
+		printf '%b\n' "${color}${head}${legacy:+：${legacy}}${NC}"
+		return 0
+	fi
+	local count=0
+	count=$(_list_nginx_master_pids 2>/dev/null | wc -l)
+	printf '%b\n' "${color}${head}：${count} 个 master 进程${NC}"
+	local perm_marker="├" pid_marker="└"
+	[ -n "$pid_text" ] || perm_marker="└"
+	if [ -n "$perm_text" ]; then
+		printf '%b\n' "  ${color}${perm_marker}${NC} 临时目录权限：${perm_text}"
+		if [ "$perm_marker" = "├" ]; then
+			printf '%b\n' "  ${color}│${NC}   → 菜单 13 修复（建 nginx-shared 共享组 + 2770，会重启 nginx）"
+		else
+			printf '%s\n' "      → 菜单 13 修复（建 nginx-shared 共享组 + 2770，会重启 nginx）"
+		fi
+	fi
+	if [ -n "$pid_text" ]; then
+		printf '%b\n' "  ${color}${pid_marker}${NC} pid 共用：${pid_text}，文件里只记最后一个写入者"
+		printf '%s\n' "      → 菜单 13 修不了，需给该实例单独指定 pid 路径"
 	fi
 }
 
@@ -955,8 +998,12 @@ _nginx_config_health_status() {
 		printf '%s\t%s\n' "需关注" "检测到兼容性提醒"
 		return 0
 	fi
-	local multi_status="" multi_reason=""
-	IFS=$'\t' read -r multi_status multi_reason < <(_nginx_multi_instance_conflicts)
+	local multi_status="" multi_scope="" multi_pid="" multi_perm="" multi_reason=""
+	IFS=$'\x1f' read -r multi_status multi_scope multi_pid multi_perm < <(_nginx_multi_instance_conflicts)
+	multi_reason="$multi_pid"
+	if [ -n "$multi_perm" ]; then
+		multi_reason="${multi_reason:+${multi_reason}；}${multi_perm}"
+	fi
 	if [ "$multi_status" = "异常" ]; then
 		printf '%s\t%s\n' "异常" "${multi_reason}"
 		return 0

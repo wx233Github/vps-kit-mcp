@@ -140,7 +140,7 @@ EOF
   ' _ "$LIB_PATH"
   [ "$status" -eq 0 ]
   [[ "$output" == 正常* ]]
-  [ "${output%%$'\t'*}" = "正常" ]
+  [ "${output%%$'\x1f'*}" = "正常" ]
 }
 
 @test "多实例共用 pid 文件时判定为需关注" {
@@ -177,7 +177,7 @@ EOF
 @test "_nginx_multi_instance_line: 正常时输出为空" {
   run bash -c '
     source "$1"
-    _nginx_multi_instance_conflicts() { printf "%s\t%s\n" 正常 ""; }
+    _nginx_multi_instance_conflicts() { printf "%s\x1f%s\x1f%s\x1f%s\n" 正常 "" "" ""; }
     _nginx_multi_instance_line
   ' _ "$LIB_PATH"
   [ "$status" -eq 0 ]
@@ -187,12 +187,51 @@ EOF
 @test "_nginx_multi_instance_line: 异常时输出告警" {
   run bash -c '
     source "$1"
-    _nginx_multi_instance_conflicts() { printf "%s\t%s\n" 异常 "测试冲突"; }
+    _nginx_multi_instance_conflicts() { printf "%s\x1f%s\x1f%s\x1f%s\n" 异常 pid "/run/nginx.pid（1234 与 5678）" ""; }
+    _list_nginx_master_pids() { printf "%s\n" 1234 5678; }
     _nginx_multi_instance_line
   ' _ "$LIB_PATH"
   [ "$status" -eq 0 ]
   [[ "$output" == *"多实例冲突"* ]]
-  [[ "$output" == *"测试冲突"* ]]
+  [[ "$output" == *"/run/nginx.pid"* ]]
+}
+
+@test "_nginx_multi_instance_line: 权限类冲突提示菜单 13 可修" {
+  run bash -c '
+    source "$1"
+    _nginx_multi_instance_conflicts() { printf "%s\x1f%s\x1f%s\x1f%s\n" 异常 perm "" "nobody 无权写入 /tmp/body（当前 root:root 700）"; }
+    _list_nginx_master_pids() { printf "%s\n" 1234; }
+    _nginx_multi_instance_line
+  ' _ "$LIB_PATH"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"临时目录权限"* ]]
+  [[ "$output" == *"菜单 13 修复"* ]]
+  [[ "$output" != *"菜单 13 修不了"* ]]
+}
+
+@test "_nginx_multi_instance_line: 仅 pid 共用时说明菜单 13 修不了" {
+  run bash -c '
+    source "$1"
+    _nginx_multi_instance_conflicts() { printf "%s\x1f%s\x1f%s\x1f%s\n" 需关注 pid "/run/nginx.pid（1234 与 5678）" ""; }
+    _list_nginx_master_pids() { printf "%s\n" 1234 5678; }
+    _nginx_multi_instance_line
+  ' _ "$LIB_PATH"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"pid 共用"* ]]
+  [[ "$output" == *"菜单 13 修不了"* ]]
+  [[ "$output" != *"菜单 13 修复"* ]]
+}
+
+@test "_nginx_multi_instance_line: 两类冲突并存时两段都出现" {
+  run bash -c '
+    source "$1"
+    _nginx_multi_instance_conflicts() { printf "%s\x1f%s\x1f%s\x1f%s\n" 异常 "pid,perm" "/run/nginx.pid（1234 与 5678）" "nobody 无权写入 /tmp/body"; }
+    _list_nginx_master_pids() { printf "%s\n" 1234 5678; }
+    _nginx_multi_instance_line
+  ' _ "$LIB_PATH"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"菜单 13 修复"* ]]
+  [[ "$output" == *"菜单 13 修不了"* ]]
 }
 
 @test "_nginx_temp_path_allowed: 接受主配置声明的 temp_path" {

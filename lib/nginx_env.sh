@@ -26,12 +26,23 @@ run_diagnostics() {
   check_dependencies || true
   _check_dns_tools || true
   _check_nginx_config || true
-  local _multi_status="" _multi_reason=""
-  IFS=$'\t' read -r _multi_status _multi_reason < <(_nginx_multi_instance_conflicts)
+  local _multi_status="" _multi_scope="" _multi_pid="" _multi_perm="" _multi_reason=""
+  IFS=$'\x1f' read -r _multi_status _multi_scope _multi_pid _multi_perm < <(_nginx_multi_instance_conflicts)
+  _multi_reason="$_multi_pid"
+  if [ -n "$_multi_perm" ]; then
+    _multi_reason="${_multi_reason:+${_multi_reason}；}${_multi_perm}"
+  fi
   if [ "$_multi_status" = "异常" ]; then
     log_error "Nginx 多实例冲突: ${_multi_reason}"
   elif [ "$_multi_status" = "需关注" ]; then
     log_warn "Nginx 多实例需关注: ${_multi_reason}"
+  fi
+  # 只有权限类原因能靠菜单 13 解决，pid 共用需要单独指定 pid 路径，所以分开提示
+  if [ -n "$_multi_perm" ]; then
+    log_info "临时目录权限冲突可执行菜单 13（修复目录冲突）修复。"
+  fi
+  if [ -n "$_multi_pid" ]; then
+    log_info "pid 文件共用无法通过菜单 13 解决，需给该实例单独指定 pid 路径。"
   fi
   if [ -f "$PROJECTS_METADATA_FILE" ]; then jq -e . "$PROJECTS_METADATA_FILE" >/dev/null 2>&1 || log_error "projects.json 格式异常"; fi
   if [ -f "$TCP_PROJECTS_METADATA_FILE" ]; then jq -e . "$TCP_PROJECTS_METADATA_FILE" >/dev/null 2>&1 || log_error "tcp_projects.json 格式异常"; fi
