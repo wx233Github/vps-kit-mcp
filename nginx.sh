@@ -297,6 +297,7 @@ _render_menu() {
 	local title="$1"
 	shift
 	local -a lines=("$@")
+	local term_cols=0
 	if declare -f get_ui_theme >/dev/null 2>&1 && [ "$(get_ui_theme)" != "classic" ]; then
 		local width=60
 		local title_width=0
@@ -311,8 +312,13 @@ _render_menu() {
 				width=$current_width
 			fi
 		done
-		[ "$width" -lt 60 ] && width=60
+		[ "$width" -lt 40 ] && width=40
 		[ "$width" -gt 82 ] && width=82
+		# 框体总宽为 inner+2，超出终端列数就会折行，这里再按终端收一次
+		term_cols=$(_nginx_term_cols)
+		if [ "$term_cols" -gt 32 ] && [ "$width" -gt $((term_cols - 2)) ]; then
+			width=$((term_cols - 2))
+		fi
 		printf '%b' "\n" >"$out"
 		printf '%b' "${BOLD}${title}${NC}\n" >"$out"
 		printf '%b' "${CYAN}$(generate_line "$width" "─")${NC}\n" >"$out"
@@ -332,6 +338,10 @@ _render_menu() {
 	done
 	local box_inner_width=$max_content_width
 	if [ "$box_inner_width" -lt 40 ]; then box_inner_width=40; fi
+	term_cols=$(_nginx_term_cols)
+	if [ "$term_cols" -gt 32 ] && [ "$box_inner_width" -gt $((term_cols - 2)) ]; then
+		box_inner_width=$((term_cols - 2))
+	fi
 
 	printf '%b' "\n" >"$out"
 	printf '%b' "${GREEN}╭$(generate_line "$box_inner_width" "─")╮${NC}\n" >"$out"
@@ -492,7 +502,7 @@ _draw_dashboard() {
 
 	local title="Nginx 管理面板"
 	local line1="Nginx ${nginx_v}"
-	local line2="运行 ${uptime_raw} | HTTP ${count} | TCP ${tcp_count} | 告警 ${warn_count}"
+	local line2="运行 ${uptime_raw} | HTTP ${count} | TCP ${tcp_count} | 证书 ${warn_count}"
 	local line3=""
 	line3=$(_nginx_http2_warn_line "$nginx_v")
 	local line4=""
@@ -514,7 +524,11 @@ _draw_dashboard() {
 		# line5 自带换行，去掉尾换行再补一个，避免多出空行
 		printf '%s\n' "${line5%$'\n'}"
 	fi
-	printf '%b' "${GREEN}$(generate_line 68 "─")${NC}\n"
+	# 分隔线跟随终端宽度，窄屏不折行
+	local dash_width
+	dash_width=$(_nginx_term_cols)
+	[ "$dash_width" -gt 68 ] && dash_width=68
+	printf '%b' "${GREEN}$(generate_line "$dash_width" "─")${NC}\n"
 }
 
 # --- 多实例体检 ---------------------------------------------------------------
@@ -779,6 +793,12 @@ _nginx_multi_instance_line() {
 		printf '%b\n' "${color}${head}${legacy:+：${legacy}}${NC}"
 		return 0
 	fi
+	# 原因文本按终端宽度截断，避免窄屏把提示挤成多行
+	local limit
+	limit=$(($(_nginx_term_cols) - 10))
+	[ "$limit" -lt 16 ] && limit=16
+	perm_text=$(_nginx_trim_visual "$perm_text" "$limit")
+	pid_text=$(_nginx_trim_visual "$pid_text" "$limit")
 	local count=0
 	count=$(_list_nginx_master_pids 2>/dev/null | wc -l)
 	printf '%b\n' "${color}${head}：${count} 个 master 进程${NC}"
@@ -787,9 +807,9 @@ _nginx_multi_instance_line() {
 	if [ -n "$perm_text" ]; then
 		printf '%b\n' "  ${color}${perm_marker}${NC} 临时目录权限：${perm_text}"
 		if [ "$perm_marker" = "├" ]; then
-			printf '%b\n' "  ${color}│${NC}   → 菜单 13 修复（建 nginx-shared 共享组 + 2770，会重启 nginx）"
+			printf '%b\n' "  ${color}│${NC}   → 菜单 13 修复（共享组 + 2770，会重启 nginx）"
 		else
-			printf '%s\n' "      → 菜单 13 修复（建 nginx-shared 共享组 + 2770，会重启 nginx）"
+			printf '%s\n' "      → 菜单 13 修复（共享组 + 2770，会重启 nginx）"
 		fi
 	fi
 	if [ -n "$pid_text" ]; then
@@ -2694,7 +2714,7 @@ _display_tcp_projects_list() {
 		idx=$((idx + 1))
 		local tls_str="${RED}否${NC}"
 		[ "$tls" == "y" ] && tls_str="${GREEN}是${NC}"
-		printf '%b\n' "○ ${idx}. 端口 ${GREEN}${port}${NC}"
+		printf '%b\n' "$(printf '%2s' "$idx"). 端口 ${GREEN}${port}${NC}"
 		printf '%b\n' "   TLS: ${tls_str} | 备注: ${name}"
 		printf '%b\n\n' "   目标地址: ${target}"
 	done
@@ -3698,7 +3718,7 @@ _display_projects_list() {
 				color_code="${GREEN}"
 			fi
 		fi
-		printf '%b\n' "○ ${idx}. ${domain}"
+		printf '%b\n' "$(printf '%2s' "$idx"). ${domain}"
 		printf '%b\n' "   目标类型: ${target_str} | 证书状态: ${color_code}${status_text}${NC}"
 		printf '%b\n' "   下次续期: ${renew_date}"
 		printf '%b\n\n' "   说明: 选择后可查看配置、续期、重配或删除"
@@ -3739,18 +3759,18 @@ _manage_http_actions() {
 		"- ${selected_domain}" \
 		"" \
 		"常用操作" \
-		"○ 1. 查看证书详情    查看证书和签发信息" \
-		"● 2. 手动续期        立即续期当前证书" \
-		"○ 4. 查看 Nginx 配置  查看当前站点配置文件" \
-		"○ 5. 重新配置项目    修改目标、防御和 Hook" \
+		"$(_nginx_menu_row 1 '查看证书详情' '查看证书和签发信息')" \
+		"$(_nginx_menu_row 2 '手动续期' '立即续期当前证书')" \
+		"$(_nginx_menu_row 4 '查看 Nginx 配置' '查看当前站点配置文件')" \
+		"$(_nginx_menu_row 5 '重新配置项目' '修改目标、防御和 Hook')" \
 		"" \
 		"诊断与策略" \
-		"○ 6. 修改续期设置    调整 CA 和验证方式" \
-		"○ 7. 添加自定义指令  追加 server 级配置" \
-		"○ 8. 配置模板中心    管理 Block 和 Site 模板" \
+		"$(_nginx_menu_row 6 '修改续期设置' '调整 CA 和验证方式')" \
+		"$(_nginx_menu_row 7 '添加自定义指令' '追加 server 级配置')" \
+		"$(_nginx_menu_row 8 '配置模板中心' '管理 Block 和 Site 模板')" \
 		"" \
 		"危险操作" \
-		"! 3. 删除项目        删除站点及证书文件"
+		"$(_nginx_menu_row 3 '删除项目' '删除站点及证书文件' "$BRIGHT_RED")"
 	local cc
 	if ! cc=$(prompt_menu_choice "1-8" "true"); then return 0; fi
 	case "$cc" in
@@ -3777,10 +3797,10 @@ _manage_tcp_actions() {
 		"- 端口 ${selected_port}" \
 		"" \
 		"常用操作" \
-		"○ 2. 查看配置        查看当前 TCP 配置文件" \
+		"$(_nginx_menu_row 2 '查看配置' '查看当前 TCP 配置文件')" \
 		"" \
 		"危险操作" \
-		"! 1. 删除项目        删除 TCP 转发配置"
+		"$(_nginx_menu_row 1 '删除项目' '删除 TCP 转发配置' "$BRIGHT_RED")"
 	local cc
 	if ! cc=$(prompt_menu_choice "1-2" "true"); then return 0; fi
 	case "$cc" in

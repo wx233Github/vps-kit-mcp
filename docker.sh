@@ -859,12 +859,12 @@ docker_service_menu() {
 			"- 服务: ${status_color}${display_status}${NC}"
 			""
 			"常用操作"
-			"● 1. 启动 Docker 服务    拉起 Docker 服务"
-			"○ 2. 停止 Docker 服务    停止当前 Docker 服务"
-			"○ 3. 重启 Docker 服务    重新加载 Docker 服务"
+			"  1. 启动 Docker 服务    拉起 Docker 服务"
+			"  2. 停止 Docker 服务    停止当前 Docker 服务"
+			"  3. 重启 Docker 服务    重新加载 Docker 服务"
 			""
 			"诊断与策略"
-			"○ 4. 查看服务日志        实时查看 Docker 日志"
+			"  4. 查看服务日志        实时查看 Docker 日志"
 		)
 		_render_menu "Docker 服务管理" "${content_array[@]}"
 		local choice
@@ -927,20 +927,27 @@ docker_menu_line() {
 	local name="$2"
 	local desc="${3:-}"
 	local icon=""
-	local marker="○"
 	case "$name" in
-	"服务控制") marker="●"; icon="🔧" ;;
-	"安装 Docker") marker="●"; icon="🐳" ;;
+	"服务控制") icon="🔧" ;;
+	"安装 Docker") icon="🐳" ;;
 	"环境配置") icon="⚙️" ;;
 	"清理空间") icon="🧹" ;;
-	"重新安装 Docker") marker="!"; icon="🐳" ;;
-	"卸载 Docker") marker="!"; icon="🗑️" ;;
+	"重新安装 Docker") icon="🐳" ;;
+	"卸载 Docker") icon="🗑️" ;;
 	"修复服务状态") icon="🩺" ;;
 	esac
+	# 图标后补一个空格，避免无图标时编号与名称之间出现双空格
+	[ -n "$icon" ] && icon="$icon "
+	# 危险项用颜色区分：不可逆的删除用红，可重做的重装用黄
+	local row_color="$NC"
+	case "$name" in
+	"卸载 Docker") row_color="$RED" ;;
+	"重新安装 Docker") row_color="$YELLOW" ;;
+	esac
 	if [ -n "$desc" ]; then
-		printf '%s %s. %s %s    %s' "$marker" "$index" "$icon" "$name" "$desc"
+		printf '%b%2s. %s%s    %s%b' "$row_color" "$index" "$icon" "$name" "$desc" "$NC"
 	else
-		printf '%s %s. %s %s' "$marker" "$index" "$icon" "$name"
+		printf '%b%2s. %s%s%b' "$row_color" "$index" "$icon" "$name" "$NC"
 	fi
 }
 
@@ -949,8 +956,8 @@ render_manage_installation_menu() {
 	theme="$(docker_menu_theme)"
 	if [ "$theme" = "classic" ]; then
 		local -a menu_items=(
-			"! 1. 重新安装 Docker    先卸载后重建环境"
-			"! 2. 卸载 Docker       删除当前环境"
+			"  1. 重新安装 Docker    先卸载后重建环境"
+			"  2. 卸载 Docker       删除当前环境"
 		)
 		_render_menu "安装管理" "${menu_items[@]}"
 		return 0
@@ -998,16 +1005,16 @@ render_docker_main_menu() {
 				"- Compose 版本: ${COMPOSE_VERSION}"
 				""
 				"常用操作"
-				"● 1. 🔧 服务控制      启动、停止、重启服务"
-				"○ 2. ⚙️ 环境配置      配置镜像和用户组"
-				"○ 3. 🧹 清理空间      清理镜像和缓存"
+				"  1. 🔧 服务控制      启动、停止、重启服务"
+				"  2. ⚙️ 环境配置      配置镜像和用户组"
+				"  3. 🧹 清理空间      清理镜像和缓存"
 				""
 				"进阶操作"
-				"○ 4. 🩺 修复服务状态   检查并重新拉起服务"
-				"! 5. 🐳 重新安装 Docker  重新建立运行环境"
+				"  4. 🩺 修复服务状态   检查并重新拉起服务"
+				"  5. 🐳 重新安装 Docker  重新建立运行环境"
 				""
 				"危险操作"
-				"! 6. 🗑️ 卸载 Docker   删除当前环境"
+				"  6. 🗑️ 卸载 Docker   删除当前环境"
 			)
 		else
 			menu_items=(
@@ -1015,7 +1022,7 @@ render_docker_main_menu() {
 				"- ${YELLOW}未安装${NC}"
 				""
 				"建议操作"
-				"● 1. 安装 Docker    初始化运行环境"
+				"  1. 安装 Docker    初始化运行环境"
 			)
 		fi
 		_render_menu "Docker" "${menu_items[@]}"

@@ -1902,13 +1902,12 @@ format_menu_entry_line() {
 	local desc="$4"
 	local status_text="$5"
 	local desc_padding="${6:-8}"
-	local marker="${7:-○}"
-	local marker_color="${8:-${NC}}"
+	local line_color="${7:-${NC}}"
 	local line
 	if [ -n "$icon" ]; then
-		line=$(printf '%b %s. %s %s' "${marker_color}${marker}${NC}" "$index" "$icon" "$name")
+		line=$(printf '%b%2s. %b %s%b' "$line_color" "$index" "$icon" "$name" "$NC")
 	else
-		line=$(printf '%b %s. %s' "${marker_color}${marker}${NC}" "$index" "$name")
+		line=$(printf '%b%2s. %s%b' "$line_color" "$index" "$name" "$NC")
 	fi
 	if [ -n "$desc" ]; then
 		line+=$(printf '%*s- %s' "$desc_padding" '' "$desc")
@@ -1919,34 +1918,22 @@ format_menu_entry_line() {
 	printf '%s' "$line"
 }
 
-menu_entry_marker() {
+menu_entry_text_color() {
+	# 危险项改用文字颜色区分（不再用 ! 标记），入参是菜单项目名
 	local label="${1:-}"
 	case "$label" in
-	Docker | "安装 Docker" | "服务控制") printf '%s' '●' ;;
-	"重新拉取脚本" | "卸载脚本" | "卸载 Docker" | "重新安装 Docker") printf '%s' '!' ;;
-	*) printf '%s' '○' ;;
-	esac
-}
-
-menu_entry_marker_color() {
-	local marker="${1:-○}"
-	case "$marker" in
-	'●') printf '%b' "$GREEN" ;;
-	'!') printf '%b' "$YELLOW" ;;
+	"卸载脚本" | "卸载 Docker") printf '%b' "$RED" ;;
+	"重新拉取脚本" | "重新安装 Docker") printf '%b' "$YELLOW" ;;
 	*) printf '%b' "$NC" ;;
 	esac
 }
 
 format_main_menu_primary_line() {
-	local marker
-	marker=$(menu_entry_marker "$3")
-	format_menu_entry_line "$1" "$2" "$3" "" "$5" 0 "$marker" "$(menu_entry_marker_color "$marker")"
+	format_menu_entry_line "$1" "$2" "$3" "" "$5" 0 "$(menu_entry_text_color "$3")"
 }
 
 format_main_menu_func_line() {
-	local marker
-	marker=$(menu_entry_marker "$3")
-	format_menu_entry_line "$1" "$2" "$3" "" "$5" 0 "$marker" "$(menu_entry_marker_color "$marker")"
+	format_menu_entry_line "$1" "$2" "$3" "" "$5" 0 "$(menu_entry_text_color "$3")"
 }
 
 theme_action_target() {
@@ -2078,15 +2065,11 @@ secondary_menu_hint_line() {
 }
 
 format_secondary_menu_primary_line() {
-	local marker
-	marker=$(menu_entry_marker "$2")
-	format_menu_entry_line "$1" "$2" "$3" "$4" "$5" 4 "$marker" "$(menu_entry_marker_color "$marker")"
+	format_menu_entry_line "$1" "$2" "$3" "$4" "$5" 4 "$(menu_entry_text_color "$2")"
 }
 
 format_secondary_menu_func_line() {
-	local marker
-	marker=$(menu_entry_marker "$2")
-	format_menu_entry_line "$1" "$2" "$3" "$4" "$5" 4 "$marker" "$(menu_entry_marker_color "$marker")"
+	format_menu_entry_line "$1" "$2" "$3" "$4" "$5" 4 "$(menu_entry_text_color "$2")"
 }
 
 format_secondary_menu_classic_primary_line() {

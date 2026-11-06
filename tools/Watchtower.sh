@@ -2265,8 +2265,8 @@ manage_tasks() {
 	while true; do
 		if should_clear_screen "watchtower:manage_tasks"; then clear; fi
 		local -a items_array=(
-			"! 1. 停止并移除服务    删除容器并清除配置"
-			"○ 2. 重建服务         应用新配置并重新启动 Watchtower"
+			"$(printf '  %b 1. 停止并移除服务    删除容器并清除配置%b' "${RED}" "${NC}")"
+			"  2. 重建服务         应用新配置并重新启动 Watchtower"
 		)
 		_render_menu "⚙️ 服务运维 ⚙️" "${items_array[@]}"
 
@@ -2754,30 +2754,30 @@ main_menu() {
 				"通知方式: ${notify_mode}" \
 				"下一次扫描: ${COUNTDOWN}"
 			ui_append_schema_or_fallback_page_block content_array "WATCHTOWER_MENU" "action_center" "常用操作" \
-				"● 1. ⚙️ 部署或重配服务    重新配置核心运行参数" \
-				"○ 2. 🔔 配置中心         管理通知和高级参数" \
-				"○ 3. 🩺 服务运维         停止、重建和恢复服务" \
-				"○ 4. 📄 日志与容器看板    查看实时日志和容器状态"
+				"  1. ⚙️ 部署或重配服务    重新配置核心运行参数" \
+				"  2. 🔔 配置中心         管理通知和高级参数" \
+				"  3. 🩺 服务运维         停止、重建和恢复服务" \
+				"  4. 📄 日志与容器看板    查看实时日志和容器状态"
 		elif declare -f ui_append_page_block >/dev/null 2>&1; then
 			ui_append_page_block content_array "当前状态" \
 				"服务状态: ${STATUS_COLOR}${warning_msg}" \
 				"通知方式: ${notify_mode}" \
 				"下一次扫描: ${COUNTDOWN}"
 			ui_append_page_block content_array "常用操作" \
-				"● 1. ⚙️ 部署或重配服务    重新配置核心运行参数" \
-				"○ 2. 🔔 配置中心         管理通知和高级参数" \
-				"○ 3. 🩺 服务运维         停止、重建和恢复服务" \
-				"○ 4. 📄 日志与容器看板    查看实时日志和容器状态"
+				"  1. ⚙️ 部署或重配服务    重新配置核心运行参数" \
+				"  2. 🔔 配置中心         管理通知和高级参数" \
+				"  3. 🩺 服务运维         停止、重建和恢复服务" \
+				"  4. 📄 日志与容器看板    查看实时日志和容器状态"
 		else
 			ui_append_manual_page_block content_array "${service_overview_heading}" \
 				"服务状态: ${STATUS_COLOR}${warning_msg}" \
 				"通知方式: ${notify_mode}" \
 				"下一次扫描: ${COUNTDOWN}"
 			ui_append_manual_page_block content_array "${action_center_heading}" \
-				"● 1. ⚙️ 部署或重配服务    重新配置核心运行参数" \
-				"○ 2. 🔔 配置中心         管理通知和高级参数" \
-				"○ 3. 🩺 服务运维         停止、重建和恢复服务" \
-				"○ 4. 📄 日志与容器看板    查看实时日志和容器状态"
+				"  1. ⚙️ 部署或重配服务    重新配置核心运行参数" \
+				"  2. 🔔 配置中心         管理通知和高级参数" \
+				"  3. 🩺 服务运维         停止、重建和恢复服务" \
+				"  4. 📄 日志与容器看板    查看实时日志和容器状态"
 		fi
 
 		_render_menu "$header_text" "${content_array[@]}"

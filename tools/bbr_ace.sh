@@ -1189,16 +1189,16 @@ show_menu() {
 		runtime_block+=("当前模式: ${COLOR_BLUE}${current_mode}${COLOR_RESET}")
 		ui_append_schema_or_fallback_page_block lines "BBR_MENU" "runtime_overview" "当前状态" "${runtime_block[@]}"
 		ui_append_schema_or_fallback_page_block lines "BBR_MENU" "profile_control" "常用操作" \
-			"● 1. 🚀 BBR+FQ 标准模式      使用稳妥的官方参数" \
-			"○ 2. ⚡ 激进调优模式         提升吞吐并放宽缓冲"
+			"  1. 🚀 BBR+FQ 标准模式      使用稳妥的官方参数" \
+			"  2. ⚡ 激进调优模式         提升吞吐并放宽缓冲"
 		ui_append_schema_or_fallback_page_block lines "BBR_MENU" "policy_control" "网络策略" \
-			"○ 3. 🌐 IPv4 优先            调整地址选择顺序" \
-			"○ 4. 🌍 恢复默认优先级       恢复系统默认网络策略"
+			"  3. 🌐 IPv4 优先            调整地址选择顺序" \
+			"  4. 🌍 恢复默认优先级       恢复系统默认网络策略"
 		ui_append_schema_or_fallback_page_block lines "BBR_MENU" "recovery_lifecycle" "维护与恢复" \
-			"○ 5. 🧰 内核维护工具         升级、回退和清理内核" \
-			"○ 6. ♻️ 从备份恢复配置       回滚到历史配置" \
-			"○ 7. 🩺 审计当前系统配置     检查现有网络参数" \
-			"! 8. 🗑️ 卸载并恢复默认       删除调优配置并恢复系统默认"
+			"  5. 🧰 内核维护工具         升级、回退和清理内核" \
+			"  6. ♻️ 从备份恢复配置       回滚到历史配置" \
+			"  7. 🩺 审计当前系统配置     检查现有网络参数" \
+			"$(printf '  %b 8. 🗑️ 卸载并恢复默认       删除调优配置并恢复系统默认%b' "${COLOR_RED}" "${COLOR_RESET}")"
 	elif [[ "${USE_UTILS_UI}" -eq 1 ]] && declare -f ui_append_page_block >/dev/null 2>&1; then
 		local -a runtime_block=(
 			"内核版本: ${COLOR_CYAN}${cur_kver}${COLOR_RESET}"
@@ -1212,16 +1212,16 @@ show_menu() {
 		runtime_block+=("当前模式: ${COLOR_BLUE}${current_mode}${COLOR_RESET}")
 		ui_append_page_block lines "当前状态" "${runtime_block[@]}"
 		ui_append_page_block lines "常用操作" \
-			"● 1. 🚀 BBR+FQ 标准模式      使用稳妥的官方参数" \
-			"○ 2. ⚡ 激进调优模式         提升吞吐并放宽缓冲"
+			"  1. 🚀 BBR+FQ 标准模式      使用稳妥的官方参数" \
+			"  2. ⚡ 激进调优模式         提升吞吐并放宽缓冲"
 		ui_append_page_block lines "网络策略" \
-			"○ 3. 🌐 IPv4 优先            调整地址选择顺序" \
-			"○ 4. 🌍 恢复默认优先级       恢复系统默认网络策略"
+			"  3. 🌐 IPv4 优先            调整地址选择顺序" \
+			"  4. 🌍 恢复默认优先级       恢复系统默认网络策略"
 		ui_append_page_block lines "维护与恢复" \
-			"○ 5. 🧰 内核维护工具         升级、回退和清理内核" \
-			"○ 6. ♻️ 从备份恢复配置       回滚到历史配置" \
-			"○ 7. 🩺 审计当前系统配置     检查现有网络参数" \
-			"! 8. 🗑️ 卸载并恢复默认       删除调优配置并恢复系统默认"
+			"  5. 🧰 内核维护工具         升级、回退和清理内核" \
+			"  6. ♻️ 从备份恢复配置       回滚到历史配置" \
+			"  7. 🩺 审计当前系统配置     检查现有网络参数" \
+			"$(printf '  %b 8. 🗑️ 卸载并恢复默认       删除调优配置并恢复系统默认%b' "${COLOR_RED}" "${COLOR_RESET}")"
 	else
 		local -a runtime_block=(
 			"内核版本: ${COLOR_CYAN}${cur_kver}${COLOR_RESET}"
@@ -1235,16 +1235,16 @@ show_menu() {
 		runtime_block+=("当前模式: ${COLOR_BLUE}${current_mode}${COLOR_RESET}")
 		ui_append_manual_page_block lines "${runtime_heading}" "${runtime_block[@]}"
 		ui_append_manual_page_block lines "${profile_heading}" \
-			"● 1. 🚀 BBR+FQ 标准模式      使用稳妥的官方参数" \
-			"○ 2. ⚡ 激进调优模式         提升吞吐并放宽缓冲"
+			"  1. 🚀 BBR+FQ 标准模式      使用稳妥的官方参数" \
+			"  2. ⚡ 激进调优模式         提升吞吐并放宽缓冲"
 		ui_append_manual_page_block lines "${policy_heading}" \
-			"○ 3. 🌐 IPv4 优先            调整地址选择顺序" \
-			"○ 4. 🌍 恢复默认优先级       恢复系统默认网络策略"
+			"  3. 🌐 IPv4 优先            调整地址选择顺序" \
+			"  4. 🌍 恢复默认优先级       恢复系统默认网络策略"
 		ui_append_manual_page_block lines "${recovery_heading}" \
-			"○ 5. 🧰 内核维护工具         升级、回退和清理内核" \
-			"○ 6. ♻️ 从备份恢复配置       回滚到历史配置" \
-			"○ 7. 🩺 审计当前系统配置     检查现有网络参数" \
-			"! 8. 🗑️ 卸载并恢复默认       删除调优配置并恢复系统默认"
+			"  5. 🧰 内核维护工具         升级、回退和清理内核" \
+			"  6. ♻️ 从备份恢复配置       回滚到历史配置" \
+			"  7. 🩺 审计当前系统配置     检查现有网络参数" \
+			"$(printf '  %b 8. 🗑️ 卸载并恢复默认       删除调优配置并恢复系统默认%b' "${COLOR_RED}" "${COLOR_RESET}")"
 	fi
 
 	ui_render_menu "BBR ACE" "${lines[@]}"

@@ -179,82 +179,247 @@ configure_nginx_projects() {
 	else log_message ERROR "证书申请失败,未保存。"; fi
 }
 
+# --- 主菜单版式辅助（方案 D） -------------------------------------------------
+# 编号纯文字 + 标签定宽 + 说明；状态区为「键值 + 缩进明细 + 修复出口」。
+# 对齐按显示列计算（中文占 2 列），不依赖字面空格数量，窄屏也不产生孤字折行。
+
+# 终端列数（取不到时按 80，下限 24）
+_nginx_term_cols() {
+	local cols="${COLUMNS:-0}"
+	if [ -t 1 ] && command -v tput >/dev/null 2>&1; then
+		cols=$(tput cols 2>/dev/null || printf '%s' "$cols")
+	fi
+	case "$cols" in
+	'' | *[!0-9]*) cols=0 ;;
+	esac
+	[ "$cols" -le 0 ] && cols=80
+	[ "$cols" -lt 24 ] && cols=24
+	printf '%s\n' "$cols"
+}
+
+# 补齐到指定显示列数；已超宽则原样返回
+_nginx_pad_visual() {
+	local text="$1" target="$2" width
+	width=$(_get_visual_width "$text")
+	if [ "$width" -ge "$target" ]; then
+		printf '%s' "$text"
+		return 0
+	fi
+	printf '%s%*s' "$text" $((target - width)) ''
+}
+
+# 按显示列粗截断（中文按 2 列估算，保证不超宽），超出补省略号
+_nginx_trim_visual() {
+	local text="$1" limit="$2" width
+	width=$(_get_visual_width "$text")
+	if [ "$width" -le "$limit" ]; then
+		printf '%s' "$text"
+		return 0
+	fi
+	if command -v python3 >/dev/null 2>&1; then
+		printf '%s' "$text" | python3 -c '
+import sys, unicodedata
+limit = int(sys.argv[1])
+s = sys.stdin.read().strip()
+out = ""
+width = 0
+for ch in s:
+    cw = 2 if unicodedata.east_asian_width(ch) in ("W", "F", "A") else 1
+    if width + cw > limit - 1:
+        break
+    out += ch
+    width += cw
+sys.stdout.write(out + "…")
+' "$limit" 2>/dev/null && return 0
+	fi
+	# 取不到 python 时按字符数保守截断（中文按 2 列估算）
+	printf '%s…' "${text:0:$((limit / 2))}"
+}
+
+# 一行菜单项：编号右对齐 2 列 + 标签 16 列 + 说明
+_nginx_menu_row() {
+	local num="$1" label="$2" desc="${3:-}" color="${4:-}" limit
+	# 编号 2 列 + 分隔 2 列 + 标签 16 列 + 分隔 1 列 = 21 列，其余留给说明
+	limit=$(($(_nginx_term_cols) - 21))
+	[ "$limit" -lt 8 ] && limit=8
+	desc=$(_nginx_trim_visual "$desc" "$limit")
+	# 传了颜色就整行上色（危险项），说明文字不再用灰色，避免与底色冲突
+	if [ -n "$color" ]; then
+		printf '%s%s  %s %s%b' "$color" "$(printf '%2s' "$num")" "$(_nginx_pad_visual "$label" 16)" "$desc" "$NC"
+	else
+		printf '%s  %s %s' "$(printf '%2s' "$num")" "$(_nginx_pad_visual "$label" 16)" "${GRAY}${desc}${NC}"
+	fi
+}
+
+_nginx_status_color() {
+	case "$1" in
+	正常) printf '%s' "$GREEN" ;;
+	需关注) printf '%s' "$YELLOW" ;;
+	*) printf '%s' "$BRIGHT_RED" ;;
+	esac
+}
+
+_nginx_status_row() {
+	local label="$1" value="$2" color
+	color=$(_nginx_status_color "$value")
+	printf '%s%s%s%s' "$(_nginx_pad_visual "$label" 12)" "$color" "$value" "$NC"
+}
+
+_nginx_status_detail() {
+	local limit
+	limit=$(($(_nginx_term_cols) - 14))
+	[ "$limit" -lt 20 ] && limit=20
+	[ "$limit" -gt 46 ] && limit=46
+	printf '            %s%s%s' "$GRAY" "$(_nginx_trim_visual "$1" "$limit")" "$NC"
+}
+
+_nginx_status_hint() {
+	printf '            %s→ %s%s' "$GRAY" "$1" "$NC"
+}
+
+# 把「；」分隔的原因拆成明细行，超过 limit 条折成计数
+_nginx_status_details() {
+	local reason="$1" limit="${2:-3}" item="" shown=0 total=0
+	local -a raw=() items=()
+	IFS='；' read -r -a raw <<<"$reason"
+	# 先剔除空项，否则「还有 N 项」的计数会把结尾多余的分号也算进去
+	for item in "${raw[@]}"; do
+		if [ -n "$item" ]; then
+			items+=("$item")
+		fi
+	done
+	total=${#items[@]}
+	for item in "${items[@]}"; do
+		if [ "$shown" -ge "$limit" ]; then
+			printf '%s\n' "还有 $((total - limit)) 项"
+			return 0
+		fi
+		printf '%s\n' "$item"
+		shown=$((shown + 1))
+	done
+}
+
+# 配置检查的修复出口：只有临时目录权限类可用菜单 13
+_nginx_config_health_hint() {
+	case "$1" in
+	*目录* | *权限* | *写入*) printf '%s' "菜单 13 共享组修复" ;;
+	*) printf '' ;;
+	esac
+}
+
+# 证书状态的修复出口：非正常时都给续期入口
+_nginx_cert_health_hint() {
+	[ "$1" = "正常" ] && return 0
+	printf '%s' "菜单 6 批量续期"
+}
+
+# 状态区行：键值 + 缩进明细 + 修复出口
+_nginx_status_lines() {
+	local config_status config_reason cert_status cert_reason detail="" hint=""
+	IFS=$'\t' read -r config_status config_reason < <(_nginx_config_health_status)
+	IFS=$'\t' read -r cert_status cert_reason < <(_nginx_cert_health_status)
+	_nginx_status_row "配置检查" "$config_status"
+	printf '\n'
+	while IFS= read -r detail; do
+		if [ -n "$detail" ]; then
+			_nginx_status_detail "$detail"
+			printf '\n'
+		fi
+	done < <(_nginx_status_details "$config_reason" 3)
+	hint=$(_nginx_config_health_hint "$config_reason")
+	if [ -n "$hint" ]; then
+		_nginx_status_hint "$hint"
+		printf '\n'
+	fi
+	_nginx_status_row "证书状态" "$cert_status"
+	printf '\n'
+	while IFS= read -r detail; do
+		if [ -n "$detail" ]; then
+			_nginx_status_detail "$detail"
+			printf '\n'
+		fi
+	done < <(_nginx_status_details "$cert_reason" 3)
+	hint=$(_nginx_cert_health_hint "$cert_status")
+	if [ -n "$hint" ]; then
+		_nginx_status_hint "$hint"
+		printf '\n'
+	fi
+}
+
+# 常用操作分组
+_nginx_menu_common_rows() {
+	_nginx_menu_row 1 "配置新网站" "新建反向代理网站"
+	printf '\n'
+	_nginx_menu_row 2 "管理网站" "查看、修改或删除"
+	printf '\n'
+	_nginx_menu_row 3 "仅申请证书" "只管理证书"
+	printf '\n'
+	_nginx_menu_row 4 "配置 TCP 转发" "新建反代或负载均衡"
+	printf '\n'
+	_nginx_menu_row 5 "管理 TCP 转发" "查看或删除 TCP 项目"
+	printf '\n'
+}
+
+# 诊断与策略分组
+_nginx_menu_policy_rows() {
+	_nginx_menu_row 6 "批量续期" "检查并续期现有证书"
+	printf '\n'
+	_nginx_menu_row 7 "查看日志" "nginx 与 acme 日志"
+	printf '\n'
+	_nginx_menu_row 8 "Cloudflare 防御" "管理状态与 IP 库"
+	printf '\n'
+	_nginx_menu_row 9 "备份与恢复" "备份、还原与重建"
+	printf '\n'
+	_nginx_menu_row 10 "Telegram 通知" "机器人通知"
+	printf '\n'
+	_nginx_menu_row 11 "配置模板中心" "Block 与 Site 模板"
+	printf '\n'
+	_nginx_menu_row 12 "升级 Nginx" "从官方源升级"
+	printf '\n'
+	_nginx_menu_row 13 "修复目录冲突" "共享组修复权限"
+	printf '\n'
+}
+
 main_menu() {
 	_generate_op_id
 	_ensure_menu_interactive
 	while true; do
 		_draw_dashboard
 		JB_MENU_CONTEXT="submenu"
-		local config_status config_reason cert_status cert_reason
-		IFS=$'\t' read -r config_status config_reason < <(_nginx_config_health_status)
-		IFS=$'\t' read -r cert_status cert_reason < <(_nginx_cert_health_status)
-		local config_line="- 配置检查    ${config_status}"
-		local cert_line="- 证书状态    ${cert_status}"
-		[ -n "$config_reason" ] && config_line+="，${config_reason}"
-		[ -n "$cert_reason" ] && cert_line+="，${cert_reason}"
+		local -a status_lines=() menu_common=() menu_policy=()
+		mapfile -t status_lines < <(_nginx_status_lines)
+		mapfile -t menu_common < <(_nginx_menu_common_rows)
+		mapfile -t menu_policy < <(_nginx_menu_policy_rows)
+
 		if declare -f get_ui_theme >/dev/null 2>&1 && [ "$(get_ui_theme)" != "classic" ]; then
 			local -a menu_lines=()
 			if declare -f ui_append_schema_or_fallback_page_block >/dev/null 2>&1; then
 				ui_append_schema_or_fallback_page_block menu_lines "NGINX_MENU" "runtime_overview" "当前状态" \
-					"${config_line}" \
-					"${cert_line}"
+					"${status_lines[@]}"
 				ui_append_schema_or_fallback_page_block menu_lines "NGINX_MENU" "transport_routing" "常用操作" \
-					"● 1. 🌐 配置新网站        新建反向代理网站" \
-					"○ 2. 🗂️ 管理网站          查看、修改或删除网站" \
-					"○ 3. 📜 仅申请证书        只管理证书，不配置代理" \
-					"○ 4. 🔀 配置 TCP 转发     新建 TCP 反代或负载均衡" \
-					"○ 5. 🧩 管理 TCP 转发     查看、修改或删除 TCP 项目"
+					"${menu_common[@]}"
 				ui_append_schema_or_fallback_page_block menu_lines "NGINX_MENU" "operations_policy" "诊断与策略" \
-					"○ 6. 🔁 批量续期          检查并续期现有证书" \
-					"○ 7. 📄 查看日志          查看 Nginx 和 acme 日志" \
-					"○ 8. 🛡️ Cloudflare 防御   管理防御状态和 IP 库" \
-					"○ 9. 💾 备份与恢复        备份、还原和配置重建" \
-					"○ 10. 🤖 Telegram 通知    配置机器人通知" \
-					"○ 11. 🧱 配置模板中心     管理 Block 和 Site 模板" \
-					"! 12. ⬆️ 升级 Nginx       从官方源升级" \
-					"○ 13. 🩹 修复目录冲突     共享组根治多实例权限冲突"
+					"${menu_policy[@]}"
 			else
-				ui_append_manual_page_block menu_lines "当前状态" \
-					"${config_line}" \
-					"${cert_line}"
-				ui_append_manual_page_block menu_lines "常用操作" \
-					"● 1. 🌐 配置新网站        新建反向代理网站" \
-					"○ 2. 🗂️ 管理网站          查看、修改或删除网站" \
-					"○ 3. 📜 仅申请证书        只管理证书，不配置代理" \
-					"○ 4. 🔀 配置 TCP 转发     新建 TCP 反代或负载均衡" \
-					"○ 5. 🧩 管理 TCP 转发     查看、修改或删除 TCP 项目"
-				ui_append_manual_page_block menu_lines "诊断与策略" \
-					"○ 6. 🔁 批量续期          检查并续期现有证书" \
-					"○ 7. 📄 查看日志          查看 Nginx 和 acme 日志" \
-					"○ 8. 🛡️ Cloudflare 防御   管理防御状态和 IP 库" \
-					"○ 9. 💾 备份与恢复        备份、还原和配置重建" \
-					"○ 10. 🤖 Telegram 通知    配置机器人通知" \
-					"○ 11. 🧱 配置模板中心     管理 Block 和 Site 模板" \
-					"! 12. ⬆️ 升级 Nginx       从官方源升级" \
-					"○ 13. 🩹 修复目录冲突     共享组根治多实例权限冲突"
+				ui_append_manual_page_block menu_lines "当前状态" "${status_lines[@]}"
+				ui_append_manual_page_block menu_lines "常用操作" "${menu_common[@]}"
+				ui_append_manual_page_block menu_lines "诊断与策略" "${menu_policy[@]}"
 			fi
 			_render_menu "Nginx 管理" "${menu_lines[@]}"
 		else
+			local row=""
 			printf '%b' "${CYAN}当前状态${NC}\n"
-			printf '%b' " ${config_line}\n"
-			printf '%b' " ${cert_line}\n"
-			printf '%b' "\n"
-			printf '%b' "${CYAN}常用操作${NC}\n"
-			printf '%b' " ● 1. 配置新网站\n"
-			printf '%b' " ○ 2. 管理网站\n"
-			printf '%b' " ○ 3. 仅申请证书\n"
-			printf '%b' " ○ 4. 配置 TCP 转发\n"
-			printf '%b' " ○ 5. 管理 TCP 转发\n"
-			printf '%b' "\n"
-			printf '%b' "${CYAN}诊断与策略${NC}\n"
-			printf '%b' " ○ 6. 批量续期\n"
-			printf '%b' " ○ 7. 查看日志\n"
-			printf '%b' " ○ 8. Cloudflare 防御\n"
-			printf '%b' " ○ 9. 备份与恢复\n"
-			printf '%b' " ○ 10. Telegram 通知\n"
-			printf '%b' " ○ 11. 配置模板中心\n"
-			printf '%b' " ! 12. 升级 Nginx\n"
-			printf '%b' " ○ 13. 修复目录冲突\n"
+			for row in "${status_lines[@]}"; do
+				printf ' %s\n' "$row"
+			done
+			printf '%b' "\n${CYAN}常用操作${NC}\n"
+			for row in "${menu_common[@]}"; do
+				printf ' %s\n' "$row"
+			done
+			printf '%b' "\n${CYAN}诊断与策略${NC}\n"
+			for row in "${menu_policy[@]}"; do
+				printf ' %s\n' "$row"
+			done
 			printf '%b' "\n"
 		fi
 		local c

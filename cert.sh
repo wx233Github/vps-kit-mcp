@@ -769,7 +769,7 @@ _manage_certificates() {
 				[ -n "$next_ts" ] && next_renew_str=$(date -d "@$next_ts" +%F 2>/dev/null || echo "Err")
 			fi
 
-			list_lines+=("○ $((i + 1)). ${d}")
+			list_lines+=("  $((i + 1)). ${d}")
 			list_lines+=("   证书状态: ${color}${status_text}${NC} | CA: ${ca_str}")
 			list_lines+=("   到期时间: ${date_str} | 剩余: ${days_info}")
 			list_lines+=("   下次续期: ${next_renew_str} | 路径: ${install_path}")
@@ -797,12 +797,12 @@ _manage_certificates() {
 				"- ${SELECTED_DOMAIN}"
 				""
 				"常用操作"
-				"○ 1. 查看证书详情    查看证书签发方、到期时间和域名信息"
-				"● 2. 立即续期        立即尝试续期当前证书"
+				"  1. 查看证书详情    查看证书签发方、到期时间和域名信息"
+				"  2. 立即续期        立即尝试续期当前证书"
 				""
 				"危险操作"
-				"! 3. 删除证书        删除证书文件和 acme 记录"
-				"! 4. 重新申请证书    覆盖原有配置并重新申请"
+				"$(printf '  %b 3. 删除证书        删除证书文件和 acme 记录%b' "${RED}" "${NC}")"
+				"$(printf '  %b 4. 重新申请证书    覆盖原有配置并重新申请%b' "${YELLOW}" "${NC}")"
 			)
 			_render_menu "管理: $SELECTED_DOMAIN" "${action_menu[@]}"
 
@@ -960,21 +960,22 @@ cert_menu_line() {
 	local index="$1"
 	local name="$2"
 	local desc="${3:-}"
-	local marker="○"
 	local icon=""
 	case "$name" in
-	"申请证书") marker="●"; icon="📜" ;;
+	"申请证书") icon="📜" ;;
 	"证书管理") icon="🗂️" ;;
 	"系统设置") icon="⚙️" ;;
-	"诊断自动续期") marker="●"; icon="🩺" ;;
+	"诊断自动续期") icon="🩺" ;;
 	"升级 acme.sh") icon="⬆️" ;;
 	"开启自动更新") icon="🔁" ;;
-	"关闭自动更新") marker="!"; icon="⏸️" ;;
+	"关闭自动更新") icon="⏸️" ;;
 	esac
+	# 图标后补一个空格，避免无图标时编号与名称之间出现双空格
+	[ -n "$icon" ] && icon="$icon "
 	if [ -n "$desc" ]; then
-		printf '%s %s. %s %s    %s' "$marker" "$index" "$icon" "$name" "$desc"
+		printf '%2s. %s%s    %s' "$index" "$icon" "$name" "$desc"
 	else
-		printf '%s %s. %s %s' "$marker" "$index" "$icon" "$name"
+		printf '%2s. %s%s' "$index" "$icon" "$name"
 	fi
 }
 
@@ -983,10 +984,10 @@ render_cert_system_maintenance_menu() {
 	theme="$(cert_menu_theme)"
 	if [ "$theme" = "classic" ]; then
 		local -a sys_menu=(
-			"● 1. 🩺 诊断自动续期    检查 cron 和续期任务"
-			"○ 2. ⬆️ 升级 acme.sh    更新客户端和规则"
-			"○ 3. 🔁 开启自动更新    保持客户端最新"
-			"! 4. ⏸️ 关闭自动更新    固定当前版本"
+			"  1. 🩺 诊断自动续期    检查 cron 和续期任务"
+			"  2. ⬆️ 升级 acme.sh    更新客户端和规则"
+			"  3. 🔁 开启自动更新    保持客户端最新"
+			"  4. ⏸️ 关闭自动更新    固定当前版本"
 		)
 		_render_menu "系统维护" "${sys_menu[@]}"
 		return 0
@@ -1030,11 +1031,11 @@ render_cert_main_menu() {
 			"- acme.sh $( [ -x "$ACME_BIN" ] && printf '已安装' || printf '未安装' )"
 			""
 			"常用操作"
-			"● 1. 📜 申请证书      申请单域名、泛域名和 DNS 验证证书"
-			"○ 2. 🗂️ 证书管理      查看详情、续期和重新申请"
+			"  1. 📜 申请证书      申请单域名、泛域名和 DNS 验证证书"
+			"  2. 🗂️ 证书管理      查看详情、续期和重新申请"
 			""
 			"诊断与策略"
-			"○ 3. ⚙️ 系统设置      管理续期、升级和自动更新"
+			"  3. ⚙️ 系统设置      管理续期、升级和自动更新"
 		)
 		_render_menu "证书管理" "${menu_items[@]}"
 		return 0
