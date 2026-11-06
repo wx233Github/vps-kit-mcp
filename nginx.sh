@@ -421,8 +421,12 @@ _nginx_http2_warn_line() {
 	printf '%b' "${BRIGHT_RED}⚠ 当前 Nginx 版本不支持 http2 on; 建议升级或改用 listen 443 ssl http2${NC}"
 }
 
-_nginx_latest_upstream_version() {
-	local cache_file="${NGINX_UPSTREAM_VERSION_CACHE:-/tmp/.nginx_latest_version.cache}"
+# 输出 "稳定版<TAB>文档里出现过的分支列表"（分支列表以空格分隔）。
+# 下载页顶部是 Mainline 版（1.31.x），直接取页面第一个版本号会拿主线；而菜单 12 安装的是
+# 稳定线，两者比较会让「可升级」提示永远清不掉。整页是单行 HTML，只能按「锚点 + 定长窗口」
+# 截取，用行区间会把主线版一起截进来。
+_nginx_upstream_meta() {
+	local cache_file="${NGINX_UPSTREAM_META_CACHE:-/tmp/.nginx_upstream_meta.cache}"
 	local ttl="${NGINX_UPSTREAM_VERSION_TTL:-86400}"
 	local now mtime
 	now=$(date +%s)
@@ -431,19 +435,41 @@ _nginx_latest_upstream_version() {
 		cat "$cache_file" 2>/dev/null
 		return 0
 	fi
-	local latest
-	latest=$(curl -fsSL --connect-timeout 5 --max-time 10 https://nginx.org/en/download.html 2>/dev/null | grep -oE 'nginx-[0-9]+\.[0-9]+\.[0-9]+' | head -n1 | cut -d- -f2)
-	if [ -n "$latest" ]; then
-		printf '%s' "$latest" >"$cache_file" 2>/dev/null || true
-		printf '%s' "$latest"
-	fi
+	local html="" stable="" branches=""
+	html=$(curl -fsSL --connect-timeout 5 --max-time 10 https://nginx.org/en/download.html 2>/dev/null) || return 0
+	[ -n "$html" ] || return 0
+	stable=$(printf '%s' "$html" | grep -oE 'Stable version.{0,500}' | head -n1 | grep -oE 'nginx-[0-9]+\.[0-9]+\.[0-9]+' | head -n1 | cut -d- -f2)
+	[ -n "$stable" ] || return 0
+	branches=$(printf '%s' "$html" | grep -oE 'CHANGES-[0-9]+\.[0-9]+' | sed 's/^CHANGES-//' | sort -uV | tr '\n' ' ')
+	branches="${branches% }"
+	printf '%s\t%s' "$stable" "$branches" >"$cache_file" 2>/dev/null || true
+	printf '%s\t%s' "$stable" "$branches"
 }
 
 _nginx_new_version_line() {
-	local current="${1:-}" latest="${2:-}"
-	if [ -z "$latest" ] || [ -z "$current" ] || [ "$current" = "unknown" ]; then return 0; fi
-	if _version_ge "$current" "$latest"; then return 0; fi
-	printf '%b' "${BRIGHT_YELLOW}⬆ 发现 Nginx 新版本 ${latest}（当前 ${current}），可通过菜单「升级 Nginx」更新${NC}"
+	local current="${1:-}" meta="" stable="" branches="" cur_branch="" stable_branch=""
+	if [ -z "$current" ] || [ "$current" = "unknown" ]; then return 0; fi
+	meta=$(_nginx_upstream_meta)
+	[ -n "$meta" ] || return 0
+	IFS=$'\t' read -r stable branches <<<"$meta"
+	[ -n "$stable" ] || return 0
+	if _version_ge "$current" "$stable"; then return 0; fi
+	cur_branch="${current%.*}"
+	stable_branch="${stable%.*}"
+	if [ "$cur_branch" = "$stable_branch" ]; then
+		printf '%b' "${BRIGHT_YELLOW}⬆ 稳定版补丁更新 ${stable}（当前 ${current}），可通过菜单「升级 Nginx」更新${NC}"
+		return 0
+	fi
+	# 稳定分支本身也会出现在 CHANGES-x.y 列表里，所以判定顺序不能反：
+	# 先确认不是同一分支，再看剩余分支列表，命中即说明当前分支已停止维护。
+	case " ${branches} " in
+	*" ${cur_branch} "*)
+		printf '%b' "${BRIGHT_YELLOW}⬆ 当前 ${cur_branch} 分支已停止维护（${current}），建议升级到稳定版 ${stable}${NC}"
+		;;
+	*)
+		printf '%b' "${BRIGHT_YELLOW}⬆ 发现 Nginx 稳定版 ${stable}（当前 ${current}），可通过菜单「升级 Nginx」更新${NC}"
+		;;
+	esac
 }
 
 _draw_dashboard() {
@@ -470,7 +496,7 @@ _draw_dashboard() {
 	local line3=""
 	line3=$(_nginx_http2_warn_line "$nginx_v")
 	local line4=""
-	line4=$(_nginx_new_version_line "$nginx_v" "$(_nginx_latest_upstream_version)")
+	line4=$(_nginx_new_version_line "$nginx_v")
 	local line5=""
 	line5=$(_nginx_multi_instance_line)
 
