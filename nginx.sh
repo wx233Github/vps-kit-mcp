@@ -505,7 +505,22 @@ _nginx_hint_line() {
 # 参数可选：传入秒数用于测试，省略时读 /proc/uptime。
 _nginx_uptime_cn() {
 	local secs="${1:-}"
-	[ -n "$secs" ] || secs=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+	if [ -z "$secs" ]; then
+		# 取 nginx 服务自身的启动时刻；服务不在（未装/未运行）时不再拿系统 uptime 充数
+		local started="" started_ts=0
+		started=$(systemctl show nginx -p ActiveEnterTimestamp --value 2>/dev/null || true)
+		if [ -z "$started" ]; then
+			printf '%s' "未运行"
+			return 0
+		fi
+		started_ts=$(date -d "$started" +%s 2>/dev/null || printf '0')
+		if [ "$started_ts" -le 0 ]; then
+			printf '%s' "未运行"
+			return 0
+		fi
+		secs=$(($(date +%s) - started_ts))
+		[ "$secs" -lt 0 ] && secs=0
+	fi
 	case "$secs" in
 	'' | *[!0-9]*)
 		printf '%s' "未知"
@@ -584,10 +599,13 @@ _draw_dashboard() {
 	_generate_op_id
 	# 健康结论只在本次绘制内复用，下次重绘必须重新体检，否则修完证书告警数不会更新
 	_NGINX_HEALTH_CACHED=0
-	local nginx_v="unknown"
+	local nginx_v="unknown" nginx_missing="false"
 	if _ensure_nginx_in_path; then
 		nginx_v=$(_get_nginx_version)
 		[ -z "$nginx_v" ] && nginx_v="unknown"
+	else
+		nginx_v="未安装"
+		nginx_missing="true"
 	fi
 	local uptime_text
 	uptime_text=$(_nginx_uptime_cn)
@@ -601,10 +619,13 @@ _draw_dashboard() {
 	alert_count=$(_nginx_alert_count)
 
 	local line4=""
-	line4=$(_nginx_new_version_line "$nginx_v")
+	[ "$nginx_missing" = "true" ] || line4=$(_nginx_new_version_line "$nginx_v")
 	# 版本提示与 http2 提醒都是「去升级」，版本提示已给出建议时不再重复
 	local line3=""
-	[ -z "$line4" ] && line3=$(_nginx_http2_warn_line "$nginx_v")
+	# 未安装时不谈兼容性；已给出升级建议时也不重复
+	if [ "$nginx_missing" != "true" ] && [ -z "$line4" ]; then
+		line3=$(_nginx_http2_warn_line "$nginx_v")
+	fi
 	local line5=""
 	line5=$(_nginx_multi_instance_line)
 
@@ -616,6 +637,9 @@ _draw_dashboard() {
 	printf '%bNginx%b   %s%b\n' "$BOLD" "$NC" "$nginx_v" "$NC"
 	printf '%b已运行 %s%b   HTTP %s   TCP %s   证书 %s   告警 %s\n' \
 		"$GRAY" "$uptime_text" "$NC" "$count" "$tcp_count" "$cert_count" "$alert_count"
+	if [ "$nginx_missing" = "true" ]; then
+		printf '%b\n' "${BRIGHT_YELLOW}nginx 未安装：回主菜单用「2 Nginx」重新安装${NC}"
+	fi
 	if [ -n "$line3" ]; then
 		printf '%b\n' "$line3"
 	fi
@@ -1135,6 +1159,10 @@ _fix_nginx_temp_path_conflicts() {
 _nginx_config_health_status() {
 	local output=""
 	local rc=0
+	if ! command -v nginx >/dev/null 2>&1 && [ ! -x /usr/sbin/nginx ] && [ ! -x /usr/local/sbin/nginx ]; then
+		printf '%s\t%s\n' "未安装" "nginx 未安装，回主菜单 2 重新安装"
+		return 0
+	fi
 	output=$(nginx -t 2>&1) || rc=$?
 	if [ "$rc" -ne 0 ]; then
 		printf '%s\t%s\n' "异常" "nginx -t 未通过"

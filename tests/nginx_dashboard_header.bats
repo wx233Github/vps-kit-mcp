@@ -221,3 +221,51 @@ teardown() {
   [[ "$first" == *"分支已停止维护"* ]]
   [[ "$second" == *"HTTP2-WARN"* ]]
 }
+
+@test "_draw_dashboard: nginx 未安装时显示未安装提示且不打版本提示" {
+  run bash -c '
+    source "$1"
+    PROJECTS_METADATA_FILE="$2/p.json"
+    TCP_PROJECTS_METADATA_FILE="$2/t.json"
+    _generate_op_id() { :; }
+    _ensure_nginx_in_path() { return 1; }
+    _get_nginx_version() { printf "%s" "unknown"; }
+    _nginx_config_health_status() { printf "未安装\\tnginx 未安装，回主菜单 2 重新安装\\n"; }
+    _nginx_cert_health_status() { printf "正常\\t\\n"; }
+    _nginx_upstream_meta() { printf "%s\\t%s" 1.30.6 "1.30 1.28 1.26"; }
+    _nginx_multi_instance_line() { :; }
+    _nginx_http2_warn_line() { printf "HTTP2-WARN"; }
+    generate_line() { local w="$1" c="$2" i=0 o=""; while [ "$i" -lt "$w" ]; do o+="$c"; i=$((i+1)); done; printf "%s" "$o"; }
+    COLUMNS=45 _draw_dashboard
+  ' _ "$LIB_PATH" "$WORK_DIR"
+  [ "$status" -eq 0 ]
+  local plain
+  plain=$(printf '%s\n' "$output" | sed 's/\x1b\[[0-9;]*m//g')
+  [[ "$plain" == *"Nginx   未安装"* ]]
+  [[ "$plain" == *"nginx 未安装：回主菜单用「2 Nginx」重新安装"* ]]
+  [[ "$plain" != *"分支已停止维护"* ]]
+  [[ "$plain" != *"HTTP2-WARN"* ]]
+  [[ "$plain" == *"告警 1"* ]]
+}
+
+@test "_nginx_uptime_cn: nginx 服务不在时显示未运行" {
+  run bash -c '
+    source "$1"
+    systemctl() { :; }
+    _nginx_uptime_cn
+  ' _ "$LIB_PATH"
+  [ "$status" -eq 0 ]
+  [ "$output" = "未运行" ]
+}
+
+@test "_nginx_uptime_cn: 取 nginx 服务启动时刻而不是系统开机时长" {
+  run bash -c '
+    source "$1"
+    systemctl() {
+      printf "%s" "$(date -d "@$(( $(date +%s) - 7200 ))" "+%Y-%m-%d %H:%M:%S")"
+    }
+    _nginx_uptime_cn
+  ' _ "$LIB_PATH"
+  [ "$status" -eq 0 ]
+  [ "$output" = "2 时" ]
+}
