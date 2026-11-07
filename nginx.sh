@@ -600,10 +600,11 @@ _draw_dashboard() {
 	local alert_count
 	alert_count=$(_nginx_alert_count)
 
-	local line3=""
-	line3=$(_nginx_http2_warn_line "$nginx_v")
 	local line4=""
 	line4=$(_nginx_new_version_line "$nginx_v")
+	# 版本提示与 http2 提醒都是「去升级」，版本提示已给出建议时不再重复
+	local line3=""
+	[ -z "$line4" ] && line3=$(_nginx_http2_warn_line "$nginx_v")
 	local line5=""
 	line5=$(_nginx_multi_instance_line)
 
@@ -1548,12 +1549,13 @@ install_dependencies() {
 		local apt_log
 		apt_log=$(mktemp /tmp/nginx_deps.XXXXXX.log 2>/dev/null || printf '%s' "/tmp/nginx_deps.log")
 		_stage 2 5 "安装缺失依赖（${missing_display}）"
+		_wait_apt_lock 60 || return 1
 		log_message INFO "刷新软件源…"
-		if run_cmd 300 sudo -n "${apt_env[@]}" apt-get update >"$apt_log" 2>&1 ||
-			run_cmd 300 "${apt_env[@]}" apt-get update >>"$apt_log" 2>&1; then
+		if _run_in_group_with_timeout 300 sudo -n "${apt_env[@]}" apt-get update >"$apt_log" 2>&1 ||
+			_run_in_group_with_timeout 300 "${apt_env[@]}" apt-get update >>"$apt_log" 2>&1; then
 			log_message INFO "安装软件包…"
-			if run_cmd 900 sudo -n "${apt_env[@]}" apt-get install "${apt_opts[@]}" "${missing_deps[@]}" >>"$apt_log" 2>&1 ||
-				run_cmd 900 "${apt_env[@]}" apt-get install "${apt_opts[@]}" "${missing_deps[@]}" >>"$apt_log" 2>&1; then
+			if _run_in_group_with_timeout 900 sudo -n "${apt_env[@]}" apt-get install "${apt_opts[@]}" "${missing_deps[@]}" >>"$apt_log" 2>&1 ||
+				_run_in_group_with_timeout 900 "${apt_env[@]}" apt-get install "${apt_opts[@]}" "${missing_deps[@]}" >>"$apt_log" 2>&1; then
 				log_message SUCCESS "依赖安装完成"
 			else
 				log_message ERROR "依赖安装失败，最后 5 行输出:"
@@ -5487,14 +5489,6 @@ uninstall_nginx_module() {
 		return 1
 	fi
 	if ! confirm_or_cancel "确认继续卸载 Nginx?" "n"; then return 0; fi
-	local typed=""
-	printf '%b' "请输入 ${BOLD}UNINSTALL${NC} 确认: "
-	read -r typed </dev/tty || typed=""
-	if [ "$typed" != "UNINSTALL" ]; then
-		log_message INFO "输入不匹配，已取消卸载。"
-		return 0
-	fi
-
 	local ts backup_dir
 	ts=$(date +%Y%m%d_%H%M%S)
 	backup_dir="${BACKUP_DIR}/nginx-uninstall-${ts}"
@@ -5518,11 +5512,12 @@ uninstall_nginx_module() {
 
 	local -a apt_env=(env DEBIAN_FRONTEND=noninteractive APT_LISTCHANGES_FRONTEND=none NEEDRESTART_MODE=a)
 	local -a apt_opts=(-y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+	_wait_apt_lock 60 || return 1
 	local purge_log
 	purge_log=$(mktemp /tmp/nginx_purge.XXXXXX.log 2>/dev/null || printf '%s' "/tmp/nginx_purge.log")
 	log_message INFO "正在卸载软件包…"
-	if run_cmd 300 sudo -n "${apt_env[@]}" apt-get purge "${apt_opts[@]}" "${pkgs[@]}" "${extra[@]}" >"$purge_log" 2>&1 ||
-		run_cmd 300 "${apt_env[@]}" apt-get purge "${apt_opts[@]}" "${pkgs[@]}" "${extra[@]}" >>"$purge_log" 2>&1; then
+	if _run_in_group_with_timeout 300 sudo -n "${apt_env[@]}" apt-get purge "${apt_opts[@]}" "${pkgs[@]}" "${extra[@]}" >"$purge_log" 2>&1 ||
+		_run_in_group_with_timeout 300 "${apt_env[@]}" apt-get purge "${apt_opts[@]}" "${pkgs[@]}" "${extra[@]}" >>"$purge_log" 2>&1; then
 		log_message SUCCESS "nginx 软件包已卸载"
 	else
 		log_message ERROR "卸载失败，最后 5 行输出:"
@@ -5572,11 +5567,14 @@ main() {
 		return 0
 	fi
 	if ! acquire_http_lock; then return 1; fi
-	_stage 1 5 "检查系统与依赖"
+	local first_install="false"
+	if ! _ensure_nginx_in_path; then first_install="true"; fi
+	if [ "$first_install" = "true" ]; then _stage 1 5 "检查系统与依赖"; fi
 	if ! check_root; then return 1; fi
 	if ! check_os_compatibility; then return 1; fi
 	if ! check_dependencies; then
-		install_dependencies
+		# 依赖没装上就没法继续：继续跑只会在后面报一堆 nginx -t 失败
+		install_dependencies || return 1
 	fi
 
 	if [ "${CHECK_ONLY:-false}" = "true" ]; then
@@ -5591,7 +5589,7 @@ main() {
 		run_audit_report
 		return $?
 	fi
-	_stage 3 5 "初始化目录与配置"
+	if [ "$first_install" = "true" ]; then _stage 3 5 "初始化目录与配置"; fi
 	initialize_environment
 	if [ "${TX_RECOVER:-false}" = "true" ]; then
 		tx_wal_recover
@@ -5617,12 +5615,16 @@ main() {
 
 	_ensure_systemd_nginx_running_or_warn || true
 
-	_stage 4 5 "准备证书环境"
+	if [ "$first_install" = "true" ] || [ ! -f "$ACME_BIN" ]; then
+		_stage 4 5 "准备证书环境"
+	fi
 	if ! install_acme_sh; then
 		return 1
 	fi
 
-	log_message SUCCESS "初始化完成，正在进入面板"
+	if [ "$first_install" = "true" ]; then
+		log_message SUCCESS "初始化完成，正在进入面板"
+	fi
 	local menu_rc=0
 	if main_menu; then
 		return 0

@@ -62,3 +62,35 @@ setup() {
   [[ "$output" == *"10|is-active|--quiet|nginx|"* ]]
   [[ "$output" == *"30|enable|--now|nginx|"* ]]
 }
+
+@test "_wait_apt_lock: 锁被占用时等待后报错，锁空闲时立即通过" {
+  run bash -c '
+    source "$1"
+    sleep() { :; }
+    log_message() { :; }
+    fuser() { printf " 12345"; }
+    if _wait_apt_lock 3; then printf "busy:pass\n"; else printf "busy:fail\n"; fi
+    fuser() { :; }
+    if _wait_apt_lock 3; then printf "free:pass\n"; else printf "free:fail\n"; fi
+  ' _ "$CORE_PATH"
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = "busy:fail" ]
+  [ "${lines[1]}" = "free:pass" ]
+}
+
+@test "_run_in_group_with_timeout: 超时会带走整个进程组" {
+  run bash -c '
+    source "$1"
+    start=$(date +%s)
+    _run_in_group_with_timeout 2 sleep 30
+    rc=$?
+    end=$(date +%s)
+    printf "%s %s" "$rc" "$((end - start))"
+  ' _ "$CORE_PATH"
+  [ "$status" -eq 0 ]
+  local rc elapsed
+  rc="${output% *}"
+  elapsed="${output#* }"
+  [ "$rc" -eq 124 ]
+  [ "$elapsed" -le 8 ]
+}

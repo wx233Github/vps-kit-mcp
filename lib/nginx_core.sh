@@ -495,6 +495,64 @@ _collect_systemd_nginx_fail_reason() {
 	printf '%s' "$reason"
 }
 
+# 占用者的运行时长：跑了几小时的 apt 基本就是上次装到一半的残留，等下去没意义。
+_apt_lock_holder_desc() {
+	local holder="$1" desc=""
+	[ -n "$holder" ] || return 0
+	desc=$(ps -p "$holder" -o etime=,cmd= 2>/dev/null | sed 's/^[[:space:]]*//' | cut -c1-60 || true)
+	if [ -n "$desc" ]; then
+		printf 'pid %s（%s）' "$holder" "$desc"
+	else
+		printf 'pid %s' "$holder"
+	fi
+}
+
+# dpkg 前端锁可能被上一次没跑完的 apt 占着（安装中断/后台更新）。
+# 直接 purge 会立刻失败，所以在动 apt 之前先等它释放，最多等 max 秒。
+_wait_apt_lock() {
+	local max="${1:-60}" waited=0 holder=""
+	command -v fuser >/dev/null 2>&1 || return 0
+	while [ "$waited" -lt "$max" ]; do
+		holder=$(fuser /var/lib/dpkg/lock-frontend 2>/dev/null | tr -d ' ' || true)
+		if [ -z "$holder" ]; then
+			[ "$waited" -gt 0 ] && log_message INFO "dpkg 锁已释放，继续。"
+			return 0
+		fi
+		if [ "$waited" -eq 0 ]; then
+			log_message WARN "dpkg 锁被 $(_apt_lock_holder_desc "$holder") 占用，等待释放（最多 ${max} 秒）…"
+		fi
+		sleep 3
+		waited=$((waited + 3))
+	done
+	log_message ERROR "dpkg 锁仍被 $(_apt_lock_holder_desc "$holder") 占用。若它已运行很久，多半是上次中断的 apt，先 kill 该进程再重试。"
+	return 1
+}
+
+# 在独立进程组里跑命令并带超时：apt 通过 sudo 启动时，单纯 kill sudo 不会带走
+# 它下面的 apt/dpkg，锁会被一直占着。setsid 建新会话后按组 kill，才能真正收干净。
+_run_in_group_with_timeout() {
+	local secs="${1:-900}"
+	shift
+	if ! command -v setsid >/dev/null 2>&1 || ! command -v timeout >/dev/null 2>&1; then
+		run_cmd "$secs" "$@"
+		return $?
+	fi
+	setsid "$@" &
+	local pid=$! i=0
+	while kill -0 "$pid" 2>/dev/null; do
+		if [ "$i" -ge "$secs" ]; then
+			kill -TERM "-$pid" 2>/dev/null || true
+			sleep 2
+			kill -KILL "-$pid" 2>/dev/null || true
+			wait "$pid" 2>/dev/null || true
+			return 124
+		fi
+		sleep 1
+		i=$((i + 1))
+	done
+	wait "$pid" 2>/dev/null
+}
+
 # systemd job 卡住时 systemctl 会一直等，把整个 SSH 会话一起拖死；统一加超时。
 _systemctl_timeout() {
 	local secs="${1:-30}"

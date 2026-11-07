@@ -193,3 +193,31 @@ teardown() {
   [ "$status" -eq 0 ]
   [ "${lines[0]}" = "2" ]
 }
+
+@test "_draw_dashboard: 有版本升级提示时不再打 http2 警告" {
+  run bash -c '
+    source "$1"
+    PROJECTS_METADATA_FILE="$2/p.json"
+    TCP_PROJECTS_METADATA_FILE="$2/t.json"
+    _generate_op_id() { :; }
+    _ensure_nginx_in_path() { return 0; }
+    _get_nginx_version() { printf "%s" 1.18.0; }
+    _nginx_config_health_status() { printf "正常\t\n"; }
+    _nginx_cert_health_status() { printf "正常\t\n"; }
+    _nginx_upstream_meta() { printf "%s\t%s" 1.30.6 "1.30 1.28 1.26 1.18"; }
+    _nginx_multi_instance_line() { :; }
+    _nginx_http2_warn_line() { printf "HTTP2-WARN"; }
+    generate_line() { local w="$1" c="$2" i=0 o=""; while [ "$i" -lt "$w" ]; do o+="$c"; i=$((i+1)); done; printf "%s" "$o"; }
+    COLUMNS=45 _draw_dashboard
+    printf "\n==="
+    _nginx_upstream_meta() { :; }
+    COLUMNS=45 _draw_dashboard
+  ' _ "$LIB_PATH" "$WORK_DIR"
+  [ "$status" -eq 0 ]
+  local first second
+  first="${output%%===*}"
+  second="${output#*===}"
+  [[ "$first" != *"HTTP2-WARN"* ]]
+  [[ "$first" == *"分支已停止维护"* ]]
+  [[ "$second" == *"HTTP2-WARN"* ]]
+}
