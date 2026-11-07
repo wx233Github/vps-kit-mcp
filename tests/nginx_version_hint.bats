@@ -51,7 +51,7 @@ Legacy versions</h4>CHANGES-1.28 nginx-1.28.3 CHANGES-1.26 nginx-1.26.3</html>"
     _nginx_new_version_line 1.30.5
   ' _ "$LIB_PATH"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"稳定版更新 1.30.6（当前 1.30.5），建议升级"* ]]
+  [[ "$output" == *"稳定版更新 1.30.6，建议升级"* ]]
   [[ "$output" == *"→ 菜单 12"* ]]
   [[ "$output" != *"已停止维护"* ]]
 }
@@ -76,4 +76,20 @@ Legacy versions</h4>CHANGES-1.28 nginx-1.28.3 CHANGES-1.26 nginx-1.26.3</html>"
   ' _ "$LIB_PATH"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
+}
+
+@test "_nginx_new_version_line: 窄终端下不把版本号劈到下一行" {
+  run bash -c '
+    source "$1"
+    _nginx_upstream_meta() { printf "%s\t%s" 1.30.6 "1.30 1.28 1.26"; }
+    COLUMNS=45 _nginx_new_version_line 1.18.0
+  ' _ "$LIB_PATH"
+  [ "$status" -eq 0 ]
+  local first
+  first=$(printf '%s\n' "$output" | head -n1 | sed 's/\x1b\[[0-9;]*m//g')
+  # 整个第一行必须在 45 列以内
+  local width
+  width=$(bash -c 'source "$1"; _get_visual_width "$2"' _ "$LIB_PATH" "$first")
+  [ "$width" -le 45 ]
+  [[ "$output" != *$'\n6\n'* ]]
 }

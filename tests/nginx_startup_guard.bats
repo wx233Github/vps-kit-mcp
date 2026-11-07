@@ -94,3 +94,17 @@ setup() {
   [ "$rc" -eq 124 ]
   [ "$elapsed" -le 8 ]
 }
+
+@test "首装阶段号连续且分母一致（1..5）" {
+  local nums denoms
+  nums=$(grep -o '_stage [0-9] [0-9]' nginx.sh | awk '{print $2}' | sort -n | tr '\n' ' ')
+  denoms=$(grep -o '_stage [0-9] [0-9]' nginx.sh | awk '{print $3}' | sort -u | tr '\n' ' ')
+  [ "$nums" = "1 2 3 4 5 " ]
+  [ "$denoms" = "5 " ]
+}
+
+@test "缺失依赖只由 install_dependencies 报一次 WARN" {
+  # check_dependencies 是探测函数，不应自己发 WARN（否则同一件事报两遍）
+  ! grep -q 'log_message WARN "缺失依赖' nginx.sh
+  grep -q 'log_message WARN "缺少依赖：' nginx.sh
+}

@@ -457,7 +457,7 @@ _nginx_upstream_meta() {
 }
 
 _nginx_new_version_line() {
-	local current="${1:-}" meta="" stable="" branches="" cur_branch="" stable_branch=""
+	local current="${1:-}" meta="" stable="" branches="" cur_branch="" stable_branch="" text="" limit=""
 	if [ -z "$current" ] || [ "$current" = "unknown" ]; then return 0; fi
 	meta=$(_nginx_upstream_meta)
 	[ -n "$meta" ] || return 0
@@ -467,26 +467,22 @@ _nginx_new_version_line() {
 	cur_branch="${current%.*}"
 	stable_branch="${stable%.*}"
 	# 两行结构：第一行说清问题与目标版本，第二行右对齐给出菜单入口。
+	# 文案里不再重复具体版本号——标题行已经显示 current，窄屏下重复会挤到折行。
 	if [ "$cur_branch" = "$stable_branch" ]; then
-		printf '%b\n%b%s%b\n' \
-			"${BRIGHT_YELLOW}稳定版更新 ${stable}（当前 ${current}），建议升级${NC}" \
-			"${BRIGHT_YELLOW}" "$(_nginx_hint_line "→ 菜单 12")" "${NC}"
-		return 0
-	fi
+		text="稳定版更新 ${stable}，建议升级"
 	# 稳定分支本身也会出现在 CHANGES-x.y 列表里，所以判定顺序不能反：
 	# 先确认不是同一分支，再看剩余分支列表，命中即说明当前分支已停止维护。
-	case " ${branches} " in
-	*" ${cur_branch} "*)
-		printf '%b\n%b%s%b\n' \
-			"${BRIGHT_YELLOW}当前 ${cur_branch} 分支已停止维护（${current}），建议升级到稳定版 ${stable}${NC}" \
-			"${BRIGHT_YELLOW}" "$(_nginx_hint_line "→ 菜单 12")" "${NC}"
-		;;
-	*)
-		printf '%b\n%b%s%b\n' \
-			"${BRIGHT_YELLOW}发现稳定版 ${stable}（当前 ${current}），建议升级${NC}" \
-			"${BRIGHT_YELLOW}" "$(_nginx_hint_line "→ 菜单 12")" "${NC}"
-		;;
-	esac
+	elif [[ " ${branches} " == *" ${cur_branch} "* ]]; then
+		text="当前 ${cur_branch} 分支已停止维护，建议升级到 ${stable}"
+	else
+		text="发现稳定版 ${stable}，建议升级"
+	fi
+	# 窄终端兜底：整行超过终端宽度时按显示列截断，避免把版本号劈到下一行。
+	limit=$(( $(_nginx_term_cols) - 2 ))
+	[ "$limit" -lt 24 ] && limit=24
+	text=$(_nginx_trim_visual "$text" "$limit")
+	printf '%b\n%b%s%b\n' "${BRIGHT_YELLOW}${text}${NC}" \
+		"${BRIGHT_YELLOW}" "$(_nginx_hint_line "→ 菜单 12")" "${NC}"
 }
 
 # 右对齐的入口行：把提示文字推到终端最右端（按显示列计算，中文占 2 列）。
@@ -1544,7 +1540,8 @@ check_dependencies() {
 	fi
 
 	if ((${#missing[@]} > 0)); then
-		log_message WARN "缺失依赖: ${missing[*]}"
+		# 这里只做探测，措辞与提示交给调用方（install_dependencies），避免同一件事报两遍。
+		log_message DEBUG "check_dependencies: 缺少 ${missing[*]}"
 		return 1
 	fi
 	return 0
@@ -1569,7 +1566,7 @@ install_dependencies() {
 	if ((${#missing_deps[@]} > 0)); then
 		missing_display=$(printf '%s ' "${missing_deps[@]}")
 		missing_display="${missing_display% }"
-		log_message WARN "检测到缺失依赖: ${missing_display}"
+		log_message WARN "缺少依赖：${missing_display}，开始自动安装"
 		if [ "${JB_NONINTERACTIVE:-false}" = "true" ]; then
 			log_message ERROR "非交互模式禁止自动安装依赖"
 			return 1
@@ -1584,7 +1581,7 @@ install_dependencies() {
 			log_message INFO "安装软件包…"
 			if _run_in_group_with_timeout 900 sudo -n "${apt_env[@]}" apt-get install "${apt_opts[@]}" "${missing_deps[@]}" >>"$apt_log" 2>&1 ||
 				_run_in_group_with_timeout 900 "${apt_env[@]}" apt-get install "${apt_opts[@]}" "${missing_deps[@]}" >>"$apt_log" 2>&1; then
-				log_message SUCCESS "依赖安装完成"
+				log_message INFO "依赖安装完成（${missing_display}）"
 			else
 				log_message ERROR "依赖安装失败，最后 5 行输出:"
 				tail -n 5 "$apt_log" 2>/dev/null || true
@@ -5651,7 +5648,7 @@ main() {
 	fi
 
 	if [ "$first_install" = "true" ]; then
-		log_message SUCCESS "初始化完成，正在进入面板"
+		_stage 5 5 "进入面板"
 	fi
 	local menu_rc=0
 	if main_menu; then
