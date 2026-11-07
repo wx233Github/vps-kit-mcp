@@ -316,8 +316,17 @@ _nginx_cert_health_hint() {
 # 状态区行：键值 + 缩进明细 + 修复出口
 _nginx_status_lines() {
 	local config_status config_reason cert_status cert_reason detail="" hint=""
-	IFS=$'\t' read -r config_status config_reason < <(_nginx_config_health_status)
-	IFS=$'\t' read -r cert_status cert_reason < <(_nginx_cert_health_status)
+	# 头部已算过健康结论时复用，避免同一屏重复执行 nginx -t 与证书校验
+	if declare -F _nginx_health_snapshot >/dev/null 2>&1; then
+		_nginx_health_snapshot
+		config_status=${_NGINX_HEALTH_CONFIG%%$'\t'*}
+		config_reason=${_NGINX_HEALTH_CONFIG#*$'\t'}
+		cert_status=${_NGINX_HEALTH_CERT%%$'\t'*}
+		cert_reason=${_NGINX_HEALTH_CERT#*$'\t'}
+	else
+		IFS=$'\t' read -r config_status config_reason < <(_nginx_config_health_status)
+		IFS=$'\t' read -r cert_status cert_reason < <(_nginx_cert_health_status)
+	fi
 	_nginx_status_row "配置检查" "$config_status"
 	printf '\n'
 	while IFS= read -r detail; do

@@ -466,43 +466,130 @@ _nginx_new_version_line() {
 	if _version_ge "$current" "$stable"; then return 0; fi
 	cur_branch="${current%.*}"
 	stable_branch="${stable%.*}"
+	# 两行结构：第一行说清问题，第二行给出可用入口。
 	if [ "$cur_branch" = "$stable_branch" ]; then
-		printf '%b' "${BRIGHT_YELLOW}⬆ 稳定版补丁更新 ${stable}（当前 ${current}），可通过菜单「升级 Nginx」更新${NC}"
+		printf '%b\n%b' \
+			"${BRIGHT_YELLOW}当前 ${current} 版本落后${NC}" \
+			"${BRIGHT_YELLOW}→ 菜单 12 升级到 ${stable}${NC}"
 		return 0
 	fi
 	# 稳定分支本身也会出现在 CHANGES-x.y 列表里，所以判定顺序不能反：
 	# 先确认不是同一分支，再看剩余分支列表，命中即说明当前分支已停止维护。
 	case " ${branches} " in
 	*" ${cur_branch} "*)
-		printf '%b' "${BRIGHT_YELLOW}⬆ 当前 ${cur_branch} 分支已停止维护（${current}），建议升级到稳定版 ${stable}${NC}"
+		printf '%b\n%b' \
+			"${BRIGHT_YELLOW}当前 ${cur_branch} 分支已停止维护${NC}" \
+			"${BRIGHT_YELLOW}→ 菜单 12 升级到稳定版 ${stable}${NC}"
 		;;
 	*)
-		printf '%b' "${BRIGHT_YELLOW}⬆ 发现 Nginx 稳定版 ${stable}（当前 ${current}），可通过菜单「升级 Nginx」更新${NC}"
+		printf '%b\n%b' \
+			"${BRIGHT_YELLOW}发现稳定版 ${stable}${NC}" \
+			"${BRIGHT_YELLOW}→ 菜单 12 升级到稳定版 ${stable}${NC}"
 		;;
 	esac
 }
 
+# 运行时长转中文：按 分 → 时 → 天 → 周 → 月 → 年 的阶梯自动进阶，最多两档。
+# 「两档」＝最大非零单位 + 其下一级；下一级为 0 时只显示一档（如 14 天 → 「2 周」）。
+# 月按 30 天、年按 365 天折算。uptime -p 输出英文（"16 weeks, 3 hours"），与面板中文不符，故不用。
+# 参数可选：传入秒数用于测试，省略时读 /proc/uptime。
+_nginx_uptime_cn() {
+	local secs="${1:-}"
+	[ -n "$secs" ] || secs=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+	case "$secs" in
+	'' | *[!0-9]*)
+		printf '%s' "未知"
+		return 0
+		;;
+	esac
+	local mins=$((secs / 60))
+	local hours=$((secs / 3600))
+	local days=$((secs / 86400))
+	local weeks=$((secs / 604800))
+	local months=$((secs / 2592000))
+	local years=$((secs / 31536000))
+	if [ "$years" -gt 0 ]; then
+		local rest_month=$(((secs - years * 31536000) / 2592000))
+		if [ "$rest_month" -gt 0 ]; then
+			printf '%d 年 %d 月' "$years" "$rest_month"
+		else
+			printf '%d 年' "$years"
+		fi
+	elif [ "$months" -gt 0 ]; then
+		local rest_week=$(((secs - months * 2592000) / 604800))
+		if [ "$rest_week" -gt 0 ]; then
+			printf '%d 月 %d 周' "$months" "$rest_week"
+		else
+			printf '%d 月' "$months"
+		fi
+	elif [ "$weeks" -gt 0 ]; then
+		local rest_day=$(((secs - weeks * 604800) / 86400))
+		if [ "$rest_day" -gt 0 ]; then
+			printf '%d 周 %d 天' "$weeks" "$rest_day"
+		else
+			printf '%d 周' "$weeks"
+		fi
+	elif [ "$days" -gt 0 ]; then
+		local rest_hour=$(((secs - days * 86400) / 3600))
+		if [ "$rest_hour" -gt 0 ]; then
+			printf '%d 天 %d 时' "$days" "$rest_hour"
+		else
+			printf '%d 天' "$days"
+		fi
+	elif [ "$hours" -gt 0 ]; then
+		local rest_min=$(((secs - hours * 3600) / 60))
+		if [ "$rest_min" -gt 0 ]; then
+			printf '%d 时 %d 分' "$hours" "$rest_min"
+		else
+			printf '%d 时' "$hours"
+		fi
+	else
+		printf '%d 分' "$mins"
+	fi
+}
+
+# 一次面板绘制里，头部与状态区都要用同一份健康结论；缓存一份，
+# 避免重复执行 nginx -t 与逐站点证书校验（缓存生命周期＝当前 shell 进程）。
+_nginx_health_snapshot() {
+	if [ "${_NGINX_HEALTH_CACHED:-0}" = "1" ]; then
+		return 0
+	fi
+	_NGINX_HEALTH_CONFIG=$(_nginx_config_health_status)
+	_NGINX_HEALTH_CERT=$(_nginx_cert_health_status)
+	_NGINX_HEALTH_CACHED=1
+}
+
+# 头部「告警 N」= 当前状态里非正常项的数量（配置检查、证书状态各算一项）。
+_nginx_alert_count() {
+	local count=0 status=""
+	_nginx_health_snapshot
+	status=${_NGINX_HEALTH_CONFIG%%$'\t'*}
+	[ "$status" = "正常" ] || count=$((count + 1))
+	status=${_NGINX_HEALTH_CERT%%$'\t'*}
+	[ "$status" = "正常" ] || count=$((count + 1))
+	printf '%s' "$count"
+}
+
 _draw_dashboard() {
 	_generate_op_id
+	# 健康结论只在本次绘制内复用，下次重绘必须重新体检，否则修完证书告警数不会更新
+	_NGINX_HEALTH_CACHED=0
 	local nginx_v="unknown"
 	if _ensure_nginx_in_path; then
 		nginx_v=$(_get_nginx_version)
 		[ -z "$nginx_v" ] && nginx_v="unknown"
 	fi
-	local uptime_raw
-	uptime_raw=$(uptime -p | sed 's/up //')
+	local uptime_text
+	uptime_text=$(_nginx_uptime_cn)
 	local count
 	count=$(jq '. | length' "$PROJECTS_METADATA_FILE" 2>/dev/null || printf '%s' "0")
 	local tcp_count
 	tcp_count=$(jq '. | length' "$TCP_PROJECTS_METADATA_FILE" 2>/dev/null || printf '%s' "0")
-	local warn_count=0
-	if [ -f "$PROJECTS_METADATA_FILE" ]; then warn_count=$(jq '[.[] | select(.cert_file)] | length' "$PROJECTS_METADATA_FILE" 2>/dev/null || printf '%s' "0"); fi
-	local load
-	load=$(uptime | awk -F'load average:' '{print $2}' | xargs | cut -d, -f1-3 2>/dev/null || printf '%s' "unknown")
+	local cert_count=0
+	if [ -f "$PROJECTS_METADATA_FILE" ]; then cert_count=$(jq '[.[] | select(.cert_file)] | length' "$PROJECTS_METADATA_FILE" 2>/dev/null || printf '%s' "0"); fi
+	local alert_count
+	alert_count=$(_nginx_alert_count)
 
-	local title="Nginx 管理面板"
-	local line1="Nginx ${nginx_v}"
-	local line2="运行 ${uptime_raw} | HTTP ${count} | TCP ${tcp_count} | 证书 ${warn_count}"
 	local line3=""
 	line3=$(_nginx_http2_warn_line "$nginx_v")
 	local line4=""
@@ -510,24 +597,27 @@ _draw_dashboard() {
 	local line5=""
 	line5=$(_nginx_multi_instance_line)
 
+	# 头部与分隔线共用宽度：版本号贴到标题行最右端，标题只出现一次
+	local dash_width
+	dash_width=$(_nginx_term_cols)
+	local gap=$((dash_width - 5 - ${#nginx_v}))
+	[ "$gap" -lt 1 ] && gap=1
+
 	printf '%b' "\n"
-	printf '%b' "${BOLD}Nginx${NC}\n"
-	printf '%b' "${GRAY}${line1}${NC}\n"
-	printf '%b' "${line2}\n"
+	printf '%bNginx%b%*s%s%b\n' "$BOLD" "$NC" "$gap" "" "$nginx_v" "$NC"
+	printf '%s\n' "已运行 ${uptime_text}   HTTP ${count}   TCP ${tcp_count}   证书 ${cert_count}   告警 ${alert_count}"
 	if [ -n "$line3" ]; then
-		printf '%b' "${line3}\n"
+		printf '%b\n' "$line3"
 	fi
 	if [ -n "$line4" ]; then
-		printf '%b' "${line4}\n"
+		# 版本提示独立成段，与状态行之间留一个空行
+		printf '%b' "\n"
+		printf '%b\n' "$line4"
 	fi
 	if [ -n "$line5" ]; then
 		# line5 自带换行，去掉尾换行再补一个，避免多出空行
 		printf '%s\n' "${line5%$'\n'}"
 	fi
-	# 分隔线跟随终端宽度，窄屏不折行
-	local dash_width
-	dash_width=$(_nginx_term_cols)
-	[ "$dash_width" -gt 68 ] && dash_width=68
 	printf '%b' "${GREEN}$(generate_line "$dash_width" "─")${NC}\n"
 }
 
