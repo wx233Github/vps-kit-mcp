@@ -986,6 +986,7 @@ ensure_module_sidecar_libs() {
 		;;
 	esac
 
+	local synced_deps=0
 	for rel in "${required[@]}"; do
 		if ! sanitize_module_script "$rel"; then
 			log_err "模块依赖路径非法，拒绝下载: ${rel}"
@@ -1004,15 +1005,18 @@ ensure_module_sidecar_libs() {
 		if [ "$local_hash" != "$remote_hash" ]; then
 			run_with_sudo mv "$tmp_file" "$local_path"
 			run_with_sudo chmod +x "$local_path"
-			if [ "$mode" != "auto" ]; then
-				log_info "     已同步模块依赖: ${rel}"
-			fi
+			synced_deps=$((synced_deps + 1))
 		else
 			rm -f "$tmp_file"
 		fi
 	done
 
+	if [ "$mode" != "auto" ] && [ "$synced_deps" -gt 0 ]; then
+		log_info "     已同步 ${synced_deps} 个依赖文件"
+	fi
+
 	if [ "$script_name" = "nginx.sh" ]; then
+		local synced_snips=0
 		local manifest_local="${INSTALL_DIR}/templates/nginx/manifest.json"
 		local snippet_rel=""
 		if [ -f "$manifest_local" ]; then
@@ -1036,13 +1040,14 @@ ensure_module_sidecar_libs() {
 				if [ "$local_hash" != "$remote_hash" ]; then
 					run_with_sudo mv "$tmp_file" "$local_path"
 					run_with_sudo chmod 644 "$local_path"
-					if [ "$mode" != "auto" ]; then
-						log_info "     已同步模板片段: ${rel}"
-					fi
+					synced_snips=$((synced_snips + 1))
 				else
 					rm -f "$tmp_file"
 				fi
 			done < <(jq -r '.templates[]?.snippet_file // empty' "$manifest_local" 2>/dev/null || true)
+			if [ "$mode" != "auto" ] && [ "$synced_snips" -gt 0 ]; then
+				log_info "     已同步 ${synced_snips} 个模板片段"
+			fi
 		fi
 	fi
 	return 0
@@ -1241,48 +1246,78 @@ _collect_port_occupiers() {
 	printf '%s' "$result"
 }
 
+# 只保留有内容含义的日志行：journalctl/status 的占位提示（"-- No entries --" 等）
+# 非空但不是失败原因，直接当成原因会把面板刷成假报错。
+_filter_systemd_noise() {
+	grep -vE '^[[:space:]]*-- (No entries|Logs begin|Journal begins)|^[[:space:]]*--$|No journal files were found|^[[:space:]]*$' || true
+}
+
 _collect_systemd_nginx_fail_reason() {
 	local reason=""
 	if command -v journalctl >/dev/null 2>&1; then
-		reason=$(journalctl -u nginx -n 3 --no-pager 2>/dev/null | awk 'NF{line=$0} END{print line}')
+		reason=$(journalctl -u nginx -n 5 --no-pager 2>/dev/null | _filter_systemd_noise | awk 'NF{line=$0} END{print line}')
 	fi
 	if [ -z "$reason" ]; then
-		reason=$(systemctl status nginx --no-pager -l 2>/dev/null | awk 'NF{line=$0} END{print line}')
+		reason=$(systemctl status nginx --no-pager -l 2>/dev/null | _filter_systemd_noise | awk 'NF{line=$0} END{print line}')
 	fi
 	if [ -z "$reason" ]; then
-		reason="systemctl enable --now nginx 失败"
+		reason="服务状态: $(systemctl is-active nginx 2>/dev/null || printf 'unknown')"
 	fi
 	printf '%s' "$reason"
 }
 
+# nginx 可执行文件是否已存在（PATH 可能不含 /usr/sbin）。
+_nginx_binary_present() {
+	command -v nginx >/dev/null 2>&1 && return 0
+	[ -x /usr/sbin/nginx ] && return 0
+	[ -x /usr/local/sbin/nginx ] && return 0
+	return 1
+}
+
+# 带超时的 systemctl，防止 systemd job 卡住时把整个 SSH 会话一起挂死。
+_systemctl_timeout() {
+	local secs="${1:-30}"
+	shift
+	if command -v timeout >/dev/null 2>&1; then
+		timeout "$secs" systemctl "$@"
+	else
+		systemctl "$@"
+	fi
+}
+
 _ensure_systemd_nginx_running_or_warn() {
 	local target="nginx.service"
-	local strategy="systemctl"
-	local domain="*"
 	if ! command -v systemctl >/dev/null 2>&1; then
-		log_warn "❌ systemd nginx 未启动（原因: 缺少 systemctl, domain=${domain}, target=${target}, strategy=${strategy}）"
+		log_warn "systemd 不可用，跳过 nginx 启动检查"
 		return 1
 	fi
-	if systemctl is-active --quiet nginx >/dev/null 2>&1; then
+	# 首次安装时 nginx 还没装好，这里启动必然失败；交给模块自己的依赖安装流程
+	if ! _nginx_binary_present; then
+		log_info "nginx 尚未安装，跳过启动检查（稍后由模块安装依赖）"
+		return 0
+	fi
+	if _systemctl_timeout 10 is-active --quiet nginx >/dev/null 2>&1; then
 		return 0
 	fi
 	local occupiers=""
 	occupiers=$(_collect_port_occupiers)
 	if [ -n "$occupiers" ]; then
-		log_err "❌ systemd nginx 未启动（原因: 80/443 被占用, domain=${domain}, target=${target}, strategy=${strategy}, pids=${occupiers}）"
+		log_err "❌ nginx 未启动：80/443 已被占用（pids=${occupiers}）"
 		return 1
 	fi
 	if [ "${DRY_RUN:-false}" = "true" ]; then
 		log_info "[DRY-RUN] systemctl enable --now nginx"
 		return 0
 	fi
-	if systemctl enable --now nginx >/dev/null 2>&1; then
-		log_info "✅ systemd nginx 已自动启用并启动"
+	if _systemctl_timeout 30 enable --now nginx >/dev/null 2>&1; then
+		log_info "✅ nginx 已启用并启动"
 		return 0
 	fi
 	local reason=""
 	reason=$(_collect_systemd_nginx_fail_reason)
-	log_err "❌ systemd nginx 启动失败（原因: ${reason}, domain=${domain}, target=${target}, strategy=${strategy}）"
+	log_err "❌ nginx 启动失败：${reason}"
+	printf '[%s] [ERROR] systemd nginx 启动失败 target=%s strategy=systemctl domain=*\n' \
+		"$(date +'%Y-%m-%d %H:%M:%S')" "$target" >>"${LOG_FILE:-/dev/null}" 2>/dev/null || true
 	return 1
 }
 

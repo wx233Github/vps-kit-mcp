@@ -387,6 +387,8 @@ _nginx_menu_policy_rows() {
 	printf '\n'
 	_nginx_menu_row 13 "修复目录冲突" "共享组修复权限"
 	printf '\n'
+	_nginx_menu_row 14 "卸载 Nginx" "停止服务并移除软件包" "$BRIGHT_RED"
+	printf '\n'
 }
 
 main_menu() {
@@ -432,7 +434,7 @@ main_menu() {
 			printf '%b' "\n"
 		fi
 		local c
-		if ! c=$(prompt_menu_choice "1-13" "true"); then
+		if ! c=$(prompt_menu_choice "1-14" "true"); then
 			exit 10
 		fi
 		case "$c" in
@@ -479,6 +481,10 @@ main_menu() {
 			;;
 		13)
 			_fix_nginx_temp_path_conflicts
+			press_enter_to_continue
+			;;
+		14)
+			uninstall_nginx_module
 			press_enter_to_continue
 			;;
 		"") exit 10 ;;

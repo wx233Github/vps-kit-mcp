@@ -21,7 +21,7 @@ teardown() {
   rm -rf "$WORK_DIR"
 }
 
-@test "_draw_dashboard: 标题只出现一次且版本号右对齐到分隔线" {
+@test "_draw_dashboard: 标题只出现一次且版本号紧跟标题" {
   run bash -c '
     source "$1"
     PROJECTS_METADATA_FILE="$2/p.json"
@@ -41,11 +41,9 @@ teardown() {
   local plain
   plain=$(printf '%s\n' "$output" | sed 's/\x1b\[[0-9;]*m//g')
   [ "$(printf '%s\n' "$plain" | grep -c '^Nginx')" -eq 1 ]
-  local head_line len
+  local head_line
   head_line=$(printf '%s\n' "$plain" | grep '^Nginx')
-  len=${#head_line}
-  [ "$len" -eq 45 ]
-  [[ "$head_line" == *"1.26.3" ]]
+  [ "$head_line" = "Nginx   1.26.3" ]
 }
 
 @test "_draw_dashboard: 第二行给出中文运行时长与告警数" {
@@ -132,11 +130,11 @@ teardown() {
     _nginx_new_version_line 1.26.3
   ' _ "$LIB_PATH"
   [ "$status" -eq 0 ]
-  [ "${lines[0]}" = "当前 1.26 分支已停止维护" ]
-  [ "${lines[1]}" = "→ 菜单 12 升级到稳定版 1.30.6" ]
+  [ "${lines[0]}" = "当前 1.26 分支已停止维护（1.26.3），建议升级到稳定版 1.30.6" ]
+  [[ "${lines[1]}" == *"→ 菜单 12" ]]
 }
 
-@test "_draw_dashboard: 宽终端下版本号贴到最右端" {
+@test "_draw_dashboard: 版本号紧跟标题，不随终端变宽拉远" {
   run bash -c '
     source "$1"
     PROJECTS_METADATA_FILE="$2/p.json"
@@ -156,8 +154,7 @@ teardown() {
   local plain head_line
   plain=$(printf '%s\n' "$output" | sed 's/\x1b\[[0-9;]*m//g')
   head_line=$(printf '%s\n' "$plain" | grep '^Nginx')
-  [ "${#head_line}" -eq 100 ]
-  [[ "$head_line" == *"1.26.3" ]]
+  [ "$head_line" = "Nginx   1.26.3" ]
 }
 
 @test "_nginx_health_snapshot: 同一屏只执行一次健康检查" {

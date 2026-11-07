@@ -466,27 +466,37 @@ _nginx_new_version_line() {
 	if _version_ge "$current" "$stable"; then return 0; fi
 	cur_branch="${current%.*}"
 	stable_branch="${stable%.*}"
-	# 两行结构：第一行说清问题，第二行给出可用入口。
+	# 两行结构：第一行说清问题与目标版本，第二行右对齐给出菜单入口。
 	if [ "$cur_branch" = "$stable_branch" ]; then
-		printf '%b\n%b' \
-			"${BRIGHT_YELLOW}当前 ${current} 版本落后${NC}" \
-			"${BRIGHT_YELLOW}→ 菜单 12 升级到 ${stable}${NC}"
+		printf '%b\n%b%s%b\n' \
+			"${BRIGHT_YELLOW}稳定版更新 ${stable}（当前 ${current}），建议升级${NC}" \
+			"${BRIGHT_YELLOW}" "$(_nginx_hint_line "→ 菜单 12")" "${NC}"
 		return 0
 	fi
 	# 稳定分支本身也会出现在 CHANGES-x.y 列表里，所以判定顺序不能反：
 	# 先确认不是同一分支，再看剩余分支列表，命中即说明当前分支已停止维护。
 	case " ${branches} " in
 	*" ${cur_branch} "*)
-		printf '%b\n%b' \
-			"${BRIGHT_YELLOW}当前 ${cur_branch} 分支已停止维护${NC}" \
-			"${BRIGHT_YELLOW}→ 菜单 12 升级到稳定版 ${stable}${NC}"
+		printf '%b\n%b%s%b\n' \
+			"${BRIGHT_YELLOW}当前 ${cur_branch} 分支已停止维护（${current}），建议升级到稳定版 ${stable}${NC}" \
+			"${BRIGHT_YELLOW}" "$(_nginx_hint_line "→ 菜单 12")" "${NC}"
 		;;
 	*)
-		printf '%b\n%b' \
-			"${BRIGHT_YELLOW}发现稳定版 ${stable}${NC}" \
-			"${BRIGHT_YELLOW}→ 菜单 12 升级到稳定版 ${stable}${NC}"
+		printf '%b\n%b%s%b\n' \
+			"${BRIGHT_YELLOW}发现稳定版 ${stable}（当前 ${current}），建议升级${NC}" \
+			"${BRIGHT_YELLOW}" "$(_nginx_hint_line "→ 菜单 12")" "${NC}"
 		;;
 	esac
+}
+
+# 右对齐的入口行：把提示文字推到终端最右端（按显示列计算，中文占 2 列）。
+_nginx_hint_line() {
+	local text="$1" cols="" width="" pad=""
+	cols=$(_nginx_term_cols)
+	width=$(_get_visual_width "$text")
+	pad=$((cols - width))
+	[ "$pad" -lt 0 ] && pad=0
+	printf '%*s%s' "$pad" "" "$text"
 }
 
 # 运行时长转中文：按 分 → 时 → 天 → 周 → 月 → 年 的阶梯自动进阶，最多两档。
@@ -597,15 +607,14 @@ _draw_dashboard() {
 	local line5=""
 	line5=$(_nginx_multi_instance_line)
 
-	# 头部与分隔线共用宽度：版本号贴到标题行最右端，标题只出现一次
+	# 分隔线跟随终端宽度；标题行只出现一次，版本号紧跟标题
 	local dash_width
 	dash_width=$(_nginx_term_cols)
-	local gap=$((dash_width - 5 - ${#nginx_v}))
-	[ "$gap" -lt 1 ] && gap=1
 
 	printf '%b' "\n"
-	printf '%bNginx%b%*s%s%b\n' "$BOLD" "$NC" "$gap" "" "$nginx_v" "$NC"
-	printf '%s\n' "已运行 ${uptime_text}   HTTP ${count}   TCP ${tcp_count}   证书 ${cert_count}   告警 ${alert_count}"
+	printf '%bNginx%b   %s%b\n' "$BOLD" "$NC" "$nginx_v" "$NC"
+	printf '%b已运行 %s%b   HTTP %s   TCP %s   证书 %s   告警 %s\n' \
+		"$GRAY" "$uptime_text" "$NC" "$count" "$tcp_count" "$cert_count" "$alert_count"
 	if [ -n "$line3" ]; then
 		printf '%b\n' "$line3"
 	fi
@@ -1475,6 +1484,12 @@ _ensure_nginx_in_path() {
 	return 0
 }
 
+# 首次安装的分段标题：屏幕只留阶段名，详细输出进日志。
+_stage() {
+	local index="$1" total="$2" title="$3"
+	printf '\n%b◆ 阶段 %s/%s · %s%b\n' "$CYAN" "$index" "$total" "$title" "$NC"
+}
+
 check_dependencies() {
 	local -a missing=()
 	local cmd
@@ -1526,23 +1541,33 @@ install_dependencies() {
 		missing_display=$(printf '%s ' "${missing_deps[@]}")
 		missing_display="${missing_display% }"
 		log_message WARN "检测到缺失依赖: ${missing_display}"
-		log_message INFO "正在安装依赖（步骤1/2）：刷新软件源..."
 		if [ "${JB_NONINTERACTIVE:-false}" = "true" ]; then
 			log_message ERROR "非交互模式禁止自动安装依赖"
 			return 1
 		fi
-		if run_cmd 300 sudo -n "${apt_env[@]}" apt-get update || run_cmd 300 "${apt_env[@]}" apt-get update; then
-			log_message INFO "正在安装依赖（步骤2/2）：批量安装 ${missing_display} ..."
-			if run_cmd 900 sudo -n "${apt_env[@]}" apt-get install "${apt_opts[@]}" "${missing_deps[@]}" || run_cmd 900 "${apt_env[@]}" apt-get install "${apt_opts[@]}" "${missing_deps[@]}"; then
-				log_message SUCCESS "依赖安装成功。"
+		local apt_log
+		apt_log=$(mktemp /tmp/nginx_deps.XXXXXX.log 2>/dev/null || printf '%s' "/tmp/nginx_deps.log")
+		_stage 2 5 "安装缺失依赖（${missing_display}）"
+		log_message INFO "刷新软件源…"
+		if run_cmd 300 sudo -n "${apt_env[@]}" apt-get update >"$apt_log" 2>&1 ||
+			run_cmd 300 "${apt_env[@]}" apt-get update >>"$apt_log" 2>&1; then
+			log_message INFO "安装软件包…"
+			if run_cmd 900 sudo -n "${apt_env[@]}" apt-get install "${apt_opts[@]}" "${missing_deps[@]}" >>"$apt_log" 2>&1 ||
+				run_cmd 900 "${apt_env[@]}" apt-get install "${apt_opts[@]}" "${missing_deps[@]}" >>"$apt_log" 2>&1; then
+				log_message SUCCESS "依赖安装完成"
 			else
-				log_message ERROR "依赖安装失败"
+				log_message ERROR "依赖安装失败，最后 5 行输出:"
+				tail -n 5 "$apt_log" 2>/dev/null || true
+				rm -f "$apt_log"
 				return 1
 			fi
 		else
-			log_message ERROR "apt-get update 失败（请检查网络/源可用性/apt锁）"
+			log_message ERROR "刷新软件源失败，最后 5 行输出:"
+			tail -n 5 "$apt_log" 2>/dev/null || true
+			rm -f "$apt_log"
 			return 1
 		fi
+		rm -f "$apt_log"
 	fi
 	touch "$DEPS_MARK_FILE"
 	return 0
@@ -5448,6 +5473,80 @@ _handle_cert_details() {
 # SECTION: 主流程 UI
 # ==============================================================================
 
+# 卸载 Nginx：停止服务 + 移除软件包，配置与元数据默认保留（逐项询问）。
+# 用途之一：首装流程卡死时无法回到初始状态，卸载后可重新复现。
+uninstall_nginx_module() {
+	_render_menu "卸载 Nginx" \
+		"停止并禁用 nginx 服务" \
+		"卸载软件包 nginx / nginx-common / nginx-core / libnginx-mod-*" \
+		"站点配置与证书默认保留，可逐项选择删除"
+	printf '\n'
+	log_message WARN "卸载会中断所有站点访问。"
+	if [ "${JB_NONINTERACTIVE:-false}" = "true" ] || [ ! -r /dev/tty ]; then
+		log_message ERROR "非交互环境不支持卸载，请直接在终端执行 bash nginx.sh"
+		return 1
+	fi
+	if ! confirm_or_cancel "确认继续卸载 Nginx?" "n"; then return 0; fi
+	local typed=""
+	printf '%b' "请输入 ${BOLD}UNINSTALL${NC} 确认: "
+	read -r typed </dev/tty || typed=""
+	if [ "$typed" != "UNINSTALL" ]; then
+		log_message INFO "输入不匹配，已取消卸载。"
+		return 0
+	fi
+
+	local ts backup_dir
+	ts=$(date +%Y%m%d_%H%M%S)
+	backup_dir="${BACKUP_DIR}/nginx-uninstall-${ts}"
+	mkdir -p "$backup_dir" 2>/dev/null || true
+	[ -d /etc/nginx ] && cp -a /etc/nginx "$backup_dir/" 2>/dev/null || true
+	[ -f "$PROJECTS_METADATA_FILE" ] && cp -a "$PROJECTS_METADATA_FILE" "$backup_dir/" 2>/dev/null || true
+	[ -f "$TCP_PROJECTS_METADATA_FILE" ] && cp -a "$TCP_PROJECTS_METADATA_FILE" "$backup_dir/" 2>/dev/null || true
+	log_message INFO "已备份到 ${backup_dir}"
+
+	if command -v systemctl >/dev/null 2>&1; then
+		run_cmd 30 systemctl stop nginx >/dev/null 2>&1 || true
+		run_cmd 30 systemctl disable nginx >/dev/null 2>&1 || true
+	fi
+
+	local -a pkgs=(nginx nginx-common nginx-core)
+	local -a extra=()
+	local pkg_name=""
+	while IFS= read -r pkg_name; do
+		[ -n "$pkg_name" ] && extra+=("$pkg_name")
+	done < <(dpkg-query -W -f='${Package}\n' 'libnginx-mod-*' 2>/dev/null || true)
+
+	local -a apt_env=(env DEBIAN_FRONTEND=noninteractive APT_LISTCHANGES_FRONTEND=none NEEDRESTART_MODE=a)
+	local -a apt_opts=(-y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+	local purge_log
+	purge_log=$(mktemp /tmp/nginx_purge.XXXXXX.log 2>/dev/null || printf '%s' "/tmp/nginx_purge.log")
+	log_message INFO "正在卸载软件包…"
+	if run_cmd 300 sudo -n "${apt_env[@]}" apt-get purge "${apt_opts[@]}" "${pkgs[@]}" "${extra[@]}" >"$purge_log" 2>&1 ||
+		run_cmd 300 "${apt_env[@]}" apt-get purge "${apt_opts[@]}" "${pkgs[@]}" "${extra[@]}" >>"$purge_log" 2>&1; then
+		log_message SUCCESS "nginx 软件包已卸载"
+	else
+		log_message ERROR "卸载失败，最后 5 行输出:"
+		tail -n 5 "$purge_log" 2>/dev/null || true
+		rm -f "$purge_log"
+		return 1
+	fi
+	rm -f "$purge_log"
+
+	if confirm_or_cancel "是否同时删除 /etc/nginx 配置目录?" "n"; then
+		rm -rf /etc/nginx && log_message SUCCESS "已删除 /etc/nginx"
+	fi
+	if confirm_or_cancel "是否清空站点元数据（projects.json / tcp.json）?" "n"; then
+		if _require_safe_path "$PROJECTS_METADATA_FILE" "清空站点元数据"; then
+			printf '%s\n' "[]" | _atomic_write_file "$PROJECTS_METADATA_FILE" "0644" || true
+		fi
+		if _require_safe_path "$TCP_PROJECTS_METADATA_FILE" "清空 TCP 元数据"; then
+			printf '%s\n' "[]" | _atomic_write_file "$TCP_PROJECTS_METADATA_FILE" "0644" || true
+		fi
+		log_message SUCCESS "站点元数据已清空（备份见 ${backup_dir}）"
+	fi
+	log_message SUCCESS "卸载完成。重新安装：主菜单 → Nginx"
+}
+
 main() {
 	local arg
 	for arg in "$@"; do
@@ -5473,6 +5572,7 @@ main() {
 		return 0
 	fi
 	if ! acquire_http_lock; then return 1; fi
+	_stage 1 5 "检查系统与依赖"
 	if ! check_root; then return 1; fi
 	if ! check_os_compatibility; then return 1; fi
 	if ! check_dependencies; then
@@ -5491,6 +5591,7 @@ main() {
 		run_audit_report
 		return $?
 	fi
+	_stage 3 5 "初始化目录与配置"
 	initialize_environment
 	if [ "${TX_RECOVER:-false}" = "true" ]; then
 		tx_wal_recover
@@ -5516,10 +5617,12 @@ main() {
 
 	_ensure_systemd_nginx_running_or_warn || true
 
+	_stage 4 5 "准备证书环境"
 	if ! install_acme_sh; then
 		return 1
 	fi
 
+	log_message SUCCESS "初始化完成，正在进入面板"
 	local menu_rc=0
 	if main_menu; then
 		return 0

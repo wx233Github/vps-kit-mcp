@@ -476,48 +476,61 @@ _collect_port_occupiers() {
 	printf '%s' "$result"
 }
 
+# journalctl/status 的占位行（"-- No entries --" 等）不是失败原因，误当原因会刷出假报错。
+_filter_systemd_noise() {
+	grep -vE '^[[:space:]]*-- (No entries|Logs begin|Journal begins)|^[[:space:]]*--$|No journal files were found|^[[:space:]]*$' || true
+}
+
 _collect_systemd_nginx_fail_reason() {
 	local reason=""
 	if command -v journalctl >/dev/null 2>&1; then
-		reason=$(journalctl -u nginx -n 3 --no-pager 2>/dev/null | awk 'NF{line=$0} END{print line}')
+		reason=$(journalctl -u nginx -n 5 --no-pager 2>/dev/null | _filter_systemd_noise | awk 'NF{line=$0} END{print line}')
 	fi
 	if [ -z "$reason" ]; then
-		reason=$(systemctl status nginx --no-pager -l 2>/dev/null | awk 'NF{line=$0} END{print line}')
+		reason=$(systemctl status nginx --no-pager -l 2>/dev/null | _filter_systemd_noise | awk 'NF{line=$0} END{print line}')
 	fi
 	if [ -z "$reason" ]; then
-		reason="systemctl enable --now nginx 失败"
+		reason="服务状态: $(systemctl is-active nginx 2>/dev/null || printf 'unknown')"
 	fi
 	printf '%s' "$reason"
 }
 
+# systemd job 卡住时 systemctl 会一直等，把整个 SSH 会话一起拖死；统一加超时。
+_systemctl_timeout() {
+	local secs="${1:-30}"
+	shift
+	if command -v timeout >/dev/null 2>&1; then
+		timeout "$secs" systemctl "$@"
+	else
+		systemctl "$@"
+	fi
+}
+
 _ensure_systemd_nginx_running_or_warn() {
-	local target="nginx.service"
-	local strategy="systemctl"
-	local domain="*"
 	if ! command -v systemctl >/dev/null 2>&1; then
-		log_message WARN "❌ systemd nginx 未启动（原因: 缺少 systemctl, domain=${domain}, target=${target}, strategy=${strategy}）"
+		log_message WARN "systemd 不可用，跳过 nginx 启动检查"
 		return 1
 	fi
-	if systemctl is-active --quiet nginx >/dev/null 2>&1; then
+	if _systemctl_timeout 10 is-active --quiet nginx >/dev/null 2>&1; then
 		return 0
 	fi
 	local occupiers=""
 	occupiers=$(_collect_port_occupiers)
 	if [ -n "$occupiers" ]; then
-		log_message ERROR "❌ systemd nginx 未启动（原因: 80/443 被占用, domain=${domain}, target=${target}, strategy=${strategy}, pids=${occupiers}）"
+		log_message ERROR "❌ nginx 未启动：80/443 已被占用（pids=${occupiers}）"
 		return 1
 	fi
 	if [ "${DRY_RUN:-false}" = "true" ]; then
 		log_message INFO "[DRY-RUN] systemctl enable --now nginx"
 		return 0
 	fi
-	if systemctl enable --now nginx >/dev/null 2>&1; then
-		log_message SUCCESS "✅ systemd nginx 已自动启用并启动"
+	if _systemctl_timeout 30 enable --now nginx >/dev/null 2>&1; then
+		log_message SUCCESS "✅ nginx 已启用并启动"
 		return 0
 	fi
 	local reason=""
 	reason=$(_collect_systemd_nginx_fail_reason)
-	log_message ERROR "❌ systemd nginx 启动失败（原因: ${reason}, domain=${domain}, target=${target}, strategy=${strategy}）"
+	log_message ERROR "❌ nginx 启动失败：${reason}"
 	return 1
 }
 

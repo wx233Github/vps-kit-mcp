@@ -51,8 +51,8 @@ Legacy versions</h4>CHANGES-1.28 nginx-1.28.3 CHANGES-1.26 nginx-1.26.3</html>"
     _nginx_new_version_line 1.30.5
   ' _ "$LIB_PATH"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"当前 1.30.5 版本落后"* ]]
-  [[ "$output" == *"→ 菜单 12 升级到 1.30.6"* ]]
+  [[ "$output" == *"稳定版更新 1.30.6（当前 1.30.5），建议升级"* ]]
+  [[ "$output" == *"→ 菜单 12"* ]]
   [[ "$output" != *"已停止维护"* ]]
 }
 
