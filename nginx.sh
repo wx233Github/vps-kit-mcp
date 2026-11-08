@@ -355,8 +355,11 @@ _render_menu() {
 
 	for line in "${lines[@]}"; do printf '%b' "${line}\n" >"$out"; done
 
-	local box_total_physical_width=$((box_inner_width + 2))
-	printf '%b' "${GREEN}$(generate_line "$box_total_physical_width" "─")${NC}\n" >"$out"
+	# 没有内容时这条线会紧贴标题框，看起来像「标题下划线」；只有排过内容才收线。
+	if [ "${#lines[@]}" -gt 0 ]; then
+		local box_total_physical_width=$((box_inner_width + 2))
+		printf '%b' "${GREEN}$(generate_line "$box_total_physical_width" "─")${NC}\n" >"$out"
+	fi
 }
 
 safe_rm() {
@@ -1312,12 +1315,14 @@ setup_tg_notifier() {
 		menu_lines+=(" 会话 ID      : $(_mask_string "$curr_chat")")
 		menu_lines+=(" 服务器备注   : $curr_name")
 	fi
+	# 选项一起交给 _render_menu，收尾的分隔线才能落在内容之后，而不是变成标题下划线。
+	menu_lines+=("")
+	menu_lines+=("1. 开启/修改通知配置")
+	menu_lines+=("2. 清除配置 (关闭通知)")
 	_render_menu "Telegram 机器人通知设置" "${menu_lines[@]}"
+	printf '%b' "\n"
 	if [ -f "$TG_CONF_FILE" ]; then if ! confirm_or_cancel "是否要重新配置或关闭通知?"; then return; fi; fi
 	local action
-	printf '%b' "1. 开启/修改通知配置\n"
-	printf '%b' "2. 清除配置 (关闭通知)\n"
-	printf '%b' "\n"
 	if ! action=$(prompt_menu_choice "1-2" "true"); then return; fi
 	if [ "$action" = "2" ]; then
 		rm -f "$TG_CONF_FILE"

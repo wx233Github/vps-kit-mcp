@@ -898,6 +898,10 @@ trap cleanup EXIT
 trap 'err_handler $? $LINENO' ERR
 trap '_on_int' INT TERM
 
+# 「刚才那一步是回车返回」的标记文件：prompt_menu_choice 落盘、press_enter_to_continue 消费。
+# 用文件而不是变量，是因为菜单选择发生在 $(...) 子 shell 里，变量出不来。
+_NGINX_MENU_BACK_MARKER="${TMPDIR:-/tmp}/.nginx-menu-back.$$"
+
 _log_level_to_num() {
 	case "${1:-INFO}" in
 	ERROR) printf '%s\n' "0" ;;
@@ -1014,6 +1018,11 @@ log_message() {
 }
 
 press_enter_to_continue() {
+	# 上一步是「回车返回上一层」时，屏幕上没有任何新内容，再按一次纯属多余。
+	if [ -e "$_NGINX_MENU_BACK_MARKER" ]; then
+		rm -f "$_NGINX_MENU_BACK_MARKER" 2>/dev/null || true
+		return 0
+	fi
 	if [ "${JB_NONINTERACTIVE:-false}" = "true" ] || [ "$IS_INTERACTIVE_MODE" != "true" ]; then
 		log_warn "非交互模式：跳过等待"
 		return 0
@@ -1040,6 +1049,9 @@ press_enter_to_exit() {
 prompt_menu_choice() {
 	local range="${1:-}"
 	local allow_empty="${2:-false}"
+	# 子 shell 里选的也不影响标记生效：标记是文件，按父 PID 命名。
+	local back_marker="$_NGINX_MENU_BACK_MARKER"
+	rm -f "$back_marker" 2>/dev/null || true
 	local prompt_text="${BRIGHT_YELLOW}选项 [${range}]${NC} (Enter 返回): "
 	if declare -f get_ui_theme >/dev/null 2>&1 && [ "$(get_ui_theme)" != "classic" ]; then
 		local context="submenu"
@@ -1081,6 +1093,7 @@ prompt_menu_choice() {
 		if [ -z "$choice" ]; then
 			if [ "$allow_empty" = "true" ]; then
 				printf '%b' "\n"
+				: >"$back_marker" 2>/dev/null || true
 				return 0
 			fi
 			printf '%b' "${YELLOW}请选择一个选项。${NC}\n" >&2
