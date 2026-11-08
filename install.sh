@@ -1294,6 +1294,7 @@ _ensure_systemd_nginx_running_or_warn() {
 	# 首次安装时 nginx 还没装好，这里启动必然失败；交给模块自己的依赖安装流程
 	if ! _nginx_binary_present; then
 		log_info "nginx 尚未安装，跳过启动检查（稍后由模块安装依赖）"
+		export NGINX_STARTUP_CHECK_ANNOUNCED=1
 		return 0
 	fi
 	if _systemctl_timeout 10 is-active --quiet nginx >/dev/null 2>&1; then

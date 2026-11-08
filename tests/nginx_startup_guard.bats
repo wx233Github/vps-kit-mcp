@@ -108,3 +108,29 @@ setup() {
   ! grep -q 'log_message WARN "缺失依赖' nginx.sh
   grep -q 'log_message WARN "缺少依赖：' nginx.sh
 }
+
+@test "install_dependencies: 依赖标记存在但 nginx 不在时不再短路" {
+  local script="${BATS_TEST_DIRNAME%/tests}/nginx.sh"
+  run grep -n 'if \[ -f "$DEPS_MARK_FILE" \] && _ensure_nginx_in_path; then return 0; fi' "$script"
+  [ "$status" -eq 0 ]
+  # 旧写法（只看标记）必须已经消失
+  run grep -c 'if \[ -f "$DEPS_MARK_FILE" \]; then return 0; fi' "$script"
+  [ "$output" = "0" ]
+}
+
+@test "uninstall_nginx_module: 卸载成功后清掉依赖标记" {
+  local script="${BATS_TEST_DIRNAME%/tests}/nginx.sh"
+  run bash -c '
+    awk "/nginx 软件包已卸载/{flag=1} flag&&/rm -f \"\\\$DEPS_MARK_FILE\"/{print \"found\"; exit} flag&&/^}/{exit}" "$1"
+  ' _ "$script"
+  [ "$status" -eq 0 ]
+  [ "$output" = "found" ]
+}
+
+@test "启动检查提示不重复：install.sh 提示后模块侧静默" {
+  local root="${BATS_TEST_DIRNAME%/tests}"
+  run grep -q 'export NGINX_STARTUP_CHECK_ANNOUNCED=1' "$root/install.sh"
+  [ "$status" -eq 0 ]
+  run grep -q 'NGINX_STARTUP_CHECK_ANNOUNCED' "$root/lib/nginx_core.sh"
+  [ "$status" -eq 0 ]
+}

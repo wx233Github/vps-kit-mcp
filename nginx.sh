@@ -1548,7 +1548,8 @@ check_dependencies() {
 }
 
 install_dependencies() {
-	if [ -f "$DEPS_MARK_FILE" ]; then return 0; fi
+	# 标记只代表「曾经装齐过」：卸载后它还在，光看文件会把重装短路掉，所以还要确认 nginx 仍可用。
+	if [ -f "$DEPS_MARK_FILE" ] && _ensure_nginx_in_path; then return 0; fi
 	local -a deps=(nginx curl socat openssl jq idn dnsutils nano coreutils util-linux)
 	local -a missing_deps=()
 	local missing_display=""
@@ -5544,6 +5545,8 @@ uninstall_nginx_module() {
 	if _run_in_group_with_timeout 300 sudo -n "${apt_env[@]}" apt-get purge "${apt_opts[@]}" "${pkgs[@]}" "${extra[@]}" >"$purge_log" 2>&1 ||
 		_run_in_group_with_timeout 300 "${apt_env[@]}" apt-get purge "${apt_opts[@]}" "${pkgs[@]}" "${extra[@]}" >>"$purge_log" 2>&1; then
 		log_message SUCCESS "nginx 软件包已卸载"
+		# 依赖已不完整，标记必须失效，否则下次重装会被 install_dependencies 直接短路。
+		rm -f "$DEPS_MARK_FILE"
 	else
 		log_message ERROR "卸载失败，最后 5 行输出:"
 		tail -n 5 "$purge_log" 2>/dev/null || true

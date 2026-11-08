@@ -567,7 +567,10 @@ _systemctl_timeout() {
 _ensure_systemd_nginx_running_or_warn() {
 	# 未安装时 systemd 没有 nginx 单元，启动必然失败；留给安装流程处理
 	if ! command -v nginx >/dev/null 2>&1 && [ ! -x /usr/sbin/nginx ] && [ ! -x /usr/local/sbin/nginx ]; then
-		log_message INFO "nginx 尚未安装，跳过启动检查"
+		# install.sh 在调用模块前已经提示过同一条信息，这里不重复刷屏
+		if [ "${NGINX_STARTUP_CHECK_ANNOUNCED:-0}" != "1" ]; then
+			log_message INFO "nginx 尚未安装，跳过启动检查"
+		fi
 		return 0
 	fi
 	if ! command -v systemctl >/dev/null 2>&1; then
