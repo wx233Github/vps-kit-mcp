@@ -64,3 +64,33 @@ teardown() {
   [[ "$output" =~ \[DRY-RUN\] ]]
   [[ "$output" =~ command[[:space:]]rm ]]
 }
+
+@test "log_message: SUCCESS 在默认 INFO 阈值下会输出（不再被吞）" {
+  run bash -c '
+    source "$1"
+    LOG_LEVEL="INFO"
+    LOG_FILE="/tmp/nginx.log.success"
+    QUIET_MODE="false"
+    IS_INTERACTIVE_MODE="true"
+    log_message SUCCESS "依赖安装完成（nginx）"
+  ' "$SCRIPT_PATH" "$LIB_PATH"
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ \[SUCCESS\]\ 依赖安装完成 ]]
+}
+
+@test "log_message: LOG_LEVEL=WARN 时 SUCCESS 与 INFO 一起静默" {
+  run bash -c '
+    source "$1"
+    LOG_LEVEL="WARN"
+    LOG_FILE="/tmp/nginx.log.success.warn"
+    QUIET_MODE="false"
+    IS_INTERACTIVE_MODE="true"
+    log_message SUCCESS "成功行"
+    log_message INFO "信息行"
+    log_message WARN "警告行"
+  ' "$SCRIPT_PATH" "$LIB_PATH"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"成功行"* ]]
+  [[ "$output" != *"信息行"* ]]
+  [[ "$output" == *"警告行"* ]]
+}

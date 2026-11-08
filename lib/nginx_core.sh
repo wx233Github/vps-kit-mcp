@@ -902,10 +902,12 @@ _log_level_to_num() {
 	case "${1:-INFO}" in
 	ERROR) printf '%s\n' "0" ;;
 	WARN) printf '%s\n' "1" ;;
-	INFO) printf '%s\n' "2" ;;
-	SUCCESS) printf '%s\n' "3" ;;
+	# SUCCESS 表达的是「结果」，比 INFO 的「过程」更该出现在屏幕上。
+	# 它原来排在 INFO 之后（3 > 2），默认阈值 INFO 下会被永久吞掉，这里与 INFO 同级。
+	SUCCESS) printf '%s\n' "2" ;;
+	INFO) printf '%s\n' "3" ;;
 	DEBUG) printf '%s\n' "4" ;;
-	*) printf '%s\n' "2" ;;
+	*) printf '%s\n' "3" ;;
 	esac
 }
 
