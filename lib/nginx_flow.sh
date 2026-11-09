@@ -416,18 +416,19 @@ main_menu() {
 				ui_append_manual_page_block menu_lines "常用操作" "${menu_common[@]}"
 				ui_append_manual_page_block menu_lines "诊断与策略" "${menu_policy[@]}"
 			fi
+			_nginx_menu_group_gaps menu_lines
 			_render_menu "Nginx 管理" "${menu_lines[@]}"
 		else
 			local row=""
-			printf '%b' "${CYAN}当前状态${NC}\n"
+			printf '%b' "${CYAN}当前状态${NC}\n\n"
 			for row in "${status_lines[@]}"; do
 				printf ' %s\n' "$row"
 			done
-			printf '%b' "\n${CYAN}常用操作${NC}\n"
+			printf '%b' "\n${CYAN}常用操作${NC}\n\n"
 			for row in "${menu_common[@]}"; do
 				printf ' %s\n' "$row"
 			done
-			printf '%b' "\n${CYAN}诊断与策略${NC}\n"
+			printf '%b' "\n${CYAN}诊断与策略${NC}\n\n"
 			for row in "${menu_policy[@]}"; do
 				printf ' %s\n' "$row"
 			done
@@ -491,6 +492,28 @@ main_menu() {
 		*) log_message ERROR "无效选择" ;;
 		esac
 	done
+}
+
+# 分组标题与内容之间留一行空白。各主题的 ui_append_* helper 行为不一致
+# （有的在标题后带空条目、有的不带），这里统一兜底，且不制造连续空行。
+_nginx_menu_group_gaps() {
+	local -n ref="$1"
+	local -a out=()
+	local i=0 line="" plain=""
+	for line in "${ref[@]}"; do
+		out+=("$line")
+		plain=$(printf '%s' "$line" | sed 's/\x1b\[[0-9;]*m//g; s/[[:space:]]*$//')
+		case "$plain" in
+		当前状态 | 常用操作 | 诊断与策略)
+			# 注意：`${ref[i+1]:-x}` 在元素为空串时也会返回默认值，必须显式判空
+			if [ "$((i + 1))" -ge "${#ref[@]}" ] || [ -n "${ref[$((i + 1))]}" ]; then
+				out+=("")
+			fi
+			;;
+		esac
+		i=$((i + 1))
+	done
+	ref=("${out[@]}")
 }
 
 _ensure_menu_interactive() {

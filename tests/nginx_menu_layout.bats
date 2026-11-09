@@ -138,3 +138,33 @@ _harness() {
   [ -z "$output" ]
 }
 
+
+@test "_nginx_menu_group_gaps: 分组标题后补一行空白" {
+  _harness '
+    arr=("当前状态" "  配置检查 正常" "常用操作" "  1 配置新网站")
+    _nginx_menu_group_gaps arr
+    printf "[%s]" "${arr[@]}"
+  '
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[当前状态][][  配置检查 正常][常用操作][][  1 配置新网站]"* ]]
+}
+
+@test "_nginx_menu_group_gaps: 已有空行时不重复插入" {
+  _harness '
+    arr=("当前状态" "" "  配置检查 正常")
+    _nginx_menu_group_gaps arr
+    printf "[%s]" "${arr[@]}"
+  '
+  [ "$status" -eq 0 ]
+  [[ "$output" == "[当前状态][][  配置检查 正常]" ]]
+}
+
+@test "_nginx_menu_group_gaps: 带颜色的标题也能识别" {
+  _harness '
+    arr=("$(printf "\033[36m常用操作\033[0m")" "  1 配置新网站")
+    _nginx_menu_group_gaps arr
+    printf "[%s]" "${arr[@]}" | sed "s/\x1b\[[0-9;]*m//g"
+  '
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[常用操作][][  1 配置新网站]"* ]]
+}

@@ -3871,7 +3871,6 @@ _display_projects_list() {
 		printf '%b\n' "   下次续期: ${renew_date}"
 		printf '%b\n\n' "   说明: 选择后可查看配置、续期、重配或删除"
 	done
-	printf '%b' "请输入序号选择项目，直接回车返回。\n"
 }
 
 select_item_and_act() {
