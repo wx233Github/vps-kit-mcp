@@ -299,9 +299,10 @@ _nginx_status_details() {
 	done
 }
 
-# 配置检查的修复出口：只有临时目录权限类可用菜单 13
+# 配置检查的修复出口：临时目录权限与 pid 共用都由菜单 13 处理
 _nginx_config_health_hint() {
 	case "$1" in
+	*pid*) printf '%s' "菜单 13 共享组与 pid 隔离" ;;
 	*目录* | *权限* | *写入*) printf '%s' "菜单 13 共享组修复" ;;
 	*) printf '' ;;
 	esac
@@ -385,7 +386,7 @@ _nginx_menu_policy_rows() {
 	printf '\n'
 	_nginx_menu_row 12 "升级 Nginx" "从官方源升级"
 	printf '\n'
-	_nginx_menu_row 13 "修复目录冲突" "共享组修复权限"
+	_nginx_menu_row 13 "修复多实例冲突" "共享组 + pid 隔离"
 	printf '\n'
 	_nginx_menu_row 14 "卸载 Nginx" "停止服务并移除软件包" "$BRIGHT_RED"
 	printf '\n'
@@ -482,6 +483,7 @@ main_menu() {
 			;;
 		13)
 			_fix_nginx_temp_path_conflicts
+			_fix_nginx_pid_conflicts || true
 			press_enter_to_continue
 			;;
 		14)

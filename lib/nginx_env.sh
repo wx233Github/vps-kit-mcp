@@ -37,12 +37,12 @@ run_diagnostics() {
   elif [ "$_multi_status" = "需关注" ]; then
     log_warn "Nginx 多实例需关注: ${_multi_reason}"
   fi
-  # 只有权限类原因能靠菜单 13 解决，pid 共用需要单独指定 pid 路径，所以分开提示
+  # 两类原因都由菜单 13 处理，但修复动作不同（共享组 vs 独立 pid 路径），分开提示
   if [ -n "$_multi_perm" ]; then
-    log_info "临时目录权限冲突可执行菜单 13（修复目录冲突）修复。"
+    log_info "临时目录权限冲突可执行菜单 13（修复多实例冲突）修复。"
   fi
   if [ -n "$_multi_pid" ]; then
-    log_info "pid 文件共用无法通过菜单 13 解决，需给该实例单独指定 pid 路径。"
+    log_info "pid 文件共用可执行菜单 13（修复多实例冲突）自动隔离，需 root 权限。"
   fi
   if [ -f "$PROJECTS_METADATA_FILE" ]; then jq -e . "$PROJECTS_METADATA_FILE" >/dev/null 2>&1 || log_error "projects.json 格式异常"; fi
   if [ -f "$TCP_PROJECTS_METADATA_FILE" ]; then jq -e . "$TCP_PROJECTS_METADATA_FILE" >/dev/null 2>&1 || log_error "tcp_projects.json 格式异常"; fi
@@ -59,6 +59,13 @@ _preflight_check_active_conf_include() {
   if [ "$active_conf" = "/etc/nginx/nginx.conf" ]; then
     return 0
   fi
+  # 旁挂实例（如 sing-box 自带的 nginx）不加载建站配置，注入 conf.d 反而会抢走站点
+  case "$active_conf" in
+  */sing-box/*)
+    log_message INFO "preflight: active 主配置为旁挂实例配置 ${active_conf}，跳过 conf.d 注入检查"
+    return 0
+    ;;
+  esac
   if grep -Eq 'include[[:space:]]+/etc/nginx/conf\.d/\*\.conf;' "$active_conf" 2>/dev/null; then
     return 0
   fi

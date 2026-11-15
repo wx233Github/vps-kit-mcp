@@ -790,7 +790,7 @@ _nginx_realpath() {
 # 分隔符不用 tab 是因为 tab 属于 IFS 空白字符，连续两个 tab 会被 read 折叠成一个，
 # 空字段就吞掉了；0x1f 不是空白，空字段能原样保留。
 # 状态取 异常|需关注|正常；来源为 pid、perm 或 "pid,perm"，无问题时两者皆空。
-# 两类原因分开返回，是因为只有权限问题能靠菜单 13 修；混成一串调用方就没法给出准确出口。
+# 两类原因分开返回，是因为它们的修复动作不同（权限靠共享组、pid 靠独立路径），混成一串调用方就没法给出准确出口。
 # 无 <8KB 用户请求体上传的场景不会立刻暴露，因此这里按「写不通=异常、共用=需关注」分级。
 _nginx_multi_instance_conflicts() {
 	local -a masters=()
@@ -896,7 +896,7 @@ _nginx_join_reasons() {
 }
 
 # 汇总「有则提示」的一段，供仪表盘/菜单使用；无问题时为空。
-# 权限项与 pid 共用分开渲染：只有权限项能靠菜单 13 解决，混成一行会让人以为修完就没事。
+# 权限项与 pid 共用分开渲染：两者都由菜单 13 处理，但修复动作不同，混成一行会让人以为修完权限就没事。
 _nginx_multi_instance_line() {
 	local status="" scope="" pid_text="" perm_text=""
 	IFS=$'\x1f' read -r status scope pid_text perm_text < <(_nginx_multi_instance_conflicts)
@@ -937,7 +937,7 @@ _nginx_multi_instance_line() {
 	fi
 	if [ -n "$pid_text" ]; then
 		printf '%b\n' "  ${color}${pid_marker}${NC} pid 共用：${pid_text}，文件里只记最后一个写入者"
-		printf '%s\n' "      → 菜单 13 修不了，需给该实例单独指定 pid 路径"
+		printf '%s\n' "      → 菜单 13 修复（为共用实例分配独立 pid 路径）"
 	fi
 }
 
@@ -1152,6 +1152,157 @@ _fix_nginx_temp_path_conflicts() {
 		return 1
 	fi
 	log_message INFO "修复完成：调整 ${acted} 个目录，共享组 ${group}。"
+	return 0
+}
+
+# 给被隔离的实例生成稳定的 pid 文件名片段：sing-box 的配置固定映射成 sing-box，
+# 其余按配置名加路径哈希，避免同名配置（如多个 nginx.conf）撞车。
+_nginx_pid_slug_for_conf() {
+	local conf="${1:-}"
+	case "$conf" in
+	*/sing-box/*)
+		printf '%s\n' "sing-box"
+		return 0
+		;;
+	esac
+	local base="" hash=""
+	base=$(basename "$conf" 2>/dev/null || true)
+	base="${base%.conf}"
+	if [ -z "$base" ]; then base="nginx"; fi
+	hash=$(printf '%s' "$conf" | md5sum 2>/dev/null | cut -c1-6 || true)
+	if [ -z "$hash" ]; then
+		hash=$(printf '%s' "$conf" | cksum 2>/dev/null | cut -d' ' -f1 || true)
+	fi
+	printf '%s\n' "${base}-${hash}"
+}
+
+# 把主配置里的 pid 指令改写成 target。每次改写前刷新备份（.pid.bak），
+# 让回滚恢复到「本次改写前」的状态，而不是很久以前的版本——上游会重写配置，
+# 拿旧备份回滚等于把上游的更新一起丢掉。
+# 权限属主沿用原文件，落盘用 mv 保证原子性；配置里没有 pid 行时返回 1。
+_nginx_set_pid_in_conf() {
+	local conf="${1:-}" target="${2:-}"
+	if [ -z "$conf" ] || [ ! -f "$conf" ] || [ -z "$target" ]; then return 1; fi
+	local backup="${conf}.pid.bak"
+	cp -a "$conf" "$backup" 2>/dev/null || return 1
+	local tmp=""
+	tmp=$(mktemp "${conf}.pid.XXXXXX" 2>/dev/null) || return 1
+	# awk 放进 if 里跑：脚本开了 errexit，直接执行失败会退出整个菜单流程
+	if ! awk -v target="$target" '
+		{
+			line=$0
+			if (!done && line ~ /^[[:space:]]*pid[[:space:]]+[^;]+;/) {
+				match(line, /^[[:space:]]*/)
+				indent=substr(line, 1, RLENGTH)
+				print indent "pid " target ";"
+				done=1
+				next
+			}
+			print line
+		}
+		END { if (!done) exit 3 }
+	' "$conf" >"$tmp" 2>/dev/null; then
+		rm -f "$tmp"
+		return 1
+	fi
+	chmod --reference="$conf" "$tmp" 2>/dev/null || true
+	chown --reference="$conf" "$tmp" 2>/dev/null || true
+	if ! mv -f "$tmp" "$conf"; then
+		rm -f "$tmp"
+		return 1
+	fi
+	return 0
+}
+
+# 多个实例共用同一个 pid 文件时，`nginx -s` 只能找到最后写入的那个进程。
+# 这里给非主实例各分配 /run/nginx-<slug>.pid：改写其主配置的 pid 行、校验、
+# 对 master 定向 HUP（reload 不会重写 pid 文件，所以随后手动落一份），主实例保持原状。
+# 上游每次生成配置都会把 pid 写回共享路径，因此本操作是幂等的，菜单 13 每次执行都会重新校正。
+_fix_nginx_pid_conflicts() {
+	local -a masters=() confs=() pid_files=()
+	local m="" master="" cmd="" conf="" pid_file="" rp=""
+	while IFS= read -r master; do
+		if [ -n "$master" ]; then masters+=("$master"); fi
+	done < <(_list_nginx_master_pids 2>/dev/null || true)
+	if [ "${#masters[@]}" -lt 2 ]; then
+		return 0
+	fi
+	local primary_conf="" primary_real=""
+	primary_conf=$(_get_active_nginx_main_conf)
+	primary_real=$(_nginx_realpath "$primary_conf" 2>/dev/null || true)
+	local -A owner_of=()
+	local -A shared=()
+	for m in "${masters[@]}"; do
+		cmd=$(_read_proc_cmdline "$m")
+		conf=$(_extract_nginx_conf_from_master_cmd "$cmd" 2>/dev/null || true)
+		if [ -z "$conf" ]; then conf="/etc/nginx/nginx.conf"; fi
+		pid_file=$(_get_nginx_pid_file_from_conf "$conf" 2>/dev/null || true)
+		if [ -z "$pid_file" ]; then pid_file="/run/nginx.pid"; fi
+		rp=$(_nginx_realpath "$pid_file")
+		confs+=("$conf")
+		pid_files+=("$rp")
+		if [ -n "${owner_of[$rp]:-}" ]; then
+			shared["$rp"]="1"
+		else
+			owner_of["$rp"]="$m"
+		fi
+	done
+	if [ "${#shared[@]}" -eq 0 ]; then
+		return 0
+	fi
+
+	local nginx_bin=""
+	nginx_bin=$(_nginx_bin_or_empty)
+	if [ -z "$nginx_bin" ]; then nginx_bin="nginx"; fi
+	local pid_dir="${NGINX_PID_ISOLATION_DIR:-/run}"
+
+	local i=0 fixed=0 failed=0 slug="" target=""
+	for i in "${!masters[@]}"; do
+		rp="${pid_files[$i]}"
+		if [ -z "${shared[$rp]:-}" ]; then continue; fi
+		conf="${confs[$i]}"
+		m="${masters[$i]}"
+		# 主实例保留原 pid 路径，避免影响 systemd 单元与现有运维习惯。
+		# 比较前归一化：软链或不同写法指向同一文件时，字符串比较会漏判，进而改写主实例。
+		if [ "$(_nginx_realpath "$conf")" = "$primary_real" ]; then continue; fi
+		slug=$(_nginx_pid_slug_for_conf "$conf")
+		target="${pid_dir}/nginx-${slug}.pid"
+		if [ "$(_nginx_realpath "$target")" = "$rp" ]; then continue; fi
+		if ! _nginx_set_pid_in_conf "$conf" "$target"; then
+			log_message ERROR "pid 隔离失败：无法改写 ${conf}"
+			failed=$((failed + 1))
+			continue
+		fi
+		if ! "$nginx_bin" -t -c "$conf" >/dev/null 2>&1; then
+			log_message ERROR "pid 隔离失败：改写后配置校验未通过，已回滚 ${conf}"
+			if [ -f "${conf}.pid.bak" ]; then cp -a "${conf}.pid.bak" "$conf" 2>/dev/null || true; fi
+			failed=$((failed + 1))
+			continue
+		fi
+		if ! _dry_run_kill -HUP "$m" 2>/dev/null; then
+			# HUP 没送到时配置与实际运行态会分叉（配置指向新路径、master 仍用旧路径），
+			# 回滚配置让它重新一致，等下次执行再试。
+			log_message ERROR "pid 隔离失败：HUP master(${m}) 未成功，已回滚 ${conf}"
+			if [ -f "${conf}.pid.bak" ]; then cp -a "${conf}.pid.bak" "$conf" 2>/dev/null || true; fi
+			failed=$((failed + 1))
+			continue
+		fi
+		if [ "${DRY_RUN:-false}" = "true" ]; then
+			log_message INFO "[DRY-RUN] 将写入 ${target}（master ${m}）"
+		elif ! printf '%s\n' "$m" >"$target" 2>/dev/null; then
+			log_message WARN "无法写入 ${target}，下次 reload 前需手动补写 master pid ${m}"
+		fi
+		log_message SUCCESS "已隔离 pid：${conf} → ${target}（master ${m}）"
+		fixed=$((fixed + 1))
+	done
+
+	if [ "$failed" -gt 0 ]; then
+		log_message WARN "pid 隔离未全部完成：成功 ${fixed} 项，失败 ${failed} 项。"
+		return 1
+	fi
+	if [ "$fixed" -gt 0 ]; then
+		log_message INFO "pid 隔离完成：调整 ${fixed} 个实例。"
+	fi
 	return 0
 }
 
@@ -1625,7 +1776,7 @@ _setup_logrotate() {
 		if ! _require_safe_path "/etc/logrotate.d/nginx" "写入 logrotate"; then return 1; fi
 		cat <<'EOF' | _atomic_write_file "/etc/logrotate.d/nginx" "0644"
 /var/log/nginx/*.log {
-    daily missingok rotate 14 compress delaycompress notifempty create 0640 root root sharedscripts postrotate if [ -f /var/run/nginx.pid ]; then kill -USR1 `cat /var/run/nginx.pid`; fi endscript
+    daily missingok rotate 14 compress delaycompress notifempty create 0640 root root sharedscripts postrotate for p in $(pgrep -f 'nginx: master process' 2>/dev/null); do kill -USR1 "$p" 2>/dev/null || true; done endscript
 }
 EOF
 	fi
@@ -1646,10 +1797,69 @@ _parse_args() {
 	tm_parse_args "$@"
 }
 
+# 取「主实例」的 master cmdline。多实例共存时 PID 最小的往往是旁挂实例
+# （例如 sing-box 自带的 nginx），按 PID 排序会把主配置判错，所以多实例时
+# 优先挑不带 -c 或指向 /etc/nginx/nginx.conf 的那个，其次才用 systemd 记录的
+# nginx.service 主进程。单实例无需甄别，直接返回，避免多余的系统调用。
+_nginx_primary_master_cmd() {
+	local -a cmds=()
+	local line="" conf="" pid=""
+	while IFS= read -r line; do
+		if [ -n "$line" ]; then cmds+=("$line"); fi
+	done < <(pgrep -af 'nginx: master process' 2>/dev/null || true)
+	if [ "${#cmds[@]}" -eq 0 ]; then
+		return 0
+	fi
+	if [ "${#cmds[@]}" -eq 1 ]; then
+		printf '%s\n' "${cmds[0]}"
+		return 0
+	fi
+	for line in "${cmds[@]}"; do
+		conf=$(_extract_nginx_conf_from_master_cmd "$line" 2>/dev/null || true)
+		if [ -z "$conf" ] || [ "$conf" = "/etc/nginx/nginx.conf" ]; then
+			printf '%s\n' "$line"
+			return 0
+		fi
+	done
+	if command -v systemctl >/dev/null 2>&1; then
+		pid=$(systemctl show -p MainPID --value nginx 2>/dev/null || true)
+		if [ -n "$pid" ] && [ "$pid" != "0" ]; then
+			for line in "${cmds[@]}"; do
+				case "$line" in
+				"$pid "*)
+					printf '%s\n' "$line"
+					return 0
+					;;
+				esac
+			done
+		fi
+	fi
+	printf '%s\n' "${cmds[0]}"
+	return 0
+}
+
+# 按主配置路径找对应的 master cmdline，用于对指定实例定向发信号。
+_nginx_master_cmd_by_conf() {
+	local want="${1:-}"
+	[ -n "$want" ] || return 1
+	local want_real="" cmd="" conf=""
+	want_real=$(_nginx_realpath "$want")
+	while IFS= read -r cmd; do
+		[ -n "$cmd" ] || continue
+		conf=$(_extract_nginx_conf_from_master_cmd "$cmd" 2>/dev/null || true)
+		[ -n "$conf" ] || conf="/etc/nginx/nginx.conf"
+		if [ "$(_nginx_realpath "$conf")" = "$want_real" ]; then
+			printf '%s\n' "$cmd"
+			return 0
+		fi
+	done < <(pgrep -af 'nginx: master process' 2>/dev/null || true)
+	return 1
+}
+
 _get_active_nginx_main_conf() {
 	local master_cmd=""
 	local conf=""
-	master_cmd=$(pgrep -af 'nginx: master process' | head -n1 || true)
+	master_cmd=$(_nginx_primary_master_cmd)
 	conf=$(_extract_nginx_conf_from_master_cmd "$master_cmd" 2>/dev/null || true)
 	if [ -z "$conf" ]; then
 		conf="/etc/nginx/nginx.conf"
@@ -2088,7 +2298,7 @@ _select_reload_strategy() {
 		printf '%s\n' "systemctl"
 		return 0
 	fi
-	master_cmd=$(pgrep -af 'nginx: master process' | head -n1 || true)
+	master_cmd=$(_nginx_primary_master_cmd)
 	conf_path=$(_extract_nginx_conf_from_master_cmd "$master_cmd" 2>/dev/null || true)
 	if [ -n "$conf_path" ]; then
 		NGINX_RELOAD_STRATEGY_CACHE="nginx_conf:${conf_path}"
@@ -2149,7 +2359,7 @@ control_nginx() {
 		if _is_nginx_pid_file_empty "$pid_file"; then
 			log_message WARN "nginx -c ${conf_path} -s reload 失败，PID 文件为空/无效，尝试 HUP master 进程重载。"
 			local master_cmd=""
-			master_cmd=$(pgrep -af 'nginx: master process' | head -n1 || true)
+			master_cmd=$(_nginx_master_cmd_by_conf "$conf_path" 2>/dev/null || true)
 			if _try_hup_nginx_master "$master_cmd"; then
 				return 0
 			fi
@@ -2173,7 +2383,7 @@ control_nginx() {
 
 	local master_cmd=""
 	local conf_path=""
-	master_cmd=$(pgrep -af 'nginx: master process' | head -n1 || true)
+	master_cmd=$(_nginx_primary_master_cmd)
 	conf_path=$(_extract_nginx_conf_from_master_cmd "$master_cmd" 2>/dev/null || true)
 	if [ -n "$conf_path" ] && run_cmd 20 nginx -c "$conf_path" -s reload >/dev/null 2>&1; then
 		log_message WARN "已回退为 nginx -c ${conf_path} -s reload。"

@@ -80,7 +80,7 @@ _harness() {
   [[ "$output" != *"菜单 13"* ]]
 }
 
-@test "临时目录权限原因指向菜单 13，pid 共用原因不给菜单 13" {
+@test "临时目录权限与 pid 共用都指向菜单 13" {
   _harness '
     _nginx_config_health_status() { printf "%s\t%s\n" "异常" "www-data 无权写入 /var/lib/nginx/uwsgi（当前 root:root 700）"; }
     _nginx_cert_health_status() { printf "%s\t%s\n" "正常" ""; }
@@ -95,7 +95,8 @@ _harness() {
     _nginx_status_lines
   '
   [ "$status" -eq 0 ]
-  [[ "$output" != *"菜单 13"* ]]
+  [[ "$output" == *"菜单 13"* ]]
+  [[ "$output" == *"pid 隔离"* ]]
 }
 
 @test "状态明细超过 3 条时折成「还有 N 项」" {

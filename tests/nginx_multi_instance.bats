@@ -209,7 +209,7 @@ EOF
   [[ "$output" != *"菜单 13 修不了"* ]]
 }
 
-@test "_nginx_multi_instance_line: 仅 pid 共用时说明菜单 13 修不了" {
+@test "_nginx_multi_instance_line: 仅 pid 共用时提示菜单 13 可修" {
   run bash -c '
     source "$1"
     _nginx_multi_instance_conflicts() { printf "%s\x1f%s\x1f%s\x1f%s\n" 需关注 pid "/run/nginx.pid（1234 与 5678）" ""; }
@@ -218,8 +218,9 @@ EOF
   ' _ "$LIB_PATH"
   [ "$status" -eq 0 ]
   [[ "$output" == *"pid 共用"* ]]
-  [[ "$output" == *"菜单 13 修不了"* ]]
-  [[ "$output" != *"菜单 13 修复"* ]]
+  [[ "$output" == *"菜单 13 修复"* ]]
+  [[ "$output" == *"独立 pid 路径"* ]]
+  [[ "$output" != *"菜单 13 修不了"* ]]
 }
 
 @test "_nginx_multi_instance_line: 两类冲突并存时两段都出现" {
@@ -230,8 +231,10 @@ EOF
     _nginx_multi_instance_line
   ' _ "$LIB_PATH"
   [ "$status" -eq 0 ]
+  [[ "$output" == *"临时目录权限"* ]]
+  [[ "$output" == *"pid 共用"* ]]
   [[ "$output" == *"菜单 13 修复"* ]]
-  [[ "$output" == *"菜单 13 修不了"* ]]
+  [[ "$output" != *"菜单 13 修不了"* ]]
 }
 
 @test "_nginx_temp_path_allowed: 接受主配置声明的 temp_path" {
@@ -411,3 +414,190 @@ EOF
   [[ "$output" != 异常* ]]
   [[ "$output" != *"无权写入"* ]]
 }
+
+@test "_nginx_pid_slug_for_conf: sing-box 配置固定映射" {
+  run bash -c 'source "$1"; _nginx_pid_slug_for_conf /etc/sing-box/nginx.conf' _ "$LIB_PATH"
+  [ "$status" -eq 0 ]
+  [ "$output" = "sing-box" ]
+}
+
+@test "_nginx_pid_slug_for_conf: 其他配置带路径哈希且结果稳定" {
+  run bash -c 'source "$1"; _nginx_pid_slug_for_conf /etc/nginx/nginx.conf; _nginx_pid_slug_for_conf /etc/nginx/nginx.conf' _ "$LIB_PATH"
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = "${lines[1]}" ]
+  [[ "${lines[0]}" == nginx-* ]]
+}
+
+@test "_nginx_set_pid_in_conf: 只替换 pid 行并保留其余内容" {
+  printf '# header\npid /run/nginx.pid;\nworker_processes auto;\n' >"$WORK_DIR/a.conf"
+  run bash -c 'source "$1"; _nginx_set_pid_in_conf "$2" /run/nginx-a.pid' _ "$LIB_PATH" "$WORK_DIR/a.conf"
+  [ "$status" -eq 0 ]
+  grep -qx 'pid /run/nginx-a.pid;' "$WORK_DIR/a.conf"
+  grep -qx '# header' "$WORK_DIR/a.conf"
+  grep -qx 'worker_processes auto;' "$WORK_DIR/a.conf"
+  [ -f "$WORK_DIR/a.conf.pid.bak" ]
+  grep -qx 'pid /run/nginx.pid;' "$WORK_DIR/a.conf.pid.bak"
+}
+
+@test "_nginx_set_pid_in_conf: 没有 pid 行时失败且不改文件" {
+  printf 'worker_processes auto;\n' >"$WORK_DIR/b.conf"
+  run bash -c 'source "$1"; _nginx_set_pid_in_conf "$2" /run/x.pid' _ "$LIB_PATH" "$WORK_DIR/b.conf"
+  [ "$status" -ne 0 ]
+  [ "$(cat "$WORK_DIR/b.conf")" = "worker_processes auto;" ]
+}
+
+@test "_fix_nginx_pid_conflicts: 主实例保留，旁挂实例改到独立 pid" {
+  mkdir -p "$WORK_DIR/pids"
+  printf 'pid /run/nginx.pid;\n' >"$WORK_DIR/main.conf"
+  printf 'pid /var/run/nginx.pid;\n' >"$WORK_DIR/sb.conf"
+  run env MAIN_CONF="$WORK_DIR/main.conf" SB_CONF="$WORK_DIR/sb.conf" PID_DIR="$WORK_DIR/pids" bash -c '
+    source "$1"
+    _list_nginx_master_pids() { printf "%s\n" 100 200; }
+    _read_proc_cmdline() {
+      case "$1" in
+      100) printf "%s" "nginx: master process /usr/sbin/nginx" ;;
+      *) printf "%s" "nginx: master process /usr/sbin/nginx -c $SB_CONF" ;;
+      esac
+    }
+    _extract_nginx_conf_from_master_cmd() {
+      case "$1" in
+      *"-c $SB_CONF"*) printf "%s\n" "$SB_CONF" ;;
+      *) printf "%s\n" "$MAIN_CONF" ;;
+      esac
+    }
+    _get_active_nginx_main_conf() { printf "%s\n" "$MAIN_CONF"; }
+    _nginx_bin_or_empty() { printf "%s\n" /bin/true; }
+    _dry_run_kill() { printf "kill:%s %s\n" "$1" "$2"; }
+    log_message() { :; }
+    NGINX_PID_ISOLATION_DIR="$PID_DIR" _fix_nginx_pid_conflicts
+    echo "rc=$?"
+  ' _ "$LIB_PATH"
+  [[ "$output" == *"rc=0"* ]]
+  [[ "$output" == *"kill:-HUP 200"* ]]
+  grep -qx 'pid /run/nginx.pid;' "$WORK_DIR/main.conf"
+  grep -q "pid ${WORK_DIR}/pids/nginx-sb-" "$WORK_DIR/sb.conf"
+  local target=""
+  target=$(ls "$WORK_DIR/pids"/nginx-sb-*.pid)
+  [ "$(cat "$target")" = "200" ]
+}
+
+@test "_fix_nginx_pid_conflicts: 配置校验失败时回滚" {
+  mkdir -p "$WORK_DIR/pids2"
+  printf 'pid /run/nginx.pid;\n' >"$WORK_DIR/main2.conf"
+  printf 'pid /var/run/nginx.pid;\n' >"$WORK_DIR/sb2.conf"
+  run env MAIN_CONF="$WORK_DIR/main2.conf" SB_CONF="$WORK_DIR/sb2.conf" PID_DIR="$WORK_DIR/pids2" bash -c '
+    source "$1"
+    _list_nginx_master_pids() { printf "%s\n" 100 200; }
+    _read_proc_cmdline() {
+      case "$1" in
+      100) printf "%s" "nginx: master process /usr/sbin/nginx" ;;
+      *) printf "%s" "nginx: master process /usr/sbin/nginx -c $SB_CONF" ;;
+      esac
+    }
+    _extract_nginx_conf_from_master_cmd() {
+      case "$1" in
+      *"-c $SB_CONF"*) printf "%s\n" "$SB_CONF" ;;
+      *) printf "%s\n" "$MAIN_CONF" ;;
+      esac
+    }
+    _get_active_nginx_main_conf() { printf "%s\n" "$MAIN_CONF"; }
+    _nginx_bin_or_empty() { printf "%s\n" /bin/false; }
+    _dry_run_kill() { printf "kill:%s %s\n" "$1" "$2"; }
+    log_message() { :; }
+    NGINX_PID_ISOLATION_DIR="$PID_DIR" _fix_nginx_pid_conflicts && rc=0 || rc=$?
+    echo "rc=$rc"
+  ' _ "$LIB_PATH"
+  [[ "$output" == *"rc=1"* ]]
+  [[ "$output" != *"kill:-HUP"* ]]
+  grep -qx 'pid /var/run/nginx.pid;' "$WORK_DIR/sb2.conf"
+  [ -z "$(ls "$WORK_DIR/pids2" 2>/dev/null)" ]
+}
+
+@test "_fix_nginx_pid_conflicts: 单实例时不动作" {
+  run bash -c '
+    source "$1"
+    _list_nginx_master_pids() { printf "%s\n" 100; }
+    _fix_nginx_pid_conflicts
+    echo "done"
+  ' _ "$LIB_PATH"
+  [ "$status" -eq 0 ]
+  [ "$output" = "done" ]
+}
+
+@test "_fix_nginx_pid_conflicts: HUP 失败时回滚配置" {
+  mkdir -p "$WORK_DIR/pids3"
+  printf 'pid /run/nginx.pid;\n' >"$WORK_DIR/main3.conf"
+  printf 'pid /var/run/nginx.pid;\n' >"$WORK_DIR/sb3.conf"
+  run env MAIN_CONF="$WORK_DIR/main3.conf" SB_CONF="$WORK_DIR/sb3.conf" PID_DIR="$WORK_DIR/pids3" bash -c '
+    source "$1"
+    _list_nginx_master_pids() { printf "%s\n" 100 200; }
+    _read_proc_cmdline() {
+      case "$1" in
+      100) printf "%s" "nginx: master process /usr/sbin/nginx" ;;
+      *) printf "%s" "nginx: master process /usr/sbin/nginx -c $SB_CONF" ;;
+      esac
+    }
+    _extract_nginx_conf_from_master_cmd() {
+      case "$1" in
+      *"-c $SB_CONF"*) printf "%s\n" "$SB_CONF" ;;
+      *) printf "%s\n" "$MAIN_CONF" ;;
+      esac
+    }
+    _get_active_nginx_main_conf() { printf "%s\n" "$MAIN_CONF"; }
+    _nginx_bin_or_empty() { printf "%s\n" /bin/true; }
+    _dry_run_kill() { return 1; }
+    log_message() { :; }
+    NGINX_PID_ISOLATION_DIR="$PID_DIR" _fix_nginx_pid_conflicts && rc=0 || rc=$?
+    echo "rc=$rc"
+  ' _ "$LIB_PATH"
+  [[ "$output" == *"rc=1"* ]]
+  # 配置指向新路径但 master 没重载会让运行态与配置分叉，必须回滚
+  grep -qx 'pid /var/run/nginx.pid;' "$WORK_DIR/sb3.conf"
+  [ -z "$(ls "$WORK_DIR/pids3" 2>/dev/null)" ]
+}
+
+@test "_fix_nginx_pid_conflicts: 主实例以软链路径表示时不被改写" {
+  mkdir -p "$WORK_DIR/pids4"
+  printf 'pid /run/nginx.pid;\n' >"$WORK_DIR/main4.conf"
+  printf 'pid /var/run/nginx.pid;\n' >"$WORK_DIR/sb4.conf"
+  ln -s "$WORK_DIR/main4.conf" "$WORK_DIR/main4-link.conf"
+  run env MAIN_CONF="$WORK_DIR/main4.conf" MAIN_LINK="$WORK_DIR/main4-link.conf" SB_CONF="$WORK_DIR/sb4.conf" PID_DIR="$WORK_DIR/pids4" bash -c '
+    source "$1"
+    _list_nginx_master_pids() { printf "%s\n" 100 200; }
+    _read_proc_cmdline() {
+      case "$1" in
+      100) printf "%s" "nginx: master process /usr/sbin/nginx -c $MAIN_CONF" ;;
+      *) printf "%s" "nginx: master process /usr/sbin/nginx -c $SB_CONF" ;;
+      esac
+    }
+    _extract_nginx_conf_from_master_cmd() {
+      case "$1" in
+      *"-c $SB_CONF"*) printf "%s\n" "$SB_CONF" ;;
+      *) printf "%s\n" "$MAIN_CONF" ;;
+      esac
+    }
+    _get_active_nginx_main_conf() { printf "%s\n" "$MAIN_LINK"; }
+    _nginx_bin_or_empty() { printf "%s\n" /bin/true; }
+    _dry_run_kill() { printf "kill:%s %s\n" "$1" "$2"; }
+    log_message() { :; }
+    NGINX_PID_ISOLATION_DIR="$PID_DIR" _fix_nginx_pid_conflicts
+    echo "rc=$?"
+  ' _ "$LIB_PATH"
+  [[ "$output" == *"rc=0"* ]]
+  # 主配置路径写成软链时字符串比较会漏判，改到主实例会让 systemd 的 PIDFile 失配
+  grep -qx 'pid /run/nginx.pid;' "$WORK_DIR/main4.conf"
+  [[ "$output" == *"kill:-HUP 200"* ]]
+  grep -q "pid ${WORK_DIR}/pids4/nginx-sb4-" "$WORK_DIR/sb4.conf"
+}
+
+@test "_nginx_set_pid_in_conf: 重复改写时备份刷新为本次改写前的内容" {
+  printf 'pid /run/nginx.pid;\n' >"$WORK_DIR/c.conf"
+  run bash -c 'source "$1"; _nginx_set_pid_in_conf "$2" /run/nginx-c.pid' _ "$LIB_PATH" "$WORK_DIR/c.conf"
+  [ "$status" -eq 0 ]
+  printf 'pid /run/nginx.pid;\nworker_processes 2;\n' >"$WORK_DIR/c.conf"
+  run bash -c 'source "$1"; _nginx_set_pid_in_conf "$2" /run/nginx-c.pid' _ "$LIB_PATH" "$WORK_DIR/c.conf"
+  [ "$status" -eq 0 ]
+  # 备份若停在旧版本，回滚会把上游新写入的 worker_processes 一起丢掉
+  grep -qx 'worker_processes 2;' "$WORK_DIR/c.conf.pid.bak"
+}
+
