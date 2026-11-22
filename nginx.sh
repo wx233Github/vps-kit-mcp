@@ -622,8 +622,6 @@ _draw_dashboard() {
 	if [ "$nginx_missing" != "true" ] && [ -z "$line4" ]; then
 		line3=$(_nginx_http2_warn_line "$nginx_v")
 	fi
-	local line5=""
-	line5=$(_nginx_multi_instance_line)
 
 	# 分隔线跟随终端宽度；标题行只出现一次，版本号紧跟标题
 	local dash_width
@@ -643,10 +641,6 @@ _draw_dashboard() {
 		# 版本提示独立成段，与状态行之间留一个空行
 		printf '%b' "\n"
 		printf '%b\n' "$line4"
-	fi
-	if [ -n "$line5" ]; then
-		# line5 自带换行，去掉尾换行再补一个，避免多出空行
-		printf '%s\n' "${line5%$'\n'}"
 	fi
 	printf '%b' "${GREEN}$(generate_line "$dash_width" "─")${NC}\n"
 }
@@ -890,52 +884,6 @@ _nginx_join_reasons() {
 		out="${out}；等共 $# 项"
 	fi
 	printf '%s' "$out"
-}
-
-# 汇总「有则提示」的一段，供仪表盘/菜单使用；无问题时为空。
-# 权限项与 pid 共用分开渲染：两者都由菜单 13 处理，但修复动作不同，混成一行会让人以为修完权限就没事。
-_nginx_multi_instance_line() {
-	local status="" scope="" pid_text="" perm_text=""
-	IFS=$'\x1f' read -r status scope pid_text perm_text < <(_nginx_multi_instance_conflicts)
-	case "$status" in
-	异常 | 需关注) ;;
-	*) return 0 ;;
-	esac
-	local color="${BRIGHT_YELLOW}" head="⚠ Nginx 多实例需关注"
-	if [ "$status" = "异常" ]; then
-		color="${BRIGHT_RED}"
-		head="⚠ Nginx 多实例冲突"
-	fi
-	if [ -z "$scope" ]; then
-		# 来源未知（旧调用方只给两列）时退回单行渲染，避免把来源字段当成原因显示
-		local legacy=""
-		legacy=$(printf '%s；%s' "$pid_text" "$perm_text" | sed 's/^；//; s/；$//')
-		printf '%b\n' "${color}${head}${legacy:+：${legacy}}${NC}"
-		return 0
-	fi
-	# 原因文本按终端宽度截断，避免窄屏把提示挤成多行
-	local limit
-	limit=$(($(_nginx_term_cols) - 10))
-	[ "$limit" -lt 16 ] && limit=16
-	perm_text=$(_nginx_trim_visual "$perm_text" "$limit")
-	pid_text=$(_nginx_trim_visual "$pid_text" "$limit")
-	local count=0
-	count=$(_list_nginx_master_pids 2>/dev/null | wc -l)
-	printf '%b\n' "${color}${head}：${count} 个 master 进程${NC}"
-	local perm_marker="├" pid_marker="└"
-	[ -n "$pid_text" ] || perm_marker="└"
-	if [ -n "$perm_text" ]; then
-		printf '%b\n' "  ${color}${perm_marker}${NC} 临时目录权限：${perm_text}"
-		if [ "$perm_marker" = "├" ]; then
-			printf '%b\n' "  ${color}│${NC}   → 菜单 13 修复（共享组 + 2770，会重启 nginx）"
-		else
-			printf '%s\n' "      → 菜单 13 修复（共享组 + 2770，会重启 nginx）"
-		fi
-	fi
-	if [ -n "$pid_text" ]; then
-		printf '%b\n' "  ${color}${pid_marker}${NC} pid 共用：${pid_text}，文件里只记最后一个写入者"
-		printf '%s\n' "      → 菜单 13 修复（为共用实例分配独立 pid 路径）"
-	fi
 }
 
 _nginx_temp_path_allowed() {

@@ -32,7 +32,6 @@ teardown() {
     _nginx_config_health_status() { printf "正常\t\n"; }
     _nginx_cert_health_status() { printf "异常\tx 证书已过期\n"; }
     _nginx_upstream_meta() { printf "%s\t%s" 1.30.6 "1.30 1.28 1.26"; }
-    _nginx_multi_instance_line() { :; }
     _nginx_http2_warn_line() { :; }
     generate_line() { local w="$1" c="$2" i=0 o=""; while [ "$i" -lt "$w" ]; do o+="$c"; i=$((i+1)); done; printf "%s" "$o"; }
     COLUMNS=45 _draw_dashboard
@@ -58,7 +57,6 @@ teardown() {
     _nginx_cert_health_status() { printf "异常\tx 证书已过期\n"; }
     _nginx_uptime_cn() { printf "%s" "15 周 6 天"; }
     _nginx_upstream_meta() { :; }
-    _nginx_multi_instance_line() { :; }
     _nginx_http2_warn_line() { :; }
     generate_line() { local w="$1" c="$2" i=0 o=""; while [ "$i" -lt "$w" ]; do o+="$c"; i=$((i+1)); done; printf "%s" "$o"; }
     COLUMNS=45 _draw_dashboard
@@ -145,7 +143,6 @@ teardown() {
     _nginx_config_health_status() { printf "正常\t\n"; }
     _nginx_cert_health_status() { printf "正常\t\n"; }
     _nginx_upstream_meta() { :; }
-    _nginx_multi_instance_line() { :; }
     _nginx_http2_warn_line() { :; }
     generate_line() { local w="$1" c="$2" i=0 o=""; while [ "$i" -lt "$w" ]; do o+="$c"; i=$((i+1)); done; printf "%s" "$o"; }
     COLUMNS=100 _draw_dashboard
@@ -183,7 +180,6 @@ teardown() {
     _nginx_config_health_status() { printf x >>"$CALLS"; printf "正常\t\n"; }
     _nginx_cert_health_status() { printf "正常\t\n"; }
     _nginx_upstream_meta() { :; }
-    _nginx_multi_instance_line() { :; }
     _nginx_http2_warn_line() { :; }
     generate_line() { local w="$1" c="$2" i=0 o=""; while [ "$i" -lt "$w" ]; do o+="$c"; i=$((i+1)); done; printf "%s" "$o"; }
     COLUMNS=45 _draw_dashboard >/dev/null
@@ -205,7 +201,6 @@ teardown() {
     _nginx_config_health_status() { printf "正常\t\n"; }
     _nginx_cert_health_status() { printf "正常\t\n"; }
     _nginx_upstream_meta() { printf "%s\t%s" 1.30.6 "1.30 1.28 1.26 1.18"; }
-    _nginx_multi_instance_line() { :; }
     _nginx_http2_warn_line() { printf "HTTP2-WARN"; }
     generate_line() { local w="$1" c="$2" i=0 o=""; while [ "$i" -lt "$w" ]; do o+="$c"; i=$((i+1)); done; printf "%s" "$o"; }
     COLUMNS=45 _draw_dashboard
@@ -233,7 +228,6 @@ teardown() {
     _nginx_config_health_status() { printf "未安装\\tnginx 未安装，回主菜单 2 重新安装\\n"; }
     _nginx_cert_health_status() { printf "正常\\t\\n"; }
     _nginx_upstream_meta() { printf "%s\\t%s" 1.30.6 "1.30 1.28 1.26"; }
-    _nginx_multi_instance_line() { :; }
     _nginx_http2_warn_line() { printf "HTTP2-WARN"; }
     generate_line() { local w="$1" c="$2" i=0 o=""; while [ "$i" -lt "$w" ]; do o+="$c"; i=$((i+1)); done; printf "%s" "$o"; }
     COLUMNS=45 _draw_dashboard
