@@ -1,11 +1,15 @@
 #!/usr/bin/env bats
 
+setup() {
+	export REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
+}
+
 @test "watchtower fallback _render_menu 在 retro-launcher 下使用轻量标题样式" {
 	run bash -c '
     set -euo pipefail
     JB_UI_THEME="retro-launcher"
     script_copy=$(mktemp /tmp/watchtower.theme.menu.XXXXXX.sh)
-    awk "{gsub(\"/opt/vps_install_modules/utils.sh\", \"/root/aa/vps-kit-mcp/utils.sh\"); print}" /root/aa/vps-kit-mcp/tools/Watchtower.sh >"$script_copy"
+    sed "s#/opt/vps_install_modules/utils.sh#$REPO_ROOT/utils.sh#" "$REPO_ROOT/tools/Watchtower.sh" >"$script_copy"
     source "$script_copy"
     rm -f "$script_copy"
     output=$(_render_menu "Watchtower 自动更新管理器" "1. 测试项" 2>/dev/null)
@@ -16,12 +20,12 @@
 	[ "$status" -eq 0 ]
 }
 
-@test "watchtower main_menu 在 retro-launcher 下输出 header 与分区" {
+@test "watchtower main_menu 在 retro-launcher 下渲染状态与操作分区" {
 	run bash -c '
     set -euo pipefail
     JB_UI_THEME="retro-launcher"
     script_copy=$(mktemp /tmp/watchtower.main.theme.XXXXXX.sh)
-    awk "{gsub(\"/opt/vps_install_modules/utils.sh\", \"/root/aa/vps-kit-mcp/utils.sh\"); print}" /root/aa/vps-kit-mcp/tools/Watchtower.sh >"$script_copy"
+    sed "s#/opt/vps_install_modules/utils.sh#$REPO_ROOT/utils.sh#" "$REPO_ROOT/tools/Watchtower.sh" >"$script_copy"
     source "$script_copy"
     rm -f "$script_copy"
     load_config() { return 0; }
@@ -43,9 +47,9 @@
     main_menu
   '
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"Manage container auto-updates, notifications and runtime recovery workflows"* ]]
-	[[ "$output" == *"Theme: Retro Launcher   |   Focus: Service: 已启动"* ]]
-	[[ "$output" == *"Service Overview"* ]]
-	[[ "$output" == *"Action Center"* ]]
-	[[ "$output" == *"实时日志与容器看板"* ]]
+	[[ "$output" == *"Watchtower 自动更新管理器"* ]]
+	[[ "$output" == *"当前状态"* ]]
+	[[ "$output" == *"下一次扫描"* ]]
+	[[ "$output" == *"常用操作"* ]]
+	[[ "$output" == *"日志与容器看板"* ]]
 }

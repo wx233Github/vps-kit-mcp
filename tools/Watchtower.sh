@@ -20,6 +20,7 @@ readonly ERR_DEPENDENCY=3
 readonly ERR_PERMISSION=4
 readonly ERR_CONFIG=5
 readonly ERR_CRYPTO=6
+readonly ERR_CANCEL=7
 readonly ERR_RUNTIME=10
 
 # --- 脚本元数据 ---
@@ -1188,6 +1189,33 @@ _watchtower_logs_follow() {
 	JB_SUDO_LOG_QUIET="true" run_with_sudo docker logs -f --tail 100 "${WATCHTOWER_CONTAINER_NAME}"
 }
 
+# 从原始日志中挑出有信息量的摘要行。
+# 入参: $1 原始日志文本
+# 输出: 每行一条摘要，优先更新动作与会话汇总，取不到时回退最后 5 行；
+#       已提取 logrus 的 msg 内容，超 96 字符截断。
+_watchtower_log_digest() {
+	local raw_logs="${1:-}"
+	local logs_tail="" line=""
+	if [ -z "$raw_logs" ]; then
+		return 0
+	fi
+	logs_tail=$(printf '%s\n' "$raw_logs" | grep -E 'Session done|Found new|Stopping|Starting|Creating|Checking containers|Scheduling first run' | tail -n 5 || true)
+	if [ -z "$logs_tail" ]; then
+		logs_tail=$(printf '%s\n' "$raw_logs" | tail -n 5)
+	fi
+	while IFS= read -r line; do
+		[ -n "$line" ] || continue
+		# logrus 行形如 time="…" level=info msg="…"，只保留 msg 内容
+		if [[ "$line" =~ msg=\"([^\"]*)\" ]]; then
+			line="${BASH_REMATCH[1]}"
+		fi
+		if [ "${#line}" -gt 96 ]; then
+			line="${line:0:96}…"
+		fi
+		printf '%s\n' "$line"
+	done <<<"$logs_tail"
+}
+
 _remove_watchtower_container() {
 	JB_SUDO_LOG_QUIET="true" run_with_sudo docker rm -f "${WATCHTOWER_CONTAINER_NAME}" &>/dev/null || true
 }
@@ -2026,18 +2054,32 @@ _configure_schedule() {
 
 		mode_choice=$(_prompt_for_menu_choice "1-2")
 
+		if [ -z "$mode_choice" ]; then
+			log_info "已取消：返回主菜单。"
+			return "${ERR_CANCEL}"
+		fi
 		if [ "$mode_choice" = "1" ] || [ "$mode_choice" = "2" ]; then
 			valid_choice=true
 		else
-			log_warn "无效选项，请输入 1 或 2。"
+			log_warn "无效选项，请输入 1 或 2（直接回车返回）。"
 		fi
 	done
 
 	if [ "$mode_choice" = "1" ]; then
 		local interval_hour=""
 		while true; do
-			interval_hour=$(_prompt_user_input "每隔几小时运行一次? (输入 0 表示使用分钟): " "")
-			if [[ "$interval_hour" =~ ^[0-9]+$ ]]; then break; fi
+			interval_hour=$(_prompt_user_input "每隔几小时运行一次? (输入 0 表示使用分钟，直接回车返回): " "")
+			if [ -z "$interval_hour" ]; then
+				log_info "已取消：返回主菜单。"
+				return "${ERR_CANCEL}"
+			fi
+			if [[ "$interval_hour" =~ ^[0-9]+$ ]]; then
+				if [ "$interval_hour" -gt 23 ]; then
+					log_warn "小时间隔需在 1-23 之间（输入 0 改为按分钟）。"
+					continue
+				fi
+				break
+			fi
 			log_warn "请输入数字。"
 		done
 		if [ "$interval_hour" -gt 0 ]; then
@@ -2047,6 +2089,10 @@ _configure_schedule() {
 			echo "3. 对齐到半点 (:30)"
 			local align_choice
 			align_choice=$(_prompt_for_menu_choice "1-3")
+			if [ -z "$align_choice" ]; then
+				log_info "已取消：返回主菜单。"
+				return "${ERR_CANCEL}"
+			fi
 			if [ "$align_choice" = "1" ]; then
 				WATCHTOWER_RUN_MODE="interval"
 				WATCHTOWER_CONFIG_INTERVAL=$((interval_hour * 3600))
@@ -2055,9 +2101,12 @@ _configure_schedule() {
 			else
 				WATCHTOWER_RUN_MODE="aligned"
 				local minute="0"
-				[ "$align_choice" = "3" ] && minute="30"
+				if [ "$align_choice" = "3" ]; then minute="30"; fi
 				WATCHTOWER_SCHEDULE_CRON="0 $minute */$interval_hour * * *"
 				log_info "已设置: 每 $interval_hour 小时在 :$minute 运行 (Cron: $WATCHTOWER_SCHEDULE_CRON)"
+				if [ $((24 % interval_hour)) -ne 0 ]; then
+					log_warn "注意: ${interval_hour} 小时不能整除 24，当天最后一次间隔会短于 ${interval_hour} 小时。"
+				fi
 				WATCHTOWER_CONFIG_INTERVAL="0"
 			fi
 		else
@@ -2213,7 +2262,10 @@ configure_watchtower() {
 	if _watchtower_is_running; then
 		if ! confirm_action "Watchtower 正在运行。进入配置可能会覆盖当前设置，是否继续?"; then return "${ERR_OK}"; fi
 	fi
-	_configure_schedule
+	if ! _configure_schedule; then
+		log_info "配置未完成，返回主菜单。"
+		return "${ERR_OK}"
+	fi
 	sleep 1
 	configure_exclusion_list
 	local extra_args_choice
@@ -2359,27 +2411,124 @@ get_watchtower_all_raw_logs() {
 	_watchtower_logs_tail 2>&1 || true
 }
 
+# 推算下一次 cron 触发的 epoch；仅覆盖「日/月/周均为 *」的整点类形态，无法解析时不输出
+_next_cron_epoch() {
+	local sec="${1:-}" min="${2:-}" hour="${3:-}" day="${4:-}" month="${5:-}" dow="${6:-}"
+	local now cur_hour cur_min step target base next
+
+	if [[ "$sec" != "0" ]] || [[ "$day" != "*" ]] || [[ "$month" != "*" ]] || [[ "$dow" != "*" ]]; then
+		return 0
+	fi
+
+	now=$(date +%s)
+	cur_hour=$((10#$(date +%H)))
+	cur_min=$((10#$(date +%M)))
+
+	if [[ "$hour" == "*" ]]; then
+		if [[ "$min" == "0" ]]; then
+			# 每小时整点
+			next=$((now - now % 3600 + 3600))
+		elif [[ "$min" =~ ^\*/([0-9]+)$ ]]; then
+			# 每 N 分钟
+			step="${BASH_REMATCH[1]}"
+			if [ "$step" -le 0 ]; then
+				return 0
+			fi
+			base=$((now - now % 60))
+			target=$(((cur_min / step + 1) * step))
+			if [ "$target" -gt 59 ]; then
+				next=$((base + (60 - cur_min) * 60))
+			else
+				next=$((base + (target - cur_min) * 60))
+			fi
+		else
+			return 0
+		fi
+	elif [[ "$hour" =~ ^\*/([0-9]+)$ ]] && [[ "$min" == "0" ]]; then
+		# 每 N 小时整点（0、N、2N…）
+		step="${BASH_REMATCH[1]}"
+		if [ "$step" -le 0 ]; then
+			return 0
+		fi
+		base=$((now - now % 3600))
+		target=$(((cur_hour / step + 1) * step))
+		if [ "$target" -gt 23 ]; then
+			next=$((base + (24 - cur_hour) * 3600))
+		else
+			next=$((base + (target - cur_hour) * 3600))
+		fi
+	elif [[ "$hour" =~ ^[0-9]+$ ]] && [[ "$min" == "0" ]]; then
+		# 每天 H:00:00
+		next=$(date -d "today ${hour}:00:00" +%s 2>/dev/null || echo "")
+		[ -n "$next" ] || return 0
+		[ "$next" -gt "$now" ] || next=$((next + 86400))
+	else
+		return 0
+	fi
+
+	if [ "$next" -gt "$now" ]; then
+		printf '%s' "$next"
+	fi
+	return 0
+}
+
+# 把「距离下次触发还有多久」格式化成 3h24m 这类短标签
+_format_next_run_gap() {
+	local target_epoch="${1:-}"
+	local now remaining
+	[ -n "$target_epoch" ] || return 0
+	now=$(date +%s)
+	remaining=$((target_epoch - now))
+	[ "$remaining" -ge 0 ] || remaining=0
+	if [ "$remaining" -ge 86400 ]; then
+		printf '%dd%dh 后' $((remaining / 86400)) $(((remaining % 86400) / 3600))
+	elif [ "$remaining" -ge 3600 ]; then
+		printf '%dh%dm 后' $((remaining / 3600)) $(((remaining % 3600) / 60))
+	else
+		printf '%dm 后' $((remaining / 60))
+	fi
+}
+
 _calculate_next_cron() {
-	local cron_expr="$1"
-	local sec min hour day month dow
+	local cron_expr="${1:-}"
+	local sec="" min="" hour="" day="" month="" dow=""
+	local old_ifs="${IFS:-}"
+	local readable="" next_epoch="" gap=""
+
+	# 全局 IFS 是 $'\n\t'，这里必须临时切回空格才能按字段解析 cron
+	IFS=' '
 	read -r sec min hour day month dow <<<"$cron_expr"
+	IFS="$old_ifs"
+
 	if [[ "$sec" == "0" && "$min" == "0" ]]; then
 		if [[ "$day" == "*" && "$month" == "*" && "$dow" == "*" ]]; then
 			if [[ "$hour" == "*" ]]; then
-				echo "每小时整点"
+				readable="每小时整点"
 			elif [[ "$hour" =~ ^\*/([0-9]+)$ ]]; then
-				echo "每 ${BASH_REMATCH[1]} 小时 (整点)"
+				readable="每 ${BASH_REMATCH[1]} 小时 (整点)"
 			elif [[ "$hour" =~ ^[0-9]+$ ]]; then
-				echo "每天 ${hour}:00:00"
-			else echo "$cron_expr"; fi
-		else echo "$cron_expr"; fi
+				readable="每天 ${hour}:00:00"
+			fi
+		fi
 	elif [[ "$sec" == "0" ]]; then
-		if [[ "$hour" == "*" && "$day" == "*" ]]; then
-			if [[ "$min" =~ ^\*/([0-9]+)$ ]]; then
-				echo "每 ${BASH_REMATCH[1]} 分钟"
-			else echo "$cron_expr"; fi
-		else echo "$cron_expr"; fi
-	else echo "$cron_expr"; fi
+		if [[ "$hour" == "*" && "$day" == "*" && "$month" == "*" && "$dow" == "*" && "$min" =~ ^\*/([0-9]+)$ ]]; then
+			readable="每 ${BASH_REMATCH[1]} 分钟"
+		fi
+	fi
+
+	# 无法识别的表达式（如自定义 cron）原样回显，避免信息丢失
+	if [ -z "$readable" ]; then
+		printf '%s' "$cron_expr"
+		return 0
+	fi
+
+	next_epoch=$(_next_cron_epoch "$sec" "$min" "$hour" "$day" "$month" "$dow")
+	gap=$(_format_next_run_gap "$next_epoch")
+	if [ -n "$gap" ]; then
+		printf '%s · %s' "$readable" "$gap"
+	else
+		printf '%s' "$readable"
+	fi
 }
 
 _get_watchtower_next_run_time() {
@@ -2389,7 +2538,8 @@ _get_watchtower_next_run_time() {
 	if [ -n "$schedule_env" ]; then
 		local readable_schedule
 		readable_schedule=$(_calculate_next_cron "$schedule_env")
-		echo -e "${CYAN}定时任务: ${readable_schedule}${NC}"
+		# 状态页字段本身已写明「下一次扫描」，这里只给描述与倒计时，避免重复前缀
+		echo -e "${CYAN}${readable_schedule}${NC}"
 		return
 	fi
 	if [ -z "$raw_logs" ] || [ -z "$interval_seconds" ]; then
@@ -2461,14 +2611,13 @@ show_watchtower_details() {
 			"⏱️  ${CYAN}当前状态${NC}"
 			"    ${YELLOW}下一次扫描:${NC} ${COUNTDOWN}"
 			""
-			"📜  ${CYAN}最近日志摘要 (最后 5 行)${NC}"
+			"📜  ${CYAN}最近日志摘要 (关键 5 条)${NC}"
 		)
 
-		local logs_tail
-		logs_tail=$(echo "$raw_logs" | tail -n 5)
 		while IFS= read -r line; do
-			content_lines_array+=("    ${line:0:80}...")
-		done <<<"$logs_tail"
+			[ -n "$line" ] || continue
+			content_lines_array+=("    ${line}")
+		done < <(_watchtower_log_digest "$raw_logs")
 
 		_render_menu "$title" "${content_lines_array[@]}"
 
@@ -2655,7 +2804,12 @@ view_and_edit_config() {
 				if [ -n "$new_value" ]; then declare "$var_name"="$new_value"; fi
 			fi
 			;;
-		schedule) _configure_schedule ;;
+		schedule)
+			if ! _configure_schedule; then
+				log_info "已取消，配置未修改。"
+				continue
+			fi
+			;;
 		esac
 		save_config
 		_prompt_rebuild_if_needed
