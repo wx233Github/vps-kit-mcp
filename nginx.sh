@@ -182,13 +182,6 @@ declare -A TEMPLATE_VARS=()
 
 SAFE_PATH_ROOTS+=("${SCRIPT_DIR}" "${SCRIPT_DIR}/templates" "/opt/vps_install_modules" "/opt/vps_install_modules/templates")
 
-_unused_globals_noop() {
-	: "$VERSION" "$DESCRIPTION" "$DEPENDENCIES" "$PURPLE" "$LOG_WITH_TIMESTAMP" "$EX_USAGE" "$EX_CONFIG" "$RENEW_THRESHOLD_DAYS" "$ERR_CFG_INVALID_ARGS"
-	: "$TEMPLATE_IDS" "$TEMPLATE_DOMAIN" "$TEMPLATE_VARS_RAW" "$TEMPLATE_APPLY_MODE" "$TEMPLATE_CLEANUP_MODE" "$TEMPLATE_PARALLELISM"
-	: "$TEMPLATE_DRY_RUN" "$TEMPLATE_PRECHECK" "$TEMPLATE_FAIL_FAST" "$TEMPLATE_CONTINUE_ON_ERROR" "$TEMPLATE_DEFER_RELOAD"
-	: "$TEMPLATE_IMPACT_REPORT" "$TEMPLATE_ROLLBACK_DOMAIN" "$TEMPLATE_ROLLBACK_BEFORE" "$LOG_FORMAT" "$TX_WAL_FILE" "$AUDIT_REPORT" "$AUDIT_OUTPUT_JSON" "$PLAN_MODE" "$TX_RECOVER"
-}
-
 # shellcheck disable=SC1091
 # shellcheck source=lib/template_manifest.sh
 source "${SCRIPT_DIR}/lib/template_manifest.sh"
@@ -267,7 +260,10 @@ generate_line() {
 		printf '%b' "\n"
 		return
 	fi
-	printf "%${len}s" "" | sed "s/ /$char/g"
+	# 纯 bash 替换，避免 fork sed；patsub_replacement 下需转义替换串里的 &，否则字符原样丢失
+	local spaces
+	printf -v spaces "%${len}s" ""
+	printf '%s' "${spaces// /${char//&/\\&}}"
 }
 
 # 分隔线宽度：跟随终端列数并限制在 40-80 列，与全仓库 UI 规范一致
@@ -386,22 +382,6 @@ safe_rm() {
 		return 0
 	fi
 	rm -f "$target"
-}
-
-_center_text() {
-	local text="$1"
-	local width="${2:-10}"
-	local len=${#text}
-	if [ -z "$text" ]; then
-		printf "%${width}s" ""
-		return
-	fi
-	if ((len >= width)); then printf "%-${width}.${width}s" "$text"; else
-		local pad=$((width - len))
-		local left=$((pad / 2))
-		local right=$((pad - left))
-		printf "%${left}s%s%${right}s" "" "$text" ""
-	fi
 }
 
 _get_nginx_version() {
