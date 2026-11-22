@@ -7,7 +7,7 @@ setup() {
 @test "watchtower exclusion list handles empty map" {
   run bash -c '
     set -euo pipefail
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     should_clear_screen() { return 1; }
     _render_menu() { :; }
@@ -22,7 +22,7 @@ setup() {
 @test "watchtower exclusion list matches container names literally" {
   run bash -c '
     set -euo pipefail
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     trace_file=$(mktemp)
     load_config() { :; }

@@ -8,11 +8,11 @@ setup() {
 	run bash -c '
     set -euo pipefail
     install_lib=$(mktemp /tmp/install.secondary.menu.XXXXXX.sh)
-    sed "\$d" $REPO_ROOT/install.sh >"$install_lib"
+    sed "\$d" "$REPO_ROOT/install.sh" >"$install_lib"
     readlink() { printf "%s\n" "/opt/vps_install_modules/install.sh"; }
     source() {
       if [ "$1" = "/opt/vps_install_modules/utils.sh" ]; then
-        builtin source $REPO_ROOT/utils.sh
+        builtin source "$REPO_ROOT/utils.sh"
         return 0
       fi
       builtin source "$1"
@@ -33,17 +33,20 @@ setup() {
 	[[ "$output" == *"网络"* ]]
 	[[ "$output" == *"Docker 容器自动更新与巡检入口"* ]]
 	[[ "$output" == *"[enabled]"* ]]
+	[[ "$output" == *"管理自动更新和网络调优工具"* ]]
+	[[ "$output" == *"主题: 启动器风格"* ]]
+	[[ "$output" == *"请选择要管理的工具。"* ]]
 }
 
 @test "render_secondary_menu 在 classic 下保持紧凑列表" {
 	run bash -c '
     set -euo pipefail
     install_lib=$(mktemp /tmp/install.secondary.classic.XXXXXX.sh)
-    sed "\$d" $REPO_ROOT/install.sh >"$install_lib"
+    sed "\$d" "$REPO_ROOT/install.sh" >"$install_lib"
     readlink() { printf "%s\n" "/opt/vps_install_modules/install.sh"; }
     source() {
       if [ "$1" = "/opt/vps_install_modules/utils.sh" ]; then
-        builtin source $REPO_ROOT/utils.sh
+        builtin source "$REPO_ROOT/utils.sh"
         return 0
       fi
       builtin source "$1"
@@ -68,11 +71,11 @@ setup() {
 	run bash -c '
     set -euo pipefail
     install_lib=$(mktemp /tmp/install.secondary.theme.center.XXXXXX.sh)
-    sed "\$d" $REPO_ROOT/install.sh >"$install_lib"
+    sed "\$d" "$REPO_ROOT/install.sh" >"$install_lib"
     readlink() { printf "%s\n" "/opt/vps_install_modules/install.sh"; }
     source() {
       if [ "$1" = "/opt/vps_install_modules/utils.sh" ]; then
-        builtin source $REPO_ROOT/utils.sh
+        builtin source "$REPO_ROOT/utils.sh"
         return 0
       fi
       builtin source "$1"
@@ -91,17 +94,19 @@ setup() {
 	[[ "$output" == *"主题方案"* ]]
 	[[ "$output" == *"Retro Launcher"* ]]
 	[[ "$output" == *"[当前]"* ]]
+	[[ "$output" == *"切换界面样式，选择适合当前终端的显示方式"* ]]
+	[[ "$output" == *"焦点: 当前: "* ]]
 }
 
 @test "render_secondary_menu 从 config 读取 subtitle hint focus 与分组标题" {
 	run bash -c '
     set -euo pipefail
     install_lib=$(mktemp /tmp/install.secondary.config.XXXXXX.sh)
-    sed "\$d" $REPO_ROOT/install.sh >"$install_lib"
+    sed "\$d" "$REPO_ROOT/install.sh" >"$install_lib"
     readlink() { printf "%s\n" "/opt/vps_install_modules/install.sh"; }
     source() {
       if [ "$1" = "/opt/vps_install_modules/utils.sh" ]; then
-        builtin source $REPO_ROOT/utils.sh
+        builtin source "$REPO_ROOT/utils.sh"
         return 0
       fi
       builtin source "$1"
@@ -146,11 +151,11 @@ JSON
 	run bash -c '
     set -euo pipefail
     install_lib=$(mktemp /tmp/install.secondary.classic.shared.XXXXXX.sh)
-    sed "\$d" $REPO_ROOT/install.sh >"$install_lib"
+    sed "\$d" "$REPO_ROOT/install.sh" >"$install_lib"
     readlink() { printf "%s\n" "/opt/vps_install_modules/install.sh"; }
     source() {
       if [ "$1" = "/opt/vps_install_modules/utils.sh" ]; then
-        builtin source $REPO_ROOT/utils.sh
+        builtin source "$REPO_ROOT/utils.sh"
         return 0
       fi
       builtin source "$1"
@@ -177,11 +182,11 @@ JSON
 	run bash -c '
     set -euo pipefail
     install_lib=$(mktemp /tmp/install.main.menu.XXXXXX.sh)
-    sed "\$d" $REPO_ROOT/install.sh >"$install_lib"
+    sed "\$d" "$REPO_ROOT/install.sh" >"$install_lib"
     readlink() { printf "%s\n" "/opt/vps_install_modules/install.sh"; }
     source() {
       if [ "$1" = "/opt/vps_install_modules/utils.sh" ]; then
-        builtin source $REPO_ROOT/utils.sh
+        builtin source "$REPO_ROOT/utils.sh"
         return 0
       fi
       builtin source "$1"
@@ -219,11 +224,11 @@ JSON
 	run bash -c '
     set -euo pipefail
     install_lib=$(mktemp /tmp/install.main.config.XXXXXX.sh)
-    sed "\$d" $REPO_ROOT/install.sh >"$install_lib"
+    sed "\$d" "$REPO_ROOT/install.sh" >"$install_lib"
     readlink() { printf "%s\n" "/opt/vps_install_modules/install.sh"; }
     source() {
       if [ "$1" = "/opt/vps_install_modules/utils.sh" ]; then
-        builtin source $REPO_ROOT/utils.sh
+        builtin source "$REPO_ROOT/utils.sh"
         return 0
       fi
       builtin source "$1"
@@ -278,11 +283,11 @@ JSON
 	run bash -c '
     set -euo pipefail
     install_lib=$(mktemp /tmp/install.status.config.XXXXXX.sh)
-    sed "\$d" $REPO_ROOT/install.sh >"$install_lib"
+    sed "\$d" "$REPO_ROOT/install.sh" >"$install_lib"
     readlink() { printf "%s\n" "/opt/vps_install_modules/install.sh"; }
     source() {
       if [ "$1" = "/opt/vps_install_modules/utils.sh" ]; then
-        builtin source $REPO_ROOT/utils.sh
+        builtin source "$REPO_ROOT/utils.sh"
         return 0
       fi
       builtin source "$1"
@@ -336,11 +341,11 @@ JSON
 	run bash -c '
     set -euo pipefail
     install_lib=$(mktemp /tmp/install.schema.default.XXXXXX.sh)
-    sed "\$d" $REPO_ROOT/install.sh >"$install_lib"
+    sed "\$d" "$REPO_ROOT/install.sh" >"$install_lib"
     readlink() { printf "%s\n" "/opt/vps_install_modules/install.sh"; }
     source() {
       if [ "$1" = "/opt/vps_install_modules/utils.sh" ]; then
-        builtin source $REPO_ROOT/utils.sh
+        builtin source "$REPO_ROOT/utils.sh"
         return 0
       fi
       builtin source "$1"
@@ -356,6 +361,8 @@ JSON
     [ "$(menu_ui_group_label MCP_MENU runtime)" = "运行状态" ]
     [ "$(menu_ui_focus_key TOOLS_MENU)" = "modules" ]
     [ "$(menu_ui_group_label THEME_MENU profiles)" = "主题方案" ]
+    [ "$(menu_ui_focus_source THEME_MENU)" = "current_theme" ]
+    [ "$(menu_resolved_focus_value THEME_MENU)" = "启动器风格" ]
   '
 	[ "$status" -eq 0 ]
 }

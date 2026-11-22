@@ -454,12 +454,11 @@ ui_repeat_char() {
 	generate_line "$len" "$char"
 }
 
-# 终端列数：优先 COLUMNS，其次 tput / stty；取不到按 80，下限 24
+# 终端列数：优先 COLUMNS，其次 stty size；取不到按 80，下限 24
+# 调用方都经 $(...) 取值，此时 stdout 不是 tty，tput cols 只会回落到 80，
+# 因此不走 tput，避免多一次无意义的子进程
 ui_term_cols() {
 	local cols="${COLUMNS:-0}"
-	if [ -t 1 ] && command -v tput >/dev/null 2>&1; then
-		cols=$(tput cols 2>/dev/null || printf '%s' "$cols")
-	fi
 	case "$cols" in
 	'' | *[!0-9]*) cols=0 ;;
 	esac
@@ -516,14 +515,13 @@ ui_rule_titled() {
 	fi
 	width=$(ui_rule_width)
 	title_width=$(_get_visual_width "$title")
+	# 标题两侧各需 1 个空格 + 至少 2 条分隔线，放不下时退化为纯分隔线，避免溢出折行
+	if [ $((title_width + 4)) -gt "$width" ]; then
+		ui_rule "$color"
+		return 0
+	fi
 	left=$(((width - title_width - 2) / 2))
-	if [ "$left" -lt 1 ]; then
-		left=1
-	fi
 	right=$((width - title_width - 2 - left))
-	if [ "$right" -lt 1 ]; then
-		right=1
-	fi
 	line="$(generate_line "$left" "─") ${title} $(generate_line "$right" "─")"
 	if [ -n "$color" ]; then
 		printf '%b%s%b\n' "$color" "$line" "$NC"
@@ -683,7 +681,6 @@ menu_vocab_phrase() {
 	focus_value_renewal) printf '%s' "续期" ;;
 	focus_value_kernel_scope) printf '%s' "内核" ;;
 	focus_value_edge_gateway) printf '%s' "网站入口" ;;
-	focus_source_current_theme) printf '%s' "当前主题" ;;
 	*) printf '%s' "" ;;
 	esac
 }
@@ -815,8 +812,9 @@ menu_schema_default() {
 		esac
 		;;
 	focus_source)
+		# 返回与 config.json 同域的英文 key，显示文案由 menu_resolved_focus_value 翻译
 		case "$menu_name" in
-		THEME_MENU) menu_vocab_phrase focus_source_current_theme ;;
+		THEME_MENU) printf '%s' "current_theme" ;;
 		*) printf '%s' "" ;;
 		esac
 		;;
@@ -964,7 +962,7 @@ menu_resolved_focus_value() {
 	focus_value=$(menu_ui_focus_value "$menu_name")
 	focus_source=$(menu_ui_focus_source "$menu_name")
 	case "$focus_source" in
-	current_theme) ui_theme_label ;;
+	current_theme | 当前主题) ui_theme_label ;;
 	*) printf '%s' "$focus_value" ;;
 	esac
 }
@@ -1586,7 +1584,8 @@ generate_line() {
 	# 新方法: Bash 参数扩展替换 (纯内存操作)
 	local spaces
 	printf -v spaces "%${len}s" ""
-	echo "${spaces// /$char}"
+	# bash 5.2+ 的 patsub_replacement 会把替换串里的 & 当作匹配内容，需转义后才能原样输出
+	echo "${spaces// /${char//&/\\&}}"
 }
 
 _get_visual_width() {

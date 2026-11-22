@@ -7,7 +7,7 @@ setup() {
 @test "watchtower pull fallback logs local image info" {
   run bash -c '
     set -euo pipefail
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     log_warn() { printf "%s\n" "$*"; }
     run_with_sudo() {
@@ -27,7 +27,7 @@ setup() {
 @test "watchtower pull falls back to docker hub" {
   run bash -c '
     set -euo pipefail
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     log_warn() { printf "%s\n" "$*"; }
     log_info() { printf "%s\n" "$*"; }
@@ -52,7 +52,7 @@ setup() {
 @test "watchtower resolves image from configured repo and tag" {
   run bash -c '
     set -euo pipefail
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     WATCHTOWER_IMAGE_PRIMARY_REPO="example.com/custom/watchtower"
     WATCHTOWER_IMAGE_FALLBACK_REPO=""
@@ -75,7 +75,7 @@ setup() {
 @test "watchtower local image fallback can be disabled" {
   run bash -c '
     set -euo pipefail
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     log_warn() { printf "%s\n" "$*"; }
     run_with_sudo() {

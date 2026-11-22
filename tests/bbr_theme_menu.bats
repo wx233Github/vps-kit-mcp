@@ -10,8 +10,8 @@ setup() {
     JB_NONINTERACTIVE="true"
     JB_UI_THEME="retro-launcher"
     script_copy=$(mktemp /tmp/bbr.theme.menu.XXXXXX.sh)
-    sed -e "\$d" -e "s#/opt/vps_install_modules#/tmp/bbr_test_base#g" $REPO_ROOT/tools/bbr_ace.sh >"$script_copy"
-    source $REPO_ROOT/utils.sh
+    sed -e "\$d" -e "s#/opt/vps_install_modules#/tmp/bbr_test_base#g" "$REPO_ROOT/tools/bbr_ace.sh" >"$script_copy"
+    source "$REPO_ROOT/utils.sh"
     source "$script_copy"
     rm -f "$script_copy"
     USE_UTILS_UI=1
@@ -43,8 +43,8 @@ setup() {
     JB_NONINTERACTIVE="true"
     JB_UI_THEME="retro-launcher"
     script_copy=$(mktemp /tmp/bbr.kernel.theme.menu.XXXXXX.sh)
-    sed -e "\$d" -e "s#/opt/vps_install_modules#/tmp/bbr_test_base#g" $REPO_ROOT/tools/bbr_ace.sh >"$script_copy"
-    source $REPO_ROOT/utils.sh
+    sed -e "\$d" -e "s#/opt/vps_install_modules#/tmp/bbr_test_base#g" "$REPO_ROOT/tools/bbr_ace.sh" >"$script_copy"
+    source "$REPO_ROOT/utils.sh"
     source "$script_copy"
     rm -f "$script_copy"
     USE_UTILS_UI=1

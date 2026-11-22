@@ -7,7 +7,7 @@ setup() {
 @test "watchtower notification report follows enabled no-update setting" {
   run bash -c '
     set -euo pipefail
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     _get_ip_address() { printf "%s\n" ""; }
     _resolve_watchtower_docker_api_version() { return 0; }
@@ -26,7 +26,7 @@ setup() {
 @test "watchtower notification template gates empty updates when disabled" {
   run bash -c '
     set -euo pipefail
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     _get_ip_address() { printf "%s\n" ""; }
     _resolve_watchtower_docker_api_version() { return 0; }

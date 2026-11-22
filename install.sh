@@ -456,9 +456,11 @@ if [ "$REAL_SCRIPT_PATH" != "$FINAL_SCRIPT_PATH" ]; then
 	fi
 
 	# 分隔线按终端列数自适应（40-80 列），与全仓库 UI 规范一致
+	# 顶层作用域无法声明 local；本块所有分支都以 exec 结束，变量不会泄漏到后续逻辑
 	_sep_cols="${COLUMNS:-0}"
 	case "$_sep_cols" in '' | *[!0-9]*) _sep_cols=0 ;; esac
-	if [ "$_sep_cols" -le 0 ] && [ -t 1 ]; then
+	# 分隔线输出到 stderr，因此按 stderr 是否为终端判断能否取 tput 宽度
+	if [ "$_sep_cols" -le 0 ] && [ -t 2 ]; then
 		_sep_cols=$(tput cols 2>/dev/null || printf '0')
 	fi
 	case "$_sep_cols" in '' | *[!0-9]*) _sep_cols=0 ;; esac
@@ -2280,6 +2282,10 @@ render_secondary_menu() {
 	collect_menu_group_order group_order primary_items func_items
 
 	local -a lines=()
+	# 二级菜单同样渲染 subtitle / 焦点 / 提示，与主菜单保持一致
+	if declare -f ui_append_schema_panel_header >/dev/null 2>&1; then
+		ui_append_schema_panel_header lines "$menu_name"
+	fi
 	local index=1
 	local heading=""
 	local group=""

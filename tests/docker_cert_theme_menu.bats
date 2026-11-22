@@ -8,9 +8,9 @@ setup() {
 	run bash -c '
     set -euo pipefail
     script_copy=$(mktemp /tmp/docker.theme.menu.XXXXXX.sh)
-    awk "/^UTILS_PATH=/ {print \"UTILS_PATH=\\\"/tmp/__missing_utils__\\\"\"; next} {print}" $REPO_ROOT/docker.sh | sed "\$d" >"$script_copy"
+    awk "/^UTILS_PATH=/ {print \"UTILS_PATH=\\\"/tmp/__missing_utils__\\\"\"; next} {print}" "$REPO_ROOT/docker.sh" | sed "\$d" >"$script_copy"
     source "$script_copy"
-    source $REPO_ROOT/utils.sh
+    source "$REPO_ROOT/utils.sh"
     rm -f "$script_copy"
     JB_UI_THEME="retro-launcher"
     DOCKER_INSTALLED="true"
@@ -32,9 +32,9 @@ setup() {
 	run bash -c '
     set -euo pipefail
     script_copy=$(mktemp /tmp/docker.install.theme.menu.XXXXXX.sh)
-    awk "/^UTILS_PATH=/ {print \"UTILS_PATH=\\\"/tmp/__missing_utils__\\\"\"; next} {print}" $REPO_ROOT/docker.sh | sed "\$d" >"$script_copy"
+    awk "/^UTILS_PATH=/ {print \"UTILS_PATH=\\\"/tmp/__missing_utils__\\\"\"; next} {print}" "$REPO_ROOT/docker.sh" | sed "\$d" >"$script_copy"
     source "$script_copy"
-    source $REPO_ROOT/utils.sh
+    source "$REPO_ROOT/utils.sh"
     rm -f "$script_copy"
     JB_UI_THEME="retro-launcher"
     render_manage_installation_menu
@@ -50,9 +50,9 @@ setup() {
 	run bash -c '
     set -euo pipefail
     script_copy=$(mktemp /tmp/cert.theme.menu.XXXXXX.sh)
-    awk "/^UTILS_PATH=/ {print \"UTILS_PATH=\\\"/tmp/__missing_utils__\\\"\"; next} {print}" $REPO_ROOT/cert.sh | sed "\$d" >"$script_copy"
+    awk "/^UTILS_PATH=/ {print \"UTILS_PATH=\\\"/tmp/__missing_utils__\\\"\"; next} {print}" "$REPO_ROOT/cert.sh" | sed "\$d" >"$script_copy"
     source "$script_copy"
-    source $REPO_ROOT/utils.sh
+    source "$REPO_ROOT/utils.sh"
     rm -f "$script_copy"
     JB_UI_THEME="retro-launcher"
     ACME_BIN="/tmp/not-installed-acme.sh"
@@ -71,9 +71,9 @@ setup() {
 	run bash -c '
     set -euo pipefail
     script_copy=$(mktemp /tmp/cert.maintenance.theme.menu.XXXXXX.sh)
-    awk "/^UTILS_PATH=/ {print \"UTILS_PATH=\\\"/tmp/__missing_utils__\\\"\"; next} {print}" $REPO_ROOT/cert.sh | sed "\$d" >"$script_copy"
+    awk "/^UTILS_PATH=/ {print \"UTILS_PATH=\\\"/tmp/__missing_utils__\\\"\"; next} {print}" "$REPO_ROOT/cert.sh" | sed "\$d" >"$script_copy"
     source "$script_copy"
-    source $REPO_ROOT/utils.sh
+    source "$REPO_ROOT/utils.sh"
     rm -f "$script_copy"
     JB_UI_THEME="retro-launcher"
     render_cert_system_maintenance_menu

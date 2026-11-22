@@ -53,7 +53,7 @@ run_module() { return 10; }
 CURRENT_MENU_NAME="MAIN_MENU"
 display_and_process_menu
 EOF
-	run env -i PATH="/usr/local/bin:/usr/bin:/bin" /bin/bash "$tmp_script" $REPO_ROOT
+	run env -i PATH="/usr/local/bin:/usr/bin:/bin" /bin/bash "$tmp_script" "$REPO_ROOT"
 	rm -f "$tmp_script"
 	[ "$status" -eq 10 ]
 }

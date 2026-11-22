@@ -9,7 +9,7 @@ setup() {
 set -euo pipefail
 
 script_copy=$(mktemp /tmp/docker.uninstall.cleanup.XXXXXX.sh)
-sed '$d' $REPO_ROOT/docker.sh >"$script_copy"
+sed '$d' "$REPO_ROOT/docker.sh" >"$script_copy"
 python3 - <<'PY' "$script_copy"
 from pathlib import Path
 path = Path(__import__('sys').argv[1])

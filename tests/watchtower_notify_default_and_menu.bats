@@ -9,7 +9,7 @@ setup() {
     set -euo pipefail
     tmp_home=$(mktemp -d)
     HOME="$tmp_home"
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     load_config
     [ "$WATCHTOWER_NOTIFY_ON_NO_UPDATES" = "false" ]
@@ -22,7 +22,7 @@ setup() {
     set -euo pipefail
     tmp_home=$(mktemp -d)
     HOME="$tmp_home"
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     _prompt_rebuild_if_needed() { :; }
     _prompt_user_input() { printf "%s\n" "y"; }
@@ -42,7 +42,7 @@ setup() {
     set -euo pipefail
     tmp_home=$(mktemp -d)
     HOME="$tmp_home"
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     _prompt_rebuild_if_needed() { :; }
     _prompt_user_input() { printf "%s\n" ""; }

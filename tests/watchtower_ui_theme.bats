@@ -9,7 +9,7 @@ setup() {
     set -euo pipefail
     JB_UI_THEME="retro-launcher"
     script_copy=$(mktemp /tmp/watchtower.theme.menu.XXXXXX.sh)
-    sed "s#/opt/vps_install_modules/utils.sh#$REPO_ROOT/utils.sh#" "$REPO_ROOT/tools/Watchtower.sh" >"$script_copy"
+    sed "s#/opt/vps_install_modules/utils.sh#"$REPO_ROOT/utils.sh"#" "$REPO_ROOT/tools/Watchtower.sh" >"$script_copy"
     source "$script_copy"
     rm -f "$script_copy"
     output=$(_render_menu "Watchtower 自动更新管理器" "1. 测试项" 2>/dev/null)
@@ -25,7 +25,7 @@ setup() {
     set -euo pipefail
     JB_UI_THEME="retro-launcher"
     script_copy=$(mktemp /tmp/watchtower.main.theme.XXXXXX.sh)
-    sed "s#/opt/vps_install_modules/utils.sh#$REPO_ROOT/utils.sh#" "$REPO_ROOT/tools/Watchtower.sh" >"$script_copy"
+    sed "s#/opt/vps_install_modules/utils.sh#"$REPO_ROOT/utils.sh"#" "$REPO_ROOT/tools/Watchtower.sh" >"$script_copy"
     source "$script_copy"
     rm -f "$script_copy"
     load_config() { return 0; }

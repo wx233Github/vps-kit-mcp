@@ -47,9 +47,18 @@ else
 	}
 	ui_rule_titled() {
 		local title="$1"
-		local line
-		printf -v line '%*s' 16 ''
-		printf '%s %s %s\n' "${line// /─}" "$title" "${line// /─}"
+		local width=40
+		local left right left_line="" right_line=""
+		left=$(((width - ${#title} - 2) / 2))
+		right=$((width - ${#title} - 2 - left))
+		# 标题放不下时退化为纯分隔线，避免溢出
+		if [ "$left" -lt 1 ] || [ "$right" -lt 1 ]; then
+			ui_rule
+			return 0
+		fi
+		printf -v left_line '%*s' "$left" ''
+		printf -v right_line '%*s' "$right" ''
+		printf '%s %s %s\n' "${left_line// /─}" "$title" "${right_line// /─}"
 	}
 	press_enter_to_continue() {
 		if [ "${JB_NONINTERACTIVE:-false}" = "true" ]; then

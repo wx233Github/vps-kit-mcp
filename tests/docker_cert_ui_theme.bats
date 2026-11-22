@@ -15,7 +15,7 @@ teardown() {
 @test "docker main_menu 在 retro-launcher 下通过 utils prompt 生成中文 footer" {
 	run bash -c '
     set -euo pipefail
-    source $REPO_ROOT/utils.sh
+    source "$REPO_ROOT/utils.sh"
     source "$1"
     JB_UI_THEME="retro-launcher"
     JB_MENU_CONTEXT="submenu"
@@ -28,7 +28,7 @@ teardown() {
 @test "cert main_menu 在 retro-launcher 下通过 utils prompt 生成中文 footer" {
 	run bash -c '
     set -euo pipefail
-    source $REPO_ROOT/utils.sh
+    source "$REPO_ROOT/utils.sh"
     source "$1"
     JB_UI_THEME="retro-launcher"
     JB_MENU_CONTEXT="submenu"

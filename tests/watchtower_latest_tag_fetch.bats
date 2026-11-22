@@ -11,7 +11,7 @@ setup() {
     set -euo pipefail
     tmp_home=$(mktemp -d)
     HOME="$tmp_home"
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     load_config
     printf "%s|%s|%s|%s|%s\n" \
@@ -30,7 +30,7 @@ setup() {
     set -euo pipefail
     tmp_home=$(mktemp -d)
     HOME="$tmp_home"
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     WATCHTOWER_IMAGE_PRIMARY_REPO="example.com/custom/watchtower"
     WATCHTOWER_IMAGE_FALLBACK_REPO="docker.io/custom/watchtower"
@@ -66,7 +66,7 @@ setup() {
     tmp_home=$(mktemp -d)
     HOME="$tmp_home"
     WATCHTOWER_CONF_NOTIFY_ON_NO_UPDATES="false"
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     load_config
     printf "%s\n" "$WATCHTOWER_NOTIFY_ON_NO_UPDATES"
@@ -80,7 +80,7 @@ setup() {
     set -euo pipefail
     tmp_home=$(mktemp -d)
     HOME="$tmp_home"
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     cat >"$CONFIG_FILE" <<"EOF"
 WATCHTOWER_CONFIG_INTERVAL="abc"
@@ -113,7 +113,7 @@ EOF
     set -euo pipefail
     tmp_home=$(mktemp -d)
     HOME="$tmp_home"
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     _get_ip_address() { printf "%s\n" ""; }
     WATCHTOWER_DOCKER_API_VERSION="1.40"
@@ -136,7 +136,7 @@ EOF
 exit 0
 EOF
     chmod +x "$stub_dir/docker"
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
     PATH="$stub_dir:$PATH"
 
     _get_ip_address() { printf "%s\n" ""; }
@@ -169,7 +169,7 @@ EOF
 exit 0
 EOF
     chmod +x "$stub_dir/docker"
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
     PATH="$stub_dir:$PATH"
 
     _get_ip_address() { printf "%s\n" ""; }
@@ -194,7 +194,7 @@ EOF
 @test "watchtower stable env hash ignores notification template drift" {
   run bash -c '
     set -euo pipefail
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     env_a=$(mktemp)
     env_b=$(mktemp)
@@ -226,7 +226,7 @@ EOF
 @test "watchtower stable env hash still detects meaningful drift" {
   run bash -c '
     set -euo pipefail
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     env_a=$(mktemp)
     env_b=$(mktemp)
@@ -256,7 +256,7 @@ EOF
 @test "watchtower cron validator accepts valid six-field expression" {
   run bash -c '
     set -euo pipefail
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     _validate_watchtower_cron_expression "0 0 4 * * *"
   '
@@ -266,7 +266,7 @@ EOF
 @test "watchtower cron validator rejects invalid field count" {
   run bash -c '
     set -euo pipefail
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     _validate_watchtower_cron_expression "0 4 * * *"
   '
@@ -276,7 +276,7 @@ EOF
 @test "watchtower env file rejects invalid cron schedule" {
   run bash -c '
     set -euo pipefail
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     WATCHTOWER_RUN_MODE="cron"
     WATCHTOWER_SCHEDULE_CRON="0 99 * * * *"
@@ -292,7 +292,7 @@ EOF
     set -euo pipefail
     tmp_home=$(mktemp -d)
     HOME="$tmp_home"
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     _get_ip_address() { printf "%s\n" ""; }
     _resolve_watchtower_docker_api_version() { return 0; }
@@ -325,7 +325,7 @@ EOF
     set -euo pipefail
     tmp_home=$(mktemp -d)
     HOME="$tmp_home"
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     _get_ip_address() { printf "%s\n" ""; }
     _resolve_watchtower_docker_api_version() { return 0; }
@@ -359,7 +359,7 @@ EOF
     set -euo pipefail
     tmp_home=$(mktemp -d)
     HOME="$tmp_home"
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     _get_ip_address() { printf "%s\n" ""; }
     _resolve_watchtower_docker_api_version() { return 0; }
@@ -388,7 +388,7 @@ EOF
     set -euo pipefail
     tmp_home=$(mktemp -d)
     HOME="$tmp_home"
-    source $REPO_ROOT/tools/Watchtower.sh
+    source "$REPO_ROOT/tools/Watchtower.sh"
 
     _get_ip_address() { printf "%s\n" ""; }
     _resolve_watchtower_docker_api_version() { return 0; }
