@@ -142,14 +142,12 @@ cleanup() {
 	if [ "${#TMP_PAYLOAD_FILES[@]}" -gt 0 ]; then
 		rm -f "${TMP_PAYLOAD_FILES[@]}" 2>/dev/null || true
 	fi
-	_release_lock "$LOCK_FILE_HTTP" "${LOCK_OWNER_PID_HTTP:-}"
-	_release_lock "$LOCK_FILE_TCP" "${LOCK_OWNER_PID_TCP:-}"
-	_release_lock "$LOCK_FILE_CERT" "${LOCK_OWNER_PID_CERT:-}"
-	_release_lock "$LOCK_FILE_PROJECT" "${LOCK_OWNER_PID_PROJECT:-}"
-	_release_lock "$LOCK_FILE_LOGROTATE" "${LOCK_OWNER_PID_LOGROTATE:-}"
-	_release_lock "$LOCK_FILE_CRON" "${LOCK_OWNER_PID_CRON:-}"
-	_release_lock "$LOCK_FILE_CF" "${LOCK_OWNER_PID_CF:-}"
-	_release_lock "$LOCK_FILE_WAL" "${LOCK_OWNER_PID_WAL:-}"
+	local _name _file_var _owner_var
+	for _name in HTTP TCP CERT PROJECT LOGROTATE CRON CF WAL; do
+		_file_var="LOCK_FILE_${_name}"
+		_owner_var="LOCK_OWNER_PID_${_name}"
+		_release_lock "${!_file_var:-}" "${!_owner_var:-}"
+	done
 }
 
 err_handler() {
@@ -238,55 +236,30 @@ _release_lock() {
 	fi
 }
 
-release_project_lock() {
-	local fd="${LOCK_FD_PROJECT:-}"
-	_release_lock "$LOCK_FILE_PROJECT" "${LOCK_OWNER_PID_PROJECT:-}"
+# 锁包装统一由名字驱动：LOCK_FILE_<NAME> / LOCK_FD_<NAME> / LOCK_OWNER_PID_<NAME>
+# 各锁类型的差异只体现在这三个变量名上，因此维护一张名字表即可。
+_NGINX_LOCK_NAMES=(HTTP TCP CERT PROJECT LOGROTATE CRON CF WAL)
+
+_release_named_lock() {
+	local name="${1:?lock name required}"
+	local file_var="LOCK_FILE_${name}"
+	local fd_var="LOCK_FD_${name}"
+	local owner_var="LOCK_OWNER_PID_${name}"
+	_release_lock "${!file_var:-}" "${!owner_var:-}"
+	local fd="${!fd_var:-}"
 	if [[ "$fd" =~ ^[0-9]+$ ]]; then
 		eval "exec ${fd}>&-" 2>/dev/null || true
 	fi
-	LOCK_OWNER_PID_PROJECT=""
+	printf -v "$owner_var" '%s' ""
 	return 0
 }
 
-release_logrotate_lock() {
-	local fd="${LOCK_FD_LOGROTATE:-}"
-	_release_lock "$LOCK_FILE_LOGROTATE" "${LOCK_OWNER_PID_LOGROTATE:-}"
-	if [[ "$fd" =~ ^[0-9]+$ ]]; then
-		eval "exec ${fd}>&-" 2>/dev/null || true
-	fi
-	LOCK_OWNER_PID_LOGROTATE=""
-	return 0
-}
+release_project_lock() { _release_named_lock PROJECT; }
+release_logrotate_lock() { _release_named_lock LOGROTATE; }
+release_cron_lock() { _release_named_lock CRON; }
+release_cf_lock() { _release_named_lock CF; }
+release_wal_lock() { _release_named_lock WAL; }
 
-release_cron_lock() {
-	local fd="${LOCK_FD_CRON:-}"
-	_release_lock "$LOCK_FILE_CRON" "${LOCK_OWNER_PID_CRON:-}"
-	if [[ "$fd" =~ ^[0-9]+$ ]]; then
-		eval "exec ${fd}>&-" 2>/dev/null || true
-	fi
-	LOCK_OWNER_PID_CRON=""
-	return 0
-}
-
-release_cf_lock() {
-	local fd="${LOCK_FD_CF:-}"
-	_release_lock "$LOCK_FILE_CF" "${LOCK_OWNER_PID_CF:-}"
-	if [[ "$fd" =~ ^[0-9]+$ ]]; then
-		eval "exec ${fd}>&-" 2>/dev/null || true
-	fi
-	LOCK_OWNER_PID_CF=""
-	return 0
-}
-
-release_wal_lock() {
-	local fd="${LOCK_FD_WAL:-}"
-	_release_lock "$LOCK_FILE_WAL" "${LOCK_OWNER_PID_WAL:-}"
-	if [[ "$fd" =~ ^[0-9]+$ ]]; then
-		eval "exec ${fd}>&-" 2>/dev/null || true
-	fi
-	LOCK_OWNER_PID_WAL=""
-	return 0
-}
 
 # 配置变更统一动词：推进代数、失效 nginx -t 缓存与重载策略缓存，并标记待重载。
 # 所有真正改写 nginx 配置文件的路径都应调用它，避免手工维护三个全局。
@@ -337,69 +310,27 @@ _nginx_test_cached() {
 	return "$NGINX_TEST_CACHE_RESULT"
 }
 
-acquire_http_lock() {
-	if _acquire_lock "$LOCK_FILE_HTTP" "LOCK_FD_HTTP"; then
-		LOCK_OWNER_PID_HTTP="$$"
+_acquire_named_lock() {
+	local name="${1:?lock name required}"
+	local file_var="LOCK_FILE_${name}"
+	local fd_var="LOCK_FD_${name}"
+	local owner_var="LOCK_OWNER_PID_${name}"
+	if _acquire_lock "${!file_var:-}" "$fd_var"; then
+		printf -v "$owner_var" '%s' "$$"
 		return 0
 	fi
 	return 1
 }
 
-acquire_tcp_lock() {
-	if _acquire_lock "$LOCK_FILE_TCP" "LOCK_FD_TCP"; then
-		LOCK_OWNER_PID_TCP="$$"
-		return 0
-	fi
-	return 1
-}
+acquire_http_lock() { _acquire_named_lock HTTP; }
+acquire_tcp_lock() { _acquire_named_lock TCP; }
+acquire_cert_lock() { _acquire_named_lock CERT; }
+acquire_project_lock() { _acquire_named_lock PROJECT; }
+acquire_logrotate_lock() { _acquire_named_lock LOGROTATE; }
+acquire_cron_lock() { _acquire_named_lock CRON; }
+acquire_cf_lock() { _acquire_named_lock CF; }
+acquire_wal_lock() { _acquire_named_lock WAL; }
 
-acquire_cert_lock() {
-	if _acquire_lock "$LOCK_FILE_CERT" "LOCK_FD_CERT"; then
-		LOCK_OWNER_PID_CERT="$$"
-		return 0
-	fi
-	return 1
-}
-
-acquire_project_lock() {
-	if _acquire_lock "$LOCK_FILE_PROJECT" "LOCK_FD_PROJECT"; then
-		LOCK_OWNER_PID_PROJECT="$$"
-		return 0
-	fi
-	return 1
-}
-
-acquire_logrotate_lock() {
-	if _acquire_lock "$LOCK_FILE_LOGROTATE" "LOCK_FD_LOGROTATE"; then
-		LOCK_OWNER_PID_LOGROTATE="$$"
-		return 0
-	fi
-	return 1
-}
-
-acquire_cron_lock() {
-	if _acquire_lock "$LOCK_FILE_CRON" "LOCK_FD_CRON"; then
-		LOCK_OWNER_PID_CRON="$$"
-		return 0
-	fi
-	return 1
-}
-
-acquire_cf_lock() {
-	if _acquire_lock "$LOCK_FILE_CF" "LOCK_FD_CF"; then
-		LOCK_OWNER_PID_CF="$$"
-		return 0
-	fi
-	return 1
-}
-
-acquire_wal_lock() {
-	if _acquire_lock "$LOCK_FILE_WAL" "LOCK_FD_WAL"; then
-		LOCK_OWNER_PID_WAL="$$"
-		return 0
-	fi
-	return 1
-}
 
 TX_STATE=""
 TX_DOMAIN=""
