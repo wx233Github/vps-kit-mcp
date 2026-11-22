@@ -252,7 +252,8 @@ _rollback_project_transaction() {
     fi
   fi
 
-  NGINX_RELOAD_NEEDED="true"
+  # 回滚可能直接删除/重写配置文件（未经 render 标记），必须显式推进代数使缓存失效
+  _nginx_config_changed
   if ! control_nginx_reload_if_needed; then rc=1; fi
   if [ "$rc" -ne 0 ]; then
     tx_fail "ROLLBACK_FAILED" "domain=${domain}, mode=${mode}" "${ERR_CFG_VALIDATE:-20}" || true
@@ -365,8 +366,9 @@ _apply_project_transaction() {
   fi
 
   if [ "$rc" -eq 0 ]; then
-    # shellcheck disable=SC2034
-    NGINX_RELOAD_NEEDED="true"
+    # 配置文件的实际写入由 render 层调用 _nginx_config_changed 标记；
+    # 此处仅请求重载，避免在“配置未变化”时误推进代数。
+    _nginx_request_reload
     if ! control_nginx_reload_if_needed; then
       fail_message="Nginx 重载失败，开始回滚"
       # shellcheck disable=SC2034

@@ -100,12 +100,7 @@ _apply_nginx_conf_with_validation() {
 		test_output=$(nginx -t 2>&1) || test_rc=$?
 		if [ "$test_rc" -eq 0 ]; then
 			_tx_emit_marker "APPLY_VERIFY_OK" "target=${target_conf}"
-			# shellcheck disable=SC2034
-			NGINX_TEST_CACHE_RESULT=0
-			# shellcheck disable=SC2034
-			NGINX_TEST_CACHE_GEN="$NGINX_CONF_GEN"
-			# shellcheck disable=SC2034
-			NGINX_TEST_CACHE_TS=$(date +%s)
+			_nginx_store_test_result 0
 			chmod 640 "$target_conf" || true
 			return 0
 		fi
@@ -123,12 +118,7 @@ _apply_nginx_conf_with_validation() {
 		else
 			_tx_emit_marker "RENDER_VALIDATE_FAILED" "rollback_owner=transaction, conf=${target_conf}" "ERROR"
 		fi
-		# shellcheck disable=SC2034
-		NGINX_TEST_CACHE_RESULT=1
-		# shellcheck disable=SC2034
-		NGINX_TEST_CACHE_GEN="$NGINX_CONF_GEN"
-		# shellcheck disable=SC2034
-		NGINX_TEST_CACHE_TS=$(date +%s)
+		_nginx_store_test_result 1
 		nginx -t >/dev/null 2>&1 || true
 		if [ "$rollback_owner" = "render" ]; then
 			log_message ERROR "Nginx 配置检查失败,已回滚 (snapshot: ${rollback_conf:-none})"
@@ -406,8 +396,7 @@ EOF
 			rollback_conf=$(_get_latest_conf_backup "$domain" "http" || true)
 			if [ -n "$rollback_conf" ] && [ -f "$rollback_conf" ]; then
 				cp "$rollback_conf" "$conf"
-				# shellcheck disable=SC2034
-				NGINX_RELOAD_NEEDED="true"
+				_nginx_config_changed
 				control_nginx_reload_if_needed || true
 				log_message ERROR "健康检查失败,已回滚配置 (snapshot: ${rollback_conf:-none})"
 			else

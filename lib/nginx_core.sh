@@ -288,13 +288,36 @@ release_wal_lock() {
 	return 0
 }
 
-_mark_nginx_conf_changed() {
+# 配置变更统一动词：推进代数、失效 nginx -t 缓存与重载策略缓存，并标记待重载。
+# 所有真正改写 nginx 配置文件的路径都应调用它，避免手工维护三个全局。
+_nginx_config_changed() {
 	NGINX_CONF_GEN=$((NGINX_CONF_GEN + 1))
+	# shellcheck disable=SC2034
+	NGINX_TEST_CACHE_GEN=-1
+	# shellcheck disable=SC2034
+	NGINX_TEST_CACHE_TS=0
 	# shellcheck disable=SC2034
 	NGINX_RELOAD_STRATEGY_CACHE=""
 	# shellcheck disable=SC2034
 	NGINX_RELOAD_STRATEGY_CACHE_TS=0
+	NGINX_RELOAD_NEEDED="true"
 }
+
+# 兼容旧名：语义等同于配置变更
+_mark_nginx_conf_changed() { _nginx_config_changed; }
+
+# 仅请求重载（配置未变，例如证书文件更新）：不推进代数、不失效 -t 缓存
+_nginx_request_reload() { NGINX_RELOAD_NEEDED="true"; }
+
+# 记录一次 nginx -t 结果供缓存复用
+_nginx_store_test_result() {
+	NGINX_TEST_CACHE_RESULT="${1:-1}"
+	NGINX_TEST_CACHE_GEN="$NGINX_CONF_GEN"
+	NGINX_TEST_CACHE_TS=$(date +%s)
+}
+
+# 重载成功：清除待重载标记
+_nginx_reload_done() { NGINX_RELOAD_NEEDED="false"; }
 
 _nginx_test_cached() {
 	local now
@@ -310,9 +333,7 @@ _nginx_test_cached() {
 		return "$NGINX_TEST_CACHE_RESULT"
 	fi
 	nginx -t >/dev/null 2>&1
-	NGINX_TEST_CACHE_RESULT=$?
-	NGINX_TEST_CACHE_GEN=$NGINX_CONF_GEN
-	NGINX_TEST_CACHE_TS=$now
+	_nginx_store_test_result "$?"
 	return "$NGINX_TEST_CACHE_RESULT"
 }
 

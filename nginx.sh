@@ -105,6 +105,7 @@ SKIP_NGINX_TEST_IN_APPLY="${SKIP_NGINX_TEST_IN_APPLY:-false}"
 NGINX_TEST_CACHE_ENABLED="${NGINX_TEST_CACHE_ENABLED:-true}"
 NGINX_TEST_CACHE_MAX_AGE_SECS="${NGINX_TEST_CACHE_MAX_AGE_SECS:-60}"
 NGINX_CONF_GEN=0
+NGINX_RELOAD_NEEDED="false"
 NGINX_TEST_CACHE_GEN=-1
 NGINX_TEST_CACHE_RESULT=1
 NGINX_TEST_CACHE_TS=0
@@ -2267,7 +2268,7 @@ _try_hup_nginx_master() {
 	# PID 文件异常时，使用 HUP 通知 master 进程重载
 	if _dry_run_kill -HUP "$pid" 2>/dev/null; then
 		log_message WARN "已回退为 HUP master(pid=${pid}) 触发重载。"
-		NGINX_RELOAD_NEEDED="false"
+		_nginx_reload_done
 		if [ -n "${TX_STATE:-}" ]; then
 			_tx_emit_marker "RELOAD_OK" "strategy=hup_master_pid:${pid}"
 		fi
@@ -2314,7 +2315,7 @@ control_nginx() {
 
 	if [ "$action" != "reload" ]; then
 		if systemctl "$action" nginx >/dev/null 2>&1; then
-			if [ "$action" = "reload" ]; then NGINX_RELOAD_NEEDED="false"; fi
+			if [ "$action" = "reload" ]; then _nginx_reload_done; fi
 			return 0
 		fi
 		log_message ERROR "Nginx $action 失败"
@@ -2330,7 +2331,7 @@ control_nginx() {
 	case "$strategy" in
 	systemctl)
 		if systemctl reload nginx >/dev/null 2>&1; then
-			NGINX_RELOAD_NEEDED="false"
+			_nginx_reload_done
 			if [ -n "${TX_STATE:-}" ]; then
 				_tx_emit_marker "RELOAD_OK" "strategy=systemctl"
 			fi
@@ -2341,7 +2342,7 @@ control_nginx() {
 		local conf_path="${strategy#nginx_conf:}"
 		if run_cmd 20 nginx -c "$conf_path" -s reload >/dev/null 2>&1; then
 			log_message INFO "已使用 nginx -c ${conf_path} -s reload。"
-			NGINX_RELOAD_NEEDED="false"
+			_nginx_reload_done
 			if [ -n "${TX_STATE:-}" ]; then
 				_tx_emit_marker "RELOAD_OK" "strategy=nginx_conf:${conf_path}"
 			fi
@@ -2362,7 +2363,7 @@ control_nginx() {
 	nginx_plain)
 		if run_cmd 20 nginx -s reload >/dev/null 2>&1; then
 			log_message INFO "已使用 nginx -s reload。"
-			NGINX_RELOAD_NEEDED="false"
+			_nginx_reload_done
 			if [ -n "${TX_STATE:-}" ]; then
 				_tx_emit_marker "RELOAD_OK" "strategy=nginx_plain"
 			fi
@@ -2380,7 +2381,7 @@ control_nginx() {
 	conf_path=$(_extract_nginx_conf_from_master_cmd "$master_cmd" 2>/dev/null || true)
 	if [ -n "$conf_path" ] && run_cmd 20 nginx -c "$conf_path" -s reload >/dev/null 2>&1; then
 		log_message WARN "已回退为 nginx -c ${conf_path} -s reload。"
-		NGINX_RELOAD_NEEDED="false"
+		_nginx_reload_done
 		if [ -n "${TX_STATE:-}" ]; then
 			_tx_emit_marker "RELOAD_OK" "strategy=fallback_nginx_conf:${conf_path}"
 		fi
@@ -2401,7 +2402,7 @@ control_nginx() {
 		log_message WARN "PID 文件异常，已跳过 nginx -s reload。"
 	elif run_cmd 20 nginx -s reload >/dev/null 2>&1; then
 		log_message WARN "已回退为 nginx -s reload。"
-		NGINX_RELOAD_NEEDED="false"
+		_nginx_reload_done
 		if [ -n "${TX_STATE:-}" ]; then
 			_tx_emit_marker "RELOAD_OK" "strategy=fallback_nginx_plain"
 		fi
@@ -3042,14 +3043,14 @@ configure_tcp_proxy() {
 	local json
 	json=$(jq -n --arg n "$name" --arg lp "$l_port" --arg t "$target" --arg te "$tls_enabled" --arg sc "$ssl_cert" --arg sk "$ssl_key" '{name:$n, listen_port:$lp, target:$t, tls_enabled:$te, ssl_cert:$sc, ssl_key:$sk}')
 	if _write_and_enable_tcp_config "$l_port" "$json"; then
-		NGINX_RELOAD_NEEDED="true"
+		_nginx_config_changed
 		if control_nginx_reload_if_needed; then
 			_save_tcp_project_json "$json"
 			log_message SUCCESS "TCP 代理已成功配置 ($l_port) [TLS: $tls_enabled]。"
 		else
 			log_message ERROR "Nginx 重载失败"
 			rm -f "$NGINX_STREAM_AVAILABLE_DIR/tcp_${l_port}.conf" "$NGINX_STREAM_ENABLED_DIR/tcp_${l_port}.conf"
-			NGINX_RELOAD_NEEDED="true"
+			_nginx_config_changed
 			control_nginx_reload_if_needed || true
 		fi
 	fi
@@ -4167,7 +4168,7 @@ _manage_tcp_actions() {
 			temp=$(mktemp)
 			chmod 600 "$temp"
 			jq --arg p "$selected_port" 'del(.[] | select(.listen_port == $p))' "$TCP_PROJECTS_METADATA_FILE" >"$temp" && mv "$temp" "$TCP_PROJECTS_METADATA_FILE"
-			NGINX_RELOAD_NEEDED="true"
+			_nginx_config_changed
 			control_nginx_reload_if_needed
 			log_message SUCCESS "TCP 项目 $selected_port 删除成功。"
 		fi
@@ -4205,7 +4206,7 @@ _handle_renew_cert() {
 	p=$(_get_project_json "$d")
 	[ -z "$p" ] && return
 	_generate_op_id
-	NGINX_RELOAD_NEEDED="true"
+	_nginx_request_reload
 	if _issue_and_install_certificate "$p" && control_nginx_reload_if_needed; then
 		printf '%b' "已完成：证书已续期 ${d}\n"
 		printf '%b' "下一步：可返回项目列表继续操作。\n"
@@ -4224,7 +4225,7 @@ _handle_delete_project() {
 		if _require_safe_path "$SSL_CERTS_BASE_DIR/$d.cer" "删除证书"; then rm -f "$SSL_CERTS_BASE_DIR/$d.cer"; fi
 		if _require_safe_path "$SSL_CERTS_BASE_DIR/$d.key" "删除证书"; then rm -f "$SSL_CERTS_BASE_DIR/$d.key"; fi
 		_delete_project_json "$d"
-		NGINX_RELOAD_NEEDED="true"
+		_nginx_config_changed
 		if control_nginx_reload_if_needed; then
 			printf '%b' "已完成：项目已删除 ${d}\n"
 			printf '%b' "当前结果：Nginx 配置已重载。\n"
@@ -4276,7 +4277,7 @@ _handle_reconfigure_project() {
 			_delete_project_json "$d"
 			if [ "$mode" != "cert_only" ]; then
 				_remove_and_disable_nginx_config "$d"
-				NGINX_RELOAD_NEEDED="true"
+				_nginx_config_changed
 				if ! control_nginx_reload_if_needed; then
 					printf '%b' "旧域名配置移除失败，请手动检查: ${d}\n"
 				fi

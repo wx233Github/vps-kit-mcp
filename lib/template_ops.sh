@@ -179,8 +179,8 @@ tm_rollback_templates_by_op() {
 		ok=$((ok + 1))
 		processed+=("$domain")
 		_append_template_audit_log "rollback" "$domain" "from_op=${op_id};snapshot=$(basename "$snap")" 0 0
-		# shellcheck disable=SC2034
-		NGINX_RELOAD_NEEDED="true"
+		# 配置写入经 render 层已按需标记变更；此处只需请求重载
+		_nginx_request_reload
 	done <"$log_path"
 
 	if [ "$matched" -eq 0 ]; then

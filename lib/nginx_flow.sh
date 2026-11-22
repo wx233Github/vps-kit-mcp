@@ -124,8 +124,9 @@ check_and_auto_renew_certs() {
 		if [ "$should_reload" = "true" ]; then reload_needed="true"; fi
 	done < <(jq -r '.[] | "\(.domain)\1\(.cert_file)\1\(.acme_validation_method)' "$PROJECTS_METADATA_FILE" 2>/dev/null)
 	unset IFS
-	# shellcheck disable=SC2034
-	NGINX_RELOAD_NEEDED="${reload_needed}"
+	if [ "$reload_needed" = "true" ]; then
+		_nginx_request_reload
+	fi
 	if ! control_nginx_reload_if_needed; then
 		_tx_emit_marker "RECONCILE_DRIFT" "reload_failed during cron_renew" "ERROR"
 		return 1
