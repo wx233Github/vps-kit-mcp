@@ -91,11 +91,66 @@ _build_archive_url_from_base() {
 	printf '%s\n' "https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.tar.gz"
 }
 
+# 定位 manifest.json：优先安装目录，其次脚本所在目录。找不到返回 1。
+_manifest_file_path() {
+	local candidate=""
+	for candidate in "${INSTALL_DIR:-}/manifest.json" "${REAL_SCRIPT_PATH%/*}/manifest.json"; do
+		if [ -n "$candidate" ] && [ -f "$candidate" ]; then
+			printf '%s\n' "$candidate"
+			return 0
+		fi
+	done
+	return 1
+}
+
+# 读取某模块在 manifest.json 中声明的文件清单。
+# mode=all 输出全部；mode=sidecar 排除主脚本。读不到或解析失败返回 1。
+_manifest_module_files() {
+	local module="$1"
+	local mode="${2:-all}"
+	local manifest=""
+	manifest=$(_manifest_file_path) || return 1
+	command -v jq >/dev/null 2>&1 || return 1
+	if ! jq -e --arg m "$module" '.modules[]? | select(.name == $m)' "$manifest" >/dev/null 2>&1; then
+		return 1
+	fi
+	jq -r --arg m "$module" --arg mode "$mode" '
+		.modules[] | select(.name == $m) | . as $mod
+		| ($mod.files // [])[]
+		| select((($mode == "sidecar") | not) or . != ($mod.main // ""))
+	' "$manifest"
+}
+
+# 把 manifest 声明的条目并进给定数组（去重、忽略空行），同名不重复追加。
+_manifest_union_into() {
+	local array_name="$1"
+	local module="$2"
+	local mode="${3:-all}"
+	local -n target="$array_name"
+	local rel="" existing=""
+	local -a derived=()
+	local list=""
+	list=$(_manifest_module_files "$module" "$mode") || return 0
+	[ -z "$list" ] && return 0
+	mapfile -t derived <<<"$list"
+	for rel in "${derived[@]}"; do
+		[ -z "$rel" ] && continue
+		for existing in "${target[@]}"; do
+			if [ "$existing" = "$rel" ]; then
+				continue 2
+			fi
+		done
+		target+=("$rel")
+	done
+}
+
 _collect_core_update_list() {
 	local new_dir="$1"
 	local -a changed=()
 	local file=""
 	local -a core_update_files=("install.sh" "utils.sh" "config.json" "nginx.sh")
+	# 以 manifest 声明的 install 模块清单补充核心文件，避免两处清单漂移
+	_manifest_union_into core_update_files install all || true
 	for file in "${core_update_files[@]}"; do
 		local new_path="${new_dir}/${file}"
 		local old_path="${INSTALL_DIR}/${file}"
@@ -993,6 +1048,22 @@ ensure_module_sidecar_libs() {
 			"templates/nginx/manifest.json"
 			"templates/nginx/manifest.schema.json"
 		)
+		# 以 manifest 声明的 sidecar 清单补充（排除主脚本），模板片段由下方独立流程处理
+		local _mf_list=""
+		local _mf_rel=""
+		if _mf_list=$(_manifest_module_files nginx sidecar) && [ -n "$_mf_list" ]; then
+			while IFS= read -r _mf_rel; do
+				[ -z "$_mf_rel" ] && continue
+				case "$_mf_rel" in
+				templates/nginx/snippets/*) continue ;;
+				esac
+				local _mf_seen=""
+				for _mf_seen in "${required[@]}"; do
+					[ "$_mf_seen" = "$_mf_rel" ] && continue 2
+				done
+				required+=("$_mf_rel")
+			done <<<"$_mf_list"
+		fi
 		;;
 	*)
 		return 0

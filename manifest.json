@@ -18,6 +18,7 @@
         "lib/nginx_store.sh",
         "lib/nginx_render.sh",
         "lib/nginx_flow.sh",
+        "lib/nginx_upgrade.sh",
         "lib/template_render.sh",
         "lib/template_manifest.sh",
         "lib/template_audit.sh",

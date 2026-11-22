@@ -69,3 +69,60 @@ EOF
   [ "$status" -eq 0 ]
   [[ "$output" =~ install.sh ]]
 }
+
+@test "manifest 声明的 nginx sidecar 覆盖 install.sh 内置清单" {
+  tmp_script=$(mktemp /tmp/install.manifest.sidecar.XXXXXX.sh)
+  cat >"$tmp_script" <<EOF
+set -euo pipefail
+SCRIPT_PATH="$REPO_ROOT/install.sh"
+LIB_PATH=\$(mktemp /tmp/install.manifest.sidecar.lib.XXXXXX.sh)
+sed '\$d' "\$SCRIPT_PATH" >"\$LIB_PATH"
+
+readlink() { printf '%s\n' "/opt/vps_install_modules/install.sh"; }
+source() {
+  if [ "\$1" = "/opt/vps_install_modules/utils.sh" ]; then
+    builtin source "$REPO_ROOT/utils.sh"
+    return 0
+  fi
+  builtin source "\$1"
+}
+source "\$LIB_PATH"
+INSTALL_DIR="$REPO_ROOT"
+_manifest_module_files nginx sidecar | grep -v '^templates/nginx/snippets/'
+EOF
+  run /bin/bash "$tmp_script"
+  rm -f "$tmp_script"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"lib/nginx_upgrade.sh"* ]]
+  [[ "$output" != *"nginx.sh"$'\n'* ]]
+  [ "$(printf '%s\n' "$output" | grep -c .)" -eq 13 ]
+}
+
+@test "manifest 补充核心文件并与内置清单去重" {
+  tmp_script=$(mktemp /tmp/install.manifest.core.XXXXXX.sh)
+  cat >"$tmp_script" <<EOF
+set -euo pipefail
+SCRIPT_PATH="$REPO_ROOT/install.sh"
+LIB_PATH=\$(mktemp /tmp/install.manifest.core.lib.XXXXXX.sh)
+sed '\$d' "\$SCRIPT_PATH" >"\$LIB_PATH"
+
+readlink() { printf '%s\n' "/opt/vps_install_modules/install.sh"; }
+source() {
+  if [ "\$1" = "/opt/vps_install_modules/utils.sh" ]; then
+    builtin source "$REPO_ROOT/utils.sh"
+    return 0
+  fi
+  builtin source "\$1"
+}
+source "\$LIB_PATH"
+INSTALL_DIR="$REPO_ROOT"
+declare -a core=("install.sh" "utils.sh" "config.json" "nginx.sh")
+_manifest_union_into core install all
+printf 'count=%s\n' "\${#core[@]}"
+printf '%s\n' "\${core[@]}"
+EOF
+  run /bin/bash "$tmp_script"
+  rm -f "$tmp_script"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"count=4"* ]]
+}
