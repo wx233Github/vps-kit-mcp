@@ -356,40 +356,47 @@ _nginx_status_lines() {
 	fi
 }
 
+# 菜单行定义表：唯一来源。字段顺序 group\x1fid\x1flabel\x1fdesc\x1fcolor
+# group: common(常用操作) / policy(诊断与策略)；color: 空 或 red(危险项)
+# 新增菜单项只改这里，渲染与编号校验都读同一张表。
+_nginx_menu_defs() {
+	printf '%s\n' \
+		"common"$'\x1f'"1"$'\x1f'"配置新网站"$'\x1f'"新建反向代理网站"$'\x1f'"" \
+		"common"$'\x1f'"2"$'\x1f'"管理网站"$'\x1f'"查看、修改或删除"$'\x1f'"" \
+		"common"$'\x1f'"3"$'\x1f'"仅申请证书"$'\x1f'"只管理证书"$'\x1f'"" \
+		"common"$'\x1f'"4"$'\x1f'"配置 TCP 转发"$'\x1f'"新建反代或负载均衡"$'\x1f'"" \
+		"common"$'\x1f'"5"$'\x1f'"管理 TCP 转发"$'\x1f'"查看或删除 TCP 项目"$'\x1f'"" \
+		"policy"$'\x1f'"6"$'\x1f'"批量续期"$'\x1f'"检查并续期现有证书"$'\x1f'"" \
+		"policy"$'\x1f'"7"$'\x1f'"查看日志"$'\x1f'"nginx 与 acme 日志"$'\x1f'"" \
+		"policy"$'\x1f'"8"$'\x1f'"Cloudflare 防御"$'\x1f'"管理状态与 IP 库"$'\x1f'"" \
+		"policy"$'\x1f'"9"$'\x1f'"备份与恢复"$'\x1f'"备份、还原与重建"$'\x1f'"" \
+		"policy"$'\x1f'"10"$'\x1f'"Telegram 通知"$'\x1f'"机器人通知"$'\x1f'"" \
+		"policy"$'\x1f'"11"$'\x1f'"配置模板中心"$'\x1f'"Block 与 Site 模板"$'\x1f'"" \
+		"policy"$'\x1f'"12"$'\x1f'"升级 Nginx"$'\x1f'"从官方源升级"$'\x1f'"" \
+		"policy"$'\x1f'"13"$'\x1f'"修复多实例冲突"$'\x1f'"共享组 + pid 隔离"$'\x1f'"" \
+		"policy"$'\x1f'"14"$'\x1f'"卸载 Nginx"$'\x1f'"停止服务并移除软件包"$'\x1f'"red"
+}
+
+# 按分组渲染菜单行，每条后留一空行（保持原有视觉节奏）
+_nginx_menu_rows_for() {
+	local want="$1" group="" id="" label="" desc="" color=""
+	while IFS=$'\x1f' read -r group id label desc color; do
+		[ -z "$group" ] && continue
+		[ "$group" = "$want" ] || continue
+		[ "$color" = "red" ] && color="$BRIGHT_RED"
+		_nginx_menu_row "$id" "$label" "$desc" "$color"
+		printf '\n'
+	done < <(_nginx_menu_defs)
+}
+
 # 常用操作分组
 _nginx_menu_common_rows() {
-	_nginx_menu_row 1 "配置新网站" "新建反向代理网站"
-	printf '\n'
-	_nginx_menu_row 2 "管理网站" "查看、修改或删除"
-	printf '\n'
-	_nginx_menu_row 3 "仅申请证书" "只管理证书"
-	printf '\n'
-	_nginx_menu_row 4 "配置 TCP 转发" "新建反代或负载均衡"
-	printf '\n'
-	_nginx_menu_row 5 "管理 TCP 转发" "查看或删除 TCP 项目"
-	printf '\n'
+	_nginx_menu_rows_for common
 }
 
 # 诊断与策略分组
 _nginx_menu_policy_rows() {
-	_nginx_menu_row 6 "批量续期" "检查并续期现有证书"
-	printf '\n'
-	_nginx_menu_row 7 "查看日志" "nginx 与 acme 日志"
-	printf '\n'
-	_nginx_menu_row 8 "Cloudflare 防御" "管理状态与 IP 库"
-	printf '\n'
-	_nginx_menu_row 9 "备份与恢复" "备份、还原与重建"
-	printf '\n'
-	_nginx_menu_row 10 "Telegram 通知" "机器人通知"
-	printf '\n'
-	_nginx_menu_row 11 "配置模板中心" "Block 与 Site 模板"
-	printf '\n'
-	_nginx_menu_row 12 "升级 Nginx" "从官方源升级"
-	printf '\n'
-	_nginx_menu_row 13 "修复多实例冲突" "共享组 + pid 隔离"
-	printf '\n'
-	_nginx_menu_row 14 "卸载 Nginx" "停止服务并移除软件包" "$BRIGHT_RED"
-	printf '\n'
+	_nginx_menu_rows_for policy
 }
 
 main_menu() {

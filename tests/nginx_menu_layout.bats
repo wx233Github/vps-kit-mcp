@@ -169,3 +169,19 @@ _harness() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"[常用操作][][  1 配置新网站]"* ]]
 }
+
+@test "菜单定义表编号连续为 1-14" {
+  _harness '
+    _nginx_menu_defs | cut -d$'"'"'\x1f'"'"' -f2 | paste -sd, -
+  '
+  [ "$status" -eq 0 ]
+  [ "$output" = "1,2,3,4,5,6,7,8,9,10,11,12,13,14" ]
+}
+
+@test "菜单定义表只含 common 与 policy 两组" {
+  _harness '
+    _nginx_menu_defs | cut -d$'"'"'\x1f'"'"' -f1 | sort -u | paste -sd, -
+  '
+  [ "$status" -eq 0 ]
+  [ "$output" = "common,policy" ]
+}
