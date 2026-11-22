@@ -1,189 +1,103 @@
 #!/usr/bin/env bash
 
+# 模板 CLI 唯一参数表：flag(可多别名,逗号分隔)|变量|初始值|类型(bool/value/set)|用法片段|说明
+# bool  -> 出现即置 true
+# value -> 消费下一个参数，缺省用初始值
+# set   -> 出现即赋初始值（用于 --log-kv 这类定值开关）
+_TM_FLAG_TABLE=(
+  '-h,--help|SHOW_HELP|false|bool||'
+  '--cron|CRON_MODE|false|bool||'
+  '--non-interactive|IS_INTERACTIVE_MODE|false|set||'
+  '--check|CHECK_ONLY|false|bool||'
+  '--audit-only|LEGACY_AUDIT_ONLY_USED|false|bool||'
+  '--cf-ip-update|CF_IP_UPDATE_MODE|false|bool||'
+  '--dry-run|DRY_RUN|false|bool||'
+  '--plan|PLAN_MODE|false|bool||'
+  '--preflight|PRECHECK_ONLY|false|bool||'
+  '--audit-report|AUDIT_REPORT|false|bool||'
+  '--tx-recover|TX_RECOVER|false|bool||'
+  '--log-kv|LOG_FORMAT|kv|set||'
+  '--log-plain|LOG_FORMAT|plain|set||'
+  '--template-mode|TEMPLATE_MODE||value|--template-mode <default/custom/cleanup>|模板操作模式'
+  '--template-domain|TEMPLATE_DOMAIN||value|--template-domain <domain/glob>|匹配域名或 glob 表达式'
+  '--template-ids|TEMPLATE_IDS||value|--template-ids <id[,id...]>|模板 ID 列表'
+  '--template-vars|TEMPLATE_VARS_RAW||value|--template-vars <KEY=VALUE,...>|模板变量赋值'
+  '--template-apply-mode|TEMPLATE_APPLY_MODE|append|value|--template-apply-mode <append/replace>|写入模式'
+  '--template-cleanup-mode|TEMPLATE_CLEANUP_MODE||value|--template-cleanup-mode <all/ids>|清理模式'
+  '--template-parallelism|TEMPLATE_PARALLELISM|1|value|--template-parallelism <N>|并行度（仅 dry-run/precheck/impact-report）'
+  '--template-dry-run|TEMPLATE_DRY_RUN|false|bool|--template-dry-run|模板写入演练（不落盘、不发通知）'
+  '--template-precheck|TEMPLATE_PRECHECK|false|bool|--template-precheck|仅校验模板与匹配，不执行写入'
+  '--fail-fast|TEMPLATE_FAIL_FAST|false|bool|--fail-fast|批量模式遇错立即停止'
+  '--continue-on-error|TEMPLATE_CONTINUE_ON_ERROR|false|bool|--continue-on-error|批量模式忽略失败继续执行'
+  '--json|TEMPLATE_OUTPUT_JSON|false|bool|--json|输出 JSON 摘要'
+  '--template-impact-report|TEMPLATE_IMPACT_REPORT|false|bool|--template-impact-report|输出影响分析（不写入）'
+  '--template-rollback-op|TEMPLATE_ROLLBACK_OP||value|--template-rollback-op <op_id>|按操作 ID 回滚模板变更'
+  '--template-rollback-domain|TEMPLATE_ROLLBACK_DOMAIN||value|--template-rollback-domain <domain>|回滚目标域'
+  '--template-rollback-before|TEMPLATE_ROLLBACK_BEFORE||value|--template-rollback-before <"YYYY-MM-DD HH:MM:SS">|回滚时间点'
+  '--template-audit-report|TEMPLATE_AUDIT_REPORT|false|bool|--template-audit-report|输出模板审计统计摘要'
+  '--template-approval-hook|TEMPLATE_APPROVAL_HOOK||value|--template-approval-hook </abs/path/to/hook>|审批钩子绝对路径'
+  '--quiet|QUIET_MODE|false|bool||'
+)
+
+# 参数表的副作用钩子：仅存放无法用“赋值”表达的联动
+_tm_flag_hook() {
+  case "$1" in
+  --cron) IS_INTERACTIVE_MODE="false" ;;
+  --plan) DRY_RUN="true" ;;
+  --json)
+    if [ "${AUDIT_REPORT:-false}" = "true" ]; then AUDIT_OUTPUT_JSON="true"; fi
+    ;;
+  --audit-report)
+    if [ "${TEMPLATE_OUTPUT_JSON:-false}" = "true" ]; then AUDIT_OUTPUT_JSON="true"; fi
+    ;;
+  esac
+}
+
 tm_parse_args() {
   IS_INTERACTIVE_MODE="true"
-  DRY_RUN="false"
-  SHOW_HELP="false"
-  TEMPLATE_MODE=""
-  TEMPLATE_IDS=""
-  TEMPLATE_DOMAIN=""
-  TEMPLATE_VARS_RAW=""
-  TEMPLATE_APPLY_MODE="append"
-  TEMPLATE_CLEANUP_MODE=""
-  TEMPLATE_PARALLELISM=1
-  TEMPLATE_DRY_RUN="false"
   TEMPLATE_BATCH_AUTO_CONFIRM="false"
-  TEMPLATE_PRECHECK="false"
-  TEMPLATE_FAIL_FAST="false"
-  TEMPLATE_CONTINUE_ON_ERROR="false"
-  TEMPLATE_OUTPUT_JSON="false"
   TEMPLATE_DEFER_RELOAD="false"
-  TEMPLATE_IMPACT_REPORT="false"
-  TEMPLATE_ROLLBACK_OP=""
-  TEMPLATE_ROLLBACK_DOMAIN=""
-  TEMPLATE_ROLLBACK_BEFORE=""
-  TEMPLATE_AUDIT_REPORT="false"
-  TEMPLATE_APPROVAL_HOOK=""
-  QUIET_MODE="false"
-  PRECHECK_ONLY="false"
-  CHECK_ONLY="false"
-  CRON_MODE="false"
-  CF_IP_UPDATE_MODE="false"
-  LEGACY_AUDIT_ONLY_USED="false"
-  AUDIT_REPORT="false"
   AUDIT_OUTPUT_JSON="false"
-  PLAN_MODE="false"
-  TX_RECOVER="false"
   TEMPLATE_VARS=()
+  local _row _flag _var _def _kind _use _desc
+  for _row in "${_TM_FLAG_TABLE[@]}"; do
+    IFS='|' read -r _flag _var _def _kind _use _desc <<<"$_row"
+    if [ "$_kind" != "set" ]; then
+      printf -v "$_var" '%s' "$_def"
+    fi
+  done
   local i=1
   while [ "$i" -le "$#" ]; do
     local arg="${!i}"
-    case "$arg" in
-    -h | --help)
-      SHOW_HELP="true"
+    local _hit="false"
+    for _row in "${_TM_FLAG_TABLE[@]}"; do
+      IFS='|' read -r _flag _var _def _kind _use _desc <<<"$_row"
+      case ",${_flag}," in
+      *",${arg},"*) _hit="true" ;;
+      esac
+      if [ "$_hit" = "true" ]; then
+        case "$_kind" in
+        bool)
+          printf -v "$_var" '%s' "true"
+          i=$((i + 1))
+          ;;
+        set)
+          printf -v "$_var" '%s' "$_def"
+          i=$((i + 1))
+          ;;
+        value)
+          i=$((i + 1))
+          printf -v "$_var" '%s' "${!i:-$_def}"
+          i=$((i + 1))
+          ;;
+        esac
+        _tm_flag_hook "$arg"
+        break
+      fi
+    done
+    if [ "$_hit" = "false" ]; then
       i=$((i + 1))
-      ;;
-    --cron)
-      IS_INTERACTIVE_MODE="false"
-      CRON_MODE="true"
-      i=$((i + 1))
-      ;;
-    --non-interactive)
-      IS_INTERACTIVE_MODE="false"
-      i=$((i + 1))
-      ;;
-    --check)
-      CHECK_ONLY="true"
-      i=$((i + 1))
-      ;;
-    --audit-only)
-      LEGACY_AUDIT_ONLY_USED="true"
-      i=$((i + 1))
-      ;;
-    --cf-ip-update)
-      CF_IP_UPDATE_MODE="true"
-      i=$((i + 1))
-      ;;
-    --dry-run)
-      DRY_RUN="true"
-      i=$((i + 1))
-      ;;
-    --plan)
-      PLAN_MODE="true"
-      DRY_RUN="true"
-      i=$((i + 1))
-      ;;
-    --preflight)
-      PRECHECK_ONLY="true"
-      i=$((i + 1))
-      ;;
-    --audit-report)
-      AUDIT_REPORT="true"
-      if [ "${TEMPLATE_OUTPUT_JSON:-false}" = "true" ]; then AUDIT_OUTPUT_JSON="true"; fi
-      i=$((i + 1))
-      ;;
-    --tx-recover)
-      TX_RECOVER="true"
-      i=$((i + 1))
-      ;;
-    --log-kv)
-      LOG_FORMAT="kv"
-      i=$((i + 1))
-      ;;
-    --log-plain)
-      LOG_FORMAT="plain"
-      i=$((i + 1))
-      ;;
-    --template-mode)
-      i=$((i + 1))
-      TEMPLATE_MODE="${!i:-}"
-      i=$((i + 1))
-      ;;
-    --template-ids)
-      i=$((i + 1))
-      TEMPLATE_IDS="${!i:-}"
-      i=$((i + 1))
-      ;;
-    --template-domain)
-      i=$((i + 1))
-      TEMPLATE_DOMAIN="${!i:-}"
-      i=$((i + 1))
-      ;;
-    --template-vars)
-      i=$((i + 1))
-      TEMPLATE_VARS_RAW="${!i:-}"
-      i=$((i + 1))
-      ;;
-    --template-apply-mode)
-      i=$((i + 1))
-      TEMPLATE_APPLY_MODE="${!i:-append}"
-      i=$((i + 1))
-      ;;
-    --template-cleanup-mode)
-      i=$((i + 1))
-      TEMPLATE_CLEANUP_MODE="${!i:-}"
-      i=$((i + 1))
-      ;;
-    --template-parallelism)
-      i=$((i + 1))
-      TEMPLATE_PARALLELISM="${!i:-1}"
-      i=$((i + 1))
-      ;;
-    --template-dry-run)
-      TEMPLATE_DRY_RUN="true"
-      i=$((i + 1))
-      ;;
-    --template-precheck)
-      TEMPLATE_PRECHECK="true"
-      i=$((i + 1))
-      ;;
-    --fail-fast)
-      TEMPLATE_FAIL_FAST="true"
-      i=$((i + 1))
-      ;;
-    --continue-on-error)
-      TEMPLATE_CONTINUE_ON_ERROR="true"
-      i=$((i + 1))
-      ;;
-    --json)
-      TEMPLATE_OUTPUT_JSON="true"
-      if [ "${AUDIT_REPORT:-false}" = "true" ]; then AUDIT_OUTPUT_JSON="true"; fi
-      i=$((i + 1))
-      ;;
-    --template-impact-report)
-      TEMPLATE_IMPACT_REPORT="true"
-      i=$((i + 1))
-      ;;
-    --template-rollback-op)
-      i=$((i + 1))
-      TEMPLATE_ROLLBACK_OP="${!i:-}"
-      i=$((i + 1))
-      ;;
-    --template-rollback-domain)
-      i=$((i + 1))
-      TEMPLATE_ROLLBACK_DOMAIN="${!i:-}"
-      i=$((i + 1))
-      ;;
-    --template-rollback-before)
-      i=$((i + 1))
-      TEMPLATE_ROLLBACK_BEFORE="${!i:-}"
-      i=$((i + 1))
-      ;;
-    --template-audit-report)
-      TEMPLATE_AUDIT_REPORT="true"
-      i=$((i + 1))
-      ;;
-    --template-approval-hook)
-      i=$((i + 1))
-      TEMPLATE_APPROVAL_HOOK="${!i:-}"
-      i=$((i + 1))
-      ;;
-    --quiet)
-      QUIET_MODE="true"
-      i=$((i + 1))
-      ;;
-    *) i=$((i + 1)) ;;
-    esac
+    fi
   done
   if [ "$DRY_RUN" = "true" ]; then
     log_message WARN "已启用 dry-run：破坏性操作仅记录，不实际执行。"
@@ -201,6 +115,18 @@ tm_validate_args() {
   local arg
   local skip_next="false"
   local pending_value_flag=""
+  local -a _known_flags=() _value_flags=()
+  local _row _flag _var _def _kind _use _desc _alias
+  for _row in "${_TM_FLAG_TABLE[@]}"; do
+    IFS='|' read -r _flag _var _def _kind _use _desc <<<"$_row"
+    for _alias in ${_flag//,/ }; do
+      _known_flags+=("$_alias")
+      if [ "$_kind" = "value" ]; then
+        _value_flags+=("$_alias")
+      fi
+    done
+  done
+  local _k
   for arg in "$@"; do
     if [ "$skip_next" = "true" ]; then
       if [[ "$arg" == --* ]]; then
@@ -211,17 +137,29 @@ tm_validate_args() {
       pending_value_flag=""
       continue
     fi
-    case "$arg" in
-    -h | --help | --cron | --non-interactive | --check | --audit-only | --cf-ip-update | --dry-run | --plan | --preflight | --template-dry-run | --template-precheck | --fail-fast | --continue-on-error | --json | --quiet | --template-impact-report | --template-audit-report | --audit-report | --tx-recover | --log-kv | --log-plain) ;;
-    --template-mode | --template-ids | --template-domain | --template-vars | --template-apply-mode | --template-cleanup-mode | --template-parallelism | --template-rollback-op | --template-rollback-domain | --template-rollback-before | --template-approval-hook)
+    local _is_value="false"
+    local _is_known="false"
+    for _k in "${_value_flags[@]}"; do
+      if [ "$arg" = "$_k" ]; then
+        _is_value="true"
+        break
+      fi
+    done
+    for _k in "${_known_flags[@]}"; do
+      if [ "$arg" = "$_k" ]; then
+        _is_known="true"
+        break
+      fi
+    done
+    if [ "$_is_value" = "true" ]; then
       skip_next="true"
       pending_value_flag="$arg"
-      ;;
-    *)
+      continue
+    fi
+    if [ "$_is_known" != "true" ]; then
       log_message ERROR "未知参数: $arg"
       return 1
-      ;;
-    esac
+    fi
   done
   if [ "$skip_next" = "true" ]; then
     log_message ERROR "参数 ${pending_value_flag} 缺少参数值"
@@ -348,6 +286,17 @@ tm_validate_args() {
   return 0
 }
 
+# 由参数表生成用法片段，避免第三份硬编码清单
+_tm_print_flag_usage() {
+  local _row _flag _var _def _kind _use _desc
+  for _row in "${_TM_FLAG_TABLE[@]}"; do
+    IFS='|' read -r _flag _var _def _kind _use _desc <<<"$_row"
+    if [ -n "$_use" ] && [ -n "$_desc" ]; then
+      printf '  %-38s %s\n' "$_use" "$_desc"
+    fi
+  done
+}
+
 tm_print_usage() {
   cat <<'EOF'
 用法:
@@ -373,24 +322,9 @@ tm_print_usage() {
 	  -h, --help                     显示帮助
 
 模板中心 CLI:
-  --template-mode <default|custom|cleanup>
-  --template-domain <domain|glob-expression>
-  --template-ids <id[,id...]>
-  --template-vars <KEY=VALUE[,KEY=VALUE...]>
-  --template-apply-mode <append|replace>
-  --template-cleanup-mode <all|ids>
-  --template-parallelism <N>
-  --template-dry-run
-  --template-precheck            仅校验模板与匹配，不执行写入
-  --template-impact-report       输出影响分析（不写入）
-  --template-rollback-op <op_id> 按操作ID回滚模板变更
-  --template-rollback-domain <domain>
-  --template-rollback-before <"YYYY-MM-DD HH:MM:SS">
-  --template-audit-report        输出模板审计统计摘要
-  --template-approval-hook </abs/path/to/hook>
-  --fail-fast                    批量模式遇错立即停止
-  --continue-on-error            批量模式忽略失败继续执行
-  --json                         模板 CLI 输出 JSON 摘要
+EOF
+  _tm_print_flag_usage
+  cat <<'EOF'
 
 模板 CLI 示例:
   nginx.sh --template-mode default --template-domain example.com --template-ids general_reverse_proxy --template-apply-mode append --template-dry-run --non-interactive
