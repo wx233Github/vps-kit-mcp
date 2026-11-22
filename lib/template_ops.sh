@@ -1,5 +1,45 @@
 #!/usr/bin/env bash
 
+# 模板合并统一入口：影响预测与应用共用，保证两者结果完全一致。
+# $1=当前 custom_config $2=待写入 payload $3=模式(append|replace) 其余=模板ID
+_template_merge_custom_config() {
+	local current_custom="${1:-}"
+	local payload="${2:-}"
+	local mode="${3:-append}"
+	shift 3 || true
+	local -a ids=("$@")
+	current_custom=$(_normalize_custom_config_text "$current_custom")
+	local merged=""
+	if [ "$mode" = "replace" ]; then
+		merged="$payload"
+	else
+		merged=$(_extract_template_blocks_by_ids "$current_custom" "${ids[@]}")
+		if [ -n "$merged" ]; then
+			merged="${merged}"$'\n'"${payload}"
+		else
+			merged="$payload"
+		fi
+	fi
+	_normalize_custom_config_text "$merged"
+}
+
+# 模板清理统一入口：影响预测与清理共用。
+# $1=当前 custom_config $2=清理模式(all|ids) 其余=模板ID
+_template_cleanup_custom_config() {
+	local current_custom="${1:-}"
+	local cleanup_mode="${2:-all}"
+	shift 2 || true
+	local -a ids=("$@")
+	current_custom=$(_normalize_custom_config_text "$current_custom")
+	local cleaned=""
+	if [ "$cleanup_mode" = "all" ]; then
+		cleaned=$(_extract_all_template_blocks "$current_custom")
+	else
+		cleaned=$(_extract_template_blocks_by_ids "$current_custom" "${ids[@]}")
+	fi
+	_normalize_custom_config_text "$cleaned"
+}
+
 tm_template_impact_report() {
 	local mode="${1:-}"
 	local apply_mode="${2:-append}"
@@ -57,16 +97,7 @@ tm_template_impact_report() {
 		current_custom=$(jq -r '.custom_config // empty' <<<"$cur")
 		case "$mode" in
 		default | custom)
-			if [ "$apply_mode" = "replace" ]; then
-				merged_custom="$payload"
-			else
-				merged_custom="$(_extract_template_blocks_by_ids "$current_custom" "${ids[@]}")"
-				if [ -n "$merged_custom" ]; then
-					merged_custom="${merged_custom}"$'\n'"${payload}"
-				else
-					merged_custom="$payload"
-				fi
-			fi
+			merged_custom=$(_template_merge_custom_config "$current_custom" "$payload" "$apply_mode" "${ids[@]}")
 			if [ "$merged_custom" != "$current_custom" ]; then
 				predicted_changes=$((predicted_changes + 1))
 			fi
@@ -79,11 +110,7 @@ tm_template_impact_report() {
 			_emit_template_impact_domain_json "$domain" "$before_blocks" "$after_blocks" "$before_dirs" "$after_dirs" "$changed_dirs"
 			;;
 		cleanup)
-			if [ "$cleanup_mode" = "all" ]; then
-				cleaned_custom=$(_extract_all_template_blocks "$current_custom")
-			else
-				cleaned_custom=$(_extract_template_blocks_by_ids "$current_custom" "${ids[@]}")
-			fi
+			cleaned_custom=$(_template_cleanup_custom_config "$current_custom" "$cleanup_mode" "${ids[@]}")
 			if [ "$cleaned_custom" != "$current_custom" ]; then
 				predicted_changes=$((predicted_changes + 1))
 			fi
@@ -207,7 +234,6 @@ tm_apply_templates_to_domain() {
 	local cur=""
 	local payload=""
 	local current_custom=""
-	local base_custom=""
 	local merged_custom=""
 	local new_json=""
 	local ids_text=""
@@ -250,17 +276,7 @@ tm_apply_templates_to_domain() {
 		current_custom=""
 	fi
 
-	if [ "$mode" = "replace" ]; then
-		merged_custom="$payload"
-	else
-		base_custom=$(_extract_template_blocks_by_ids "$current_custom" "${template_ids[@]}")
-		if [ -n "$base_custom" ]; then
-			merged_custom="${base_custom}"$'\n'"${payload}"
-		else
-			merged_custom="$payload"
-		fi
-	fi
-	merged_custom=$(_normalize_custom_config_text "$merged_custom")
+	merged_custom=$(_template_merge_custom_config "$current_custom" "$payload" "$mode" "${template_ids[@]}")
 
 	if _template_contains_id "hsts" "${template_ids[@]}"; then
 		cert_path=$(jq -r '.cert_file // empty' <<<"$cur")
@@ -351,12 +367,7 @@ tm_cleanup_template_blocks_for_domain() {
 		return 1
 	fi
 
-	if [ "$clean_mode" = "all" ]; then
-		cleaned_custom=$(_extract_all_template_blocks "$current_custom")
-	else
-		cleaned_custom=$(_extract_template_blocks_by_ids "$current_custom" "${ids[@]}")
-	fi
-	cleaned_custom=$(_normalize_custom_config_text "$cleaned_custom")
+	cleaned_custom=$(_template_cleanup_custom_config "$current_custom" "$clean_mode" "${ids[@]}")
 
 	if [ "$cleaned_custom" = "$current_custom" ]; then
 		log_message WARN "未匹配到可清理的模板注释块。"
