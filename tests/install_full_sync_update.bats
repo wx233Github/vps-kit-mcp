@@ -94,8 +94,9 @@ EOF
   rm -f "$tmp_script"
   [ "$status" -eq 0 ]
   [[ "$output" == *"lib/nginx_upgrade.sh"* ]]
+  [[ "$output" == *"lib/template_block.sh"* ]]
   [[ "$output" != *"nginx.sh"$'\n'* ]]
-  [ "$(printf '%s\n' "$output" | grep -c .)" -eq 13 ]
+  [ "$(printf '%s\n' "$output" | grep -c .)" -eq 14 ]
 }
 
 @test "manifest 补充核心文件并与内置清单去重" {

@@ -1045,6 +1045,7 @@ ensure_module_sidecar_libs() {
 			"lib/template_audit.sh"
 			"lib/template_ops.sh"
 			"lib/template_cli.sh"
+			"lib/template_block.sh"
 			"templates/nginx/manifest.json"
 			"templates/nginx/manifest.schema.json"
 		)
