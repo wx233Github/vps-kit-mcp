@@ -1,16 +1,20 @@
 #!/usr/bin/env bats
 
+setup() {
+	export REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
+}
+
 @test "upgrade nginx official repo runs in dry-run mode" {
   tmp_script=$(mktemp /tmp/nginx.upgrade.dryrun.XXXXXX.sh)
   cat >"$tmp_script" <<"EOF"
 set -euo pipefail
 export PATH="/usr/local/bin:/usr/bin:/bin"
 
-SCRIPT_PATH="/root/aa/vps-kit-mcp/nginx.sh"
+SCRIPT_PATH="$REPO_ROOT/nginx.sh"
 LIB_PATH=$(mktemp /tmp/nginx.upgrade.lib.XXXXXX.sh)
 sed '$d' "$SCRIPT_PATH" >"$LIB_PATH"
 
-realpath() { printf '%s\n' "/root/aa/vps-kit-mcp/nginx.sh"; }
+realpath() { printf '%s\n' "$REPO_ROOT/nginx.sh"; }
 
 source "$LIB_PATH"
 

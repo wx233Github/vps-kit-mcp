@@ -270,6 +270,19 @@ generate_line() {
 	printf "%${len}s" "" | sed "s/ /$char/g"
 }
 
+# 分隔线宽度：跟随终端列数并限制在 40-80 列，与全仓库 UI 规范一致
+_nginx_rule_width() {
+	local cols
+	cols=$(_nginx_term_cols)
+	if [ "$cols" -lt 40 ]; then
+		cols=40
+	fi
+	if [ "$cols" -gt 80 ]; then
+		cols=80
+	fi
+	printf '%s' "$cols"
+}
+
 _get_visual_width() {
 	local text="$1"
 	local plain_text
@@ -2106,7 +2119,7 @@ install_acme_sh() {
 		rm -f "$install_script"
 		printf '%b' "${CYAN}─── 安装错误详情（已脱敏） ───${NC}\n"
 		_mask_sensitive_data <"$install_log"
-		printf '%b' "${CYAN}──────────────────────────────${NC}\n"
+		printf '%b' "${CYAN}$(generate_line "$(_nginx_rule_width)" "─")${NC}\n"
 		rm -f "$install_log"
 		log_message ERROR "acme.sh 安装失败"
 		return 1
@@ -2182,7 +2195,7 @@ _ensure_zerossl_account_email() {
 		log_message ERROR "ZeroSSL 账号邮箱注册失败。"
 		printf '%b' "${CYAN}─── 注册错误详情（已脱敏） ───${NC}\n"
 		_mask_sensitive_data <"$log_temp"
-		printf '%b' "${CYAN}──────────────────────────────${NC}\n"
+		printf '%b' "${CYAN}$(generate_line "$(_nginx_rule_width)" "─")${NC}\n"
 		rm -f "$log_temp"
 		return 1
 	fi
@@ -3411,7 +3424,7 @@ _issue_and_install_certificate() {
 		log_message ERROR "申请失败: $domain"
 		printf '%b' "${CYAN}─── 错误详情（已脱敏） ───${NC}\n"
 		_mask_sensitive_data <"$log_temp"
-		printf '%b' "${CYAN}────────────────────────${NC}\n"
+		printf '%b' "${CYAN}$(generate_line "$(_nginx_rule_width)" "─")${NC}\n"
 		rm -f "$log_temp"
 		_send_tg_notify "fail" "$domain" "acme.sh 申请证书失败。" ""
 		unset CF_Token CF_Account_ID Ali_Key Ali_Secret

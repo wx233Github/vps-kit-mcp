@@ -1,14 +1,18 @@
 #!/usr/bin/env bats
 
+setup() {
+	export REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
+}
+
 @test "ui_meta_focus_line 使用受控 focus 标签输出" {
 	run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/utils.sh
+    source $REPO_ROOT/utils.sh
     JB_UI_THEME="retro-launcher"
-    [ "$(ui_meta_focus_line runtime Ready)" = "Theme: Retro Launcher   |   Focus: Runtime: Ready" ]
-    [ "$(ui_meta_focus_line service Running)" = "Theme: Retro Launcher   |   Focus: Service: Running" ]
-    [ "$(ui_meta_focus_line plane "Edge Gateway")" = "Theme: Retro Launcher   |   Focus: Plane: Edge Gateway" ]
-    [ "$(ui_meta_focus_line modules 2)" = "Theme: Retro Launcher   |   Focus: Modules: 2" ]
+    [ "$(ui_meta_focus_line runtime Ready)" = "主题: 启动器风格   |   焦点: 运行状态: Ready" ]
+    [ "$(ui_meta_focus_line service Running)" = "主题: 启动器风格   |   焦点: 服务: Running" ]
+    [ "$(ui_meta_focus_line plane "Edge Gateway")" = "主题: 启动器风格   |   焦点: 入口: Edge Gateway" ]
+    [ "$(ui_meta_focus_line modules 2)" = "主题: 启动器风格   |   焦点: 模块: 2" ]
   '
 	[ "$status" -eq 0 ]
 }
@@ -16,12 +20,12 @@
 @test "ui_render_plain_menu 输出稳定的标题分隔结构" {
 	run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/utils.sh
+    source $REPO_ROOT/utils.sh
     JB_UI_THEME="retro-launcher"
     output=$(ui_render_plain_menu /dev/stdout "Sample Menu" "Line A" "$(ui_meta_focus_line runtime Ready)" "Line B")
     [[ "$output" == *"Sample Menu"* ]]
-    [[ "$output" == *"Theme: Retro Launcher   |   Focus: Runtime: Ready"* ]]
-    [[ "$output" == *"------------------------------------------------------------"* ]]
+    [[ "$output" == *"主题: 启动器风格   |   焦点: 运行状态: Ready"* ]]
+    [[ "$output" == *"────────────────────────────────────────────────────────────"* ]]
   '
 	[ "$status" -eq 0 ]
 }
@@ -29,13 +33,13 @@
 @test "ui_append_panel_header 按统一顺序追加 header 三行" {
 	run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/utils.sh
+    source $REPO_ROOT/utils.sh
     JB_UI_THEME="retro-launcher"
     lines=()
     ui_append_panel_header lines "Panel subtitle" runtime Ready "Panel hint"
     [ "${#lines[@]}" -eq 3 ]
     [ "${lines[0]}" = "Panel subtitle" ]
-    [ "${lines[1]}" = "Theme: Retro Launcher   |   Focus: Runtime: Ready" ]
+    [ "${lines[1]}" = "主题: 启动器风格   |   焦点: 运行状态: Ready" ]
     [ "${lines[2]}" = "Panel hint" ]
   '
 	[ "$status" -eq 0 ]
@@ -44,7 +48,7 @@
 @test "ui_append_context_lines 只追加非空行" {
 	run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/utils.sh
+    source $REPO_ROOT/utils.sh
     lines=()
     ui_append_context_lines lines "Line A" "" "Line B"
     [ "${#lines[@]}" -eq 2 ]
@@ -57,12 +61,12 @@
 @test "ui_append_main_menu_context 按顺序拼接首页上下文" {
 	run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/utils.sh
+    source $REPO_ROOT/utils.sh
     lines=()
-    ui_append_main_menu_context lines "Toolkit subtitle" "Theme: Compact   |   Focus: Modules: 2" "Repo: example/repo"
+    ui_append_main_menu_context lines "Toolkit subtitle" "主题: 紧凑风格   |   焦点: 模块: 2" "Repo: example/repo"
     [ "${#lines[@]}" -eq 3 ]
     [ "${lines[0]}" = "Toolkit subtitle" ]
-    [ "${lines[1]}" = "Theme: Compact   |   Focus: Modules: 2" ]
+    [ "${lines[1]}" = "主题: 紧凑风格   |   焦点: 模块: 2" ]
     [ "${lines[2]}" = "Repo: example/repo" ]
   '
 	[ "$status" -eq 0 ]
@@ -71,7 +75,7 @@
 @test "ui_append_page_block 追加空行标题与内容块" {
 	run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/utils.sh
+    source $REPO_ROOT/utils.sh
     JB_UI_THEME="retro-launcher"
     lines=("Header line")
     ui_append_page_block lines "Section Title" "Item A" "Item B"
@@ -89,13 +93,13 @@
 @test "schema fallback helper 在无显式 schema wrapper 时也能拼装 header 与 block" {
 	run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/utils.sh
+    source $REPO_ROOT/utils.sh
     JB_UI_THEME="retro-launcher"
     lines=()
     ui_append_schema_or_fallback_panel_header lines "CUSTOM_MENU" "Ready" "runtime" "Fallback subtitle" "Fallback hint"
     ui_append_schema_or_fallback_page_block lines "CUSTOM_MENU" "runtime_overview" "Fallback Section" "Item A"
     [ "${lines[0]}" = "Fallback subtitle" ]
-    [ "${lines[1]}" = "Theme: Retro Launcher   |   Focus: Runtime: Ready" ]
+    [ "${lines[1]}" = "主题: 启动器风格   |   焦点: 运行状态: Ready" ]
     [ "${lines[2]}" = "Fallback hint" ]
     [ -z "${lines[3]}" ]
     [[ "${lines[4]}" == *"Fallback Section"* ]]
@@ -108,7 +112,7 @@
 @test "manual fallback helper 统一拼装 header 与 block" {
 	run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/utils.sh
+    source $REPO_ROOT/utils.sh
     lines=()
     ui_append_manual_panel_fallback lines "Manual subtitle" "Manual meta" "Manual hint"
     ui_append_manual_page_block lines "Manual heading" "Item A" "Item B"
@@ -127,7 +131,7 @@
 @test "ui_define_manual_fallback_helpers 可重新注册 manual fallback helper" {
 	run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/utils.sh
+    source $REPO_ROOT/utils.sh
     unset -f ui_append_manual_panel_fallback
     unset -f ui_append_manual_page_block
     ui_define_manual_fallback_helpers
@@ -148,13 +152,13 @@
 @test "ui_define_meta_fallback_helpers 可统一回退 Theme 与 Focus 行" {
 	run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/utils.sh
+    source $REPO_ROOT/utils.sh
     unset -f ui_meta_focus_fallback_line
     ui_define_meta_fallback_helpers
     JB_UI_THEME="retro-launcher"
-    [ "$(ui_meta_focus_fallback_line runtime Ready)" = "Theme: Retro Launcher   |   Focus: Runtime: Ready" ]
+    [ "$(ui_meta_focus_fallback_line runtime Ready)" = "主题: 启动器风格   |   焦点: 运行状态: Ready" ]
 	    focus_line=$(ui_meta_focus_fallback_line plane "Edge Gateway")
-	    [ "$focus_line" = "Theme: Retro Launcher   |   Focus: Plane: Edge Gateway" ]
+	    [ "$focus_line" = "主题: 启动器风格   |   焦点: 入口: Edge Gateway" ]
   '
 	[ "$status" -eq 0 ]
 }
@@ -162,10 +166,10 @@
 @test "nginx flow 可在缺少共享 manual helper 时回退到本地兼容实现" {
 	run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/utils.sh
+    source $REPO_ROOT/utils.sh
     unset -f ui_append_manual_panel_fallback
     unset -f ui_append_manual_page_block
-    source /root/aa/vps-kit-mcp/lib/nginx_flow.sh
+    source $REPO_ROOT/lib/nginx_flow.sh
     lines=()
     ui_append_manual_panel_fallback lines "Nginx subtitle" "Nginx meta" "Nginx hint"
     ui_append_manual_page_block lines "Traffic Block" "Item A"
@@ -183,12 +187,12 @@
 @test "ui_render_main_menu_hero 在 compact 下复用 context 组装" {
 	run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/utils.sh
+    source $REPO_ROOT/utils.sh
     JB_UI_THEME="compact"
-    output=$(ui_render_main_menu_hero "VPS-Kit MCP" "Toolkit subtitle" "Theme: Compact   |   Focus: Modules: 2" "Repo: example/repo" "Section line")
+    output=$(ui_render_main_menu_hero "VPS-Kit MCP" "Toolkit subtitle" "主题: 紧凑风格   |   焦点: 模块: 2" "Repo: example/repo" "Section line")
     [[ "$output" == *"VPS-Kit MCP"* ]]
     [[ "$output" == *"Toolkit subtitle"* ]]
-    [[ "$output" == *"Theme: Compact   |   Focus: Modules: 2"* ]]
+    [[ "$output" == *"主题: 紧凑风格   |   焦点: 模块: 2"* ]]
     [[ "$output" == *"Repo: example/repo"* ]]
     [[ "$output" == *"Section line"* ]]
   '
@@ -198,13 +202,13 @@
 @test "ui_render_main_menu_hero 在 retro-launcher 下输出 ASCII hero 与上下文" {
 	run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/utils.sh
+    source $REPO_ROOT/utils.sh
     JB_UI_THEME="retro-launcher"
-    output=$(ui_render_main_menu_hero "VPS-Kit MCP" "Toolkit subtitle" "Theme: Retro Launcher   |   Focus: Modules: 5" "Repo: example/repo" "Core line")
-    [[ "$output" == *"npx vkm"* ]]
+    output=$(ui_render_main_menu_hero "VPS-Kit MCP" "Toolkit subtitle" "主题: 启动器风格   |   焦点: 模块: 5" "Repo: example/repo" "Core line")
+    [[ "$output" == *"Toolkit subtitle"* ]]
     [[ "$output" == *"██╗   ██╗"* ]]
     [[ "$output" == *"VPS-Kit MCP"* ]]
-    [[ "$output" == *"Theme: Retro Launcher   |   Focus: Modules: 5"* ]]
+    [[ "$output" == *"主题: 启动器风格   |   焦点: 模块: 5"* ]]
     [[ "$output" == *"Repo: example/repo"* ]]
     [[ "$output" == *"Core line"* ]]
   '
@@ -214,7 +218,7 @@
 @test "utils.sh 单独提供菜单 schema registry 与 UI 文案读取 helper" {
 	run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/utils.sh
+    source $REPO_ROOT/utils.sh
     CONFIG_PATH=$(mktemp /tmp/utils.menu.registry.XXXXXX.json)
     cat >"$CONFIG_PATH" <<"JSON"
 {
@@ -239,9 +243,9 @@
 }
 JSON
     JB_UI_THEME="retro-launcher"
-    [ "$(menu_schema_default MAIN_MENU text subtitle)" = "One-click VPS operations toolkit for Docker, Nginx, TLS and MCP" ]
+    [ "$(menu_schema_default MAIN_MENU text subtitle)" = "管理 Docker、Nginx、证书、常用工具和 MCP" ]
     [ "$(menu_ui_text_field CUSTOM_MENU subtitle)" = "Custom subtitle" ]
-    [ "$(menu_ui_group_label MCP_MENU runtime)" = "Runtime" ]
+    [ "$(menu_ui_group_label MCP_MENU runtime)" = "运行状态" ]
     [ "$(menu_ui_status_marker THEME_MENU current)" = "Selected" ]
     [ "$(menu_ui_focus_key CUSTOM_MENU default)" = "scope" ]
     [ "$(menu_resolved_focus_value CUSTOM_MENU)" = "Edge" ]
@@ -252,17 +256,17 @@ JSON
 @test "utils.sh 提供模块页 header schema 默认值与共享 panel header helper" {
 	run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/utils.sh
+    source $REPO_ROOT/utils.sh
     JB_UI_THEME="retro-launcher"
-    [ "$(menu_schema_default DOCKER_MENU text subtitle)" = "Provision Docker engine, manage Compose runtime and recover service lifecycle safely" ]
-    [ "$(menu_schema_default CERT_MAINTENANCE_MENU text hint)" = "Adjust renewal policy, verify cron health and keep acme.sh updated." ]
-    [ "$(menu_ui_focus_key NGINX_MENU)" = "plane" ]
-    [ "$(menu_resolved_focus_value BBR_KERNEL_MENU)" = "Kernel" ]
+    [ "$(menu_schema_default DOCKER_MENU text subtitle)" = "管理 Docker 运行环境、服务状态和清理操作" ]
+    [ "$(menu_schema_default CERT_MAINTENANCE_MENU text hint)" = "请选择续期、策略或诊断相关操作。" ]
+    [ "$(menu_ui_focus_key NGINX_MENU)" = "入口" ]
+    [ "$(menu_resolved_focus_value BBR_KERNEL_MENU)" = "内核" ]
     lines=()
     ui_append_schema_panel_header lines "WATCHTOWER_MENU" "Running"
-    [ "${lines[0]}" = "Manage container auto-updates, notifications and runtime recovery workflows" ]
-    [ "${lines[1]}" = "Theme: Retro Launcher   |   Focus: Service: Running" ]
-    [ "${lines[2]}" = "Review service health, adjust notifications and inspect live container activity." ]
+    [ "${lines[0]}" = "管理容器自动更新、通知和运行状态" ]
+    [ "${lines[1]}" = "主题: 启动器风格   |   焦点: 通用: Running" ]
+    [ "${lines[2]}" = "请选择自动更新、通知或诊断相关操作。" ]
   '
 	[ "$status" -eq 0 ]
 }
@@ -270,7 +274,7 @@ JSON
 @test "utils.sh 提供模块页 section schema 默认值与共享 page block helper" {
 	run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/utils.sh
+    source $REPO_ROOT/utils.sh
     CONFIG_PATH=$(mktemp /tmp/utils.menu.section.XXXXXX.json)
     cat >"$CONFIG_PATH" <<"JSON"
 {
@@ -286,8 +290,8 @@ JSON
 }
 JSON
     JB_UI_THEME="retro-launcher"
-    [ "$(menu_schema_default BBR_MENU section profile_control)" = "Profile Control" ]
-    [ "$(menu_schema_default NGINX_MENU section operations_policy)" = "Operations & Policy" ]
+    [ "$(menu_schema_default BBR_MENU section profile_control)" = "模式设置" ]
+    [ "$(menu_schema_default NGINX_MENU section operations_policy)" = "运行与策略" ]
     [ "$(menu_ui_section_label DOCKER_MENU runtime_overview)" = "Runtime Deck" ]
     lines=()
     ui_append_schema_page_block lines "DOCKER_MENU" "runtime_overview" "Item A"
@@ -308,7 +312,7 @@ JSON
     grep -F "CERT_MAINTENANCE_MENU" "$readme" >/dev/null
     grep -F "BBR_KERNEL_MENU" "$readme" >/dev/null
     grep -F "menus.<MENU>.ui" "$readme" >/dev/null
-  ' _ "/root/aa/vps-kit-mcp/README.md"
+  ' _ "$REPO_ROOT/README.md"
 	[ "$status" -eq 0 ]
 }
 
@@ -320,6 +324,6 @@ JSON
 	    grep -F "`WATCHTOWER_MENU` | Watchtower 主菜单" "$readme" >/dev/null
 	    grep -F "`BBR_KERNEL_MENU` | BBR 内核维护页" "$readme" >/dev/null
 	    grep -F "`NGINX_MENU` | Nginx 主菜单" "$readme" >/dev/null
-  ' _ "/root/aa/vps-kit-mcp/README.md"
+  ' _ "$REPO_ROOT/README.md"
 	[ "$status" -eq 0 ]
 }

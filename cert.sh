@@ -113,10 +113,18 @@ else
 		printf '%s\n> ' "$(ui_menu_footer_text "$context") [${numeric_range}]"
 	}
 	_render_menu() {
+		local line
+		# utils.sh 不可用时无法探测终端宽度，按规范下限 40 列输出
+		printf -v line '%*s' 40 ''
 		echo "$1"
-		echo "────────────────────────────────────────"
+		echo "${line// /─}"
 		shift
 		for l in "$@"; do echo "$l"; done
+	}
+	ui_rule() {
+		local line
+		printf -v line '%*s' 40 ''
+		echo "${line// /─}"
 	}
 	RED=""
 	GREEN=""
@@ -816,7 +824,7 @@ _manage_certificates() {
 				if [ -f "$CERT_FILE" ]; then
 					echo -e "${CYAN}─── 证书详情 ───${NC}"
 					openssl x509 -in "$CERT_FILE" -noout -text | grep -E "Issuer:|Not After|Subject:|DNS:"
-					echo -e "${CYAN}────────────────${NC}"
+					ui_rule "${CYAN}"
 					log_info "文件路径: $CERT_FILE"
 				else
 					log_err "找不到证书文件。"

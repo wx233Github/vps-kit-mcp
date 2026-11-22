@@ -1,9 +1,13 @@
 #!/usr/bin/env bats
 
+setup() {
+	export REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
+}
+
 @test "watchtower exclusion list handles empty map" {
   run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     should_clear_screen() { return 1; }
     _render_menu() { :; }
@@ -18,7 +22,7 @@
 @test "watchtower exclusion list matches container names literally" {
   run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     trace_file=$(mktemp)
     load_config() { :; }

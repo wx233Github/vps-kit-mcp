@@ -455,7 +455,18 @@ if [ "$REAL_SCRIPT_PATH" != "$FINAL_SCRIPT_PATH" ]; then
 		echo_success "安装/更新完成。"
 	fi
 
-	printf '%b\n' "${CYAN}────────────────────────────────────────────────────────────${NC}" >&2
+	# 分隔线按终端列数自适应（40-80 列），与全仓库 UI 规范一致
+	_sep_cols="${COLUMNS:-0}"
+	case "$_sep_cols" in '' | *[!0-9]*) _sep_cols=0 ;; esac
+	if [ "$_sep_cols" -le 0 ] && [ -t 1 ]; then
+		_sep_cols=$(tput cols 2>/dev/null || printf '0')
+	fi
+	case "$_sep_cols" in '' | *[!0-9]*) _sep_cols=0 ;; esac
+	if [ "$_sep_cols" -lt 40 ]; then _sep_cols=40; fi
+	if [ "$_sep_cols" -gt 80 ]; then _sep_cols=80; fi
+	_sep_line=""
+	printf -v _sep_line '%*s' "$_sep_cols" ''
+	printf '%b\n' "${CYAN}${_sep_line// /─}${NC}" >&2
 	if [ "$(id -u)" -eq 0 ]; then
 		exec bash "$FINAL_SCRIPT_PATH" "${@:-}"
 	fi

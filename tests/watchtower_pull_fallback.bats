@@ -1,9 +1,13 @@
 #!/usr/bin/env bats
 
+setup() {
+	export REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
+}
+
 @test "watchtower pull fallback logs local image info" {
   run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     log_warn() { printf "%s\n" "$*"; }
     run_with_sudo() {
@@ -23,7 +27,7 @@
 @test "watchtower pull falls back to docker hub" {
   run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     log_warn() { printf "%s\n" "$*"; }
     log_info() { printf "%s\n" "$*"; }
@@ -48,7 +52,7 @@
 @test "watchtower resolves image from configured repo and tag" {
   run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     WATCHTOWER_IMAGE_PRIMARY_REPO="example.com/custom/watchtower"
     WATCHTOWER_IMAGE_FALLBACK_REPO=""
@@ -71,7 +75,7 @@
 @test "watchtower local image fallback can be disabled" {
   run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     log_warn() { printf "%s\n" "$*"; }
     run_with_sudo() {

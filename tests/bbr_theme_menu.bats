@@ -1,13 +1,17 @@
 #!/usr/bin/env bats
 
+setup() {
+	export REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
+}
+
 @test "bbr show_menu 在 retro-launcher 下输出 header 与统一分区" {
 	run bash -c '
     set -euo pipefail
     JB_NONINTERACTIVE="true"
     JB_UI_THEME="retro-launcher"
     script_copy=$(mktemp /tmp/bbr.theme.menu.XXXXXX.sh)
-    sed "\$d" /root/aa/vps-kit-mcp/tools/bbr_ace.sh >"$script_copy"
-    source /root/aa/vps-kit-mcp/utils.sh
+    sed -e "\$d" -e "s#/opt/vps_install_modules#/tmp/bbr_test_base#g" $REPO_ROOT/tools/bbr_ace.sh >"$script_copy"
+    source $REPO_ROOT/utils.sh
     source "$script_copy"
     rm -f "$script_copy"
     USE_UTILS_UI=1
@@ -25,12 +29,12 @@
     show_menu
   '
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"Tune congestion control, inspect kernel state and manage network recovery workflows"* ]]
-	[[ "$output" == *"Theme: Retro Launcher   |   Focus: Kernel: 6.8.0-test"* ]]
-	[[ "$output" == *"Runtime Overview"* ]]
-	[[ "$output" == *"Profile Control"* ]]
-	[[ "$output" == *"Policy Control"* ]]
-	[[ "$output" == *"Recovery & Lifecycle"* ]]
+	[[ "$output" == *"BBR ACE"* ]]
+	[[ "$output" == *"当前状态"* ]]
+	[[ "$output" == *"常用操作"* ]]
+	[[ "$output" == *"网络策略"* ]]
+	[[ "$output" == *"维护与恢复"* ]]
+	[[ "$output" == *"BBR+FQ 标准模式"* ]]
 }
 
 @test "bbr kernel_manager 在 retro-launcher 下复用 schema panel header" {
@@ -39,16 +43,16 @@
     JB_NONINTERACTIVE="true"
     JB_UI_THEME="retro-launcher"
     script_copy=$(mktemp /tmp/bbr.kernel.theme.menu.XXXXXX.sh)
-    sed "\$d" /root/aa/vps-kit-mcp/tools/bbr_ace.sh >"$script_copy"
-    source /root/aa/vps-kit-mcp/utils.sh
+    sed -e "\$d" -e "s#/opt/vps_install_modules#/tmp/bbr_test_base#g" $REPO_ROOT/tools/bbr_ace.sh >"$script_copy"
+    source $REPO_ROOT/utils.sh
     source "$script_copy"
     rm -f "$script_copy"
     USE_UTILS_UI=1
     kernel_manager
   '
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"Kernel lifecycle updates, rollback paths and cleanup operations"* ]]
-	[[ "$output" == *"Theme: Retro Launcher   |   Focus: Scope: Kernel"* ]]
-	[[ "$output" == *"Use this lane for kernel upgrades, reverting XanMod or pruning old images."* ]]
-	[[ "$output" == *"Recovery & Lifecycle"* ]]
+	[[ "$output" == *"BBR ACE - 内核维护"* ]]
+	[[ "$output" == *"主题: 启动器风格   |   焦点: 范围: 内核"* ]]
+	[[ "$output" == *"请选择内核升级、回退或清理操作。"* ]]
+	[[ "$output" == *"维护与恢复"* ]]
 }

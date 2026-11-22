@@ -1,11 +1,15 @@
 #!/usr/bin/env bats
 
+setup() {
+	export REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
+}
+
 @test "watchtower defaults disable no-update notifications" {
   run bash -c '
     set -euo pipefail
     tmp_home=$(mktemp -d)
     HOME="$tmp_home"
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     load_config
     [ "$WATCHTOWER_NOTIFY_ON_NO_UPDATES" = "false" ]
@@ -18,7 +22,7 @@
     set -euo pipefail
     tmp_home=$(mktemp -d)
     HOME="$tmp_home"
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     _prompt_rebuild_if_needed() { :; }
     _prompt_user_input() { printf "%s\n" "y"; }
@@ -38,7 +42,7 @@
     set -euo pipefail
     tmp_home=$(mktemp -d)
     HOME="$tmp_home"
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     _prompt_rebuild_if_needed() { :; }
     _prompt_user_input() { printf "%s\n" ""; }

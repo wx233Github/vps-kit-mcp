@@ -63,6 +63,7 @@ curl -fsSL "https://raw.githubusercontent.com/wx233Github/vps-kit-mcp/main/insta
   - `sections.<section>`：页面分区标题，例如模块页里的 `runtime_overview`、`action_center`、`operations_policy`
   - `focus.key/value/source`：二级菜单的 Focus 行；当 `source` 为 `current_theme` 时，会自动显示当前主题名称
 - 模块页（如 `DOCKER_MENU`、`DOCKER_INSTALL_MENU`、`DOCKER_BOOTSTRAP_MENU`、`CERT_MENU`、`CERT_MAINTENANCE_MENU`、`WATCHTOWER_MENU`、`BBR_MENU`、`BBR_KERNEL_MENU`、`NGINX_MENU`）的 header 与 section 默认文案也来自 `utils.sh` 的共享 registry；新增菜单页时，优先补 `menu_schema_default()` / `menu_ui_*`，不要在模块里再塞一套硬编码默认词表。
+- 分隔线宽度、菜单文案默认值与测试约定见 [docs/UI-STYLE.md](docs/UI-STYLE.md)：分隔线统一用 `─` 并按终端列数 clamp 在 40–80 列，不要硬编码重复次数。
 - 这些逻辑菜单 ID 不需要先出现在仓库自带的 `config.json` 里；只要你在本机 `/opt/vps_install_modules/config.json` 的 `menus.<MENU>.ui` 下新增对应节点，就会覆盖共享默认值。
 - 逻辑菜单 ID 一览：
 

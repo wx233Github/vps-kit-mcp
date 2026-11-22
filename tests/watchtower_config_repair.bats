@@ -1,9 +1,13 @@
 #!/usr/bin/env bats
 
+setup() {
+	export REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
+}
+
 @test "watchtower config repair keeps interval mode on positive intervals" {
   run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     warnings=0
     log_warn() { warnings=$((warnings + 1)); }
@@ -23,7 +27,7 @@
 @test "watchtower config repair falls back invalid interval values in interval mode" {
   run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     warnings=0
     log_warn() { warnings=$((warnings + 1)); }
@@ -43,7 +47,7 @@
 @test "watchtower config repair skips interval warning in aligned mode when interval is zero" {
   run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     warnings=0
     log_warn() { warnings=$((warnings + 1)); }
@@ -65,7 +69,7 @@
 @test "watchtower config repair normalizes non-numeric interval placeholders in cron mode" {
   run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     warnings=0
     log_warn() { warnings=$((warnings + 1)); }

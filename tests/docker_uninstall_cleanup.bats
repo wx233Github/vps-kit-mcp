@@ -1,11 +1,15 @@
 #!/usr/bin/env bats
 
+setup() {
+	export REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
+}
+
 @test "uninstall_docker 在缺少 groupdel 时仅告警不中断" {
 	run bash <<'EOF'
 set -euo pipefail
 
 script_copy=$(mktemp /tmp/docker.uninstall.cleanup.XXXXXX.sh)
-sed '$d' /root/aa/vps-kit-mcp/docker.sh >"$script_copy"
+sed '$d' $REPO_ROOT/docker.sh >"$script_copy"
 python3 - <<'PY' "$script_copy"
 from pathlib import Path
 path = Path(__import__('sys').argv[1])
@@ -18,6 +22,7 @@ rm -f "$script_copy"
 
 docker_group_members="root"
 confirm_action() { return 0; }
+confirm_destructive_action() { return 0; }
 log_info() { :; }
 log_success() { :; }
 log_warn() { printf 'WARN:%s\n' "$*"; }

@@ -1,9 +1,13 @@
 #!/usr/bin/env bats
 
+setup() {
+	export REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
+}
+
 @test "watchtower docker helpers preserve command contract" {
   run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     trace_file=$(mktemp)
     run_with_sudo() {
@@ -82,7 +86,7 @@
 @test "watchtower absent-container callers keep empty fallbacks" {
   run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     run_with_sudo() {
       if [ "$1" = "docker" ] && [ "$2" = "ps" ] && [ "$3" = "--format" ]; then
@@ -115,7 +119,7 @@
 @test "watchtower extra args parser accepts simple safe flags" {
   run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     WATCHTOWER_EXTRA_ARGS="--label-enable --include-stopped"
     _parse_watchtower_extra_args
@@ -128,7 +132,7 @@
 @test "watchtower extra args parser rejects managed flags" {
   run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     WATCHTOWER_EXTRA_ARGS="--cleanup"
     _parse_watchtower_extra_args
@@ -141,7 +145,7 @@
 @test "watchtower extra args parser rejects unsupported tokens" {
   run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     WATCHTOWER_EXTRA_ARGS="--label-enable --name;bad"
     _parse_watchtower_extra_args
@@ -154,7 +158,7 @@
 @test "watchtower rebuild restores previous container when replacement start fails" {
   run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     trace_file=$(mktemp)
     WATCHTOWER_CONFIG_INTERVAL="300"
@@ -185,7 +189,7 @@
 @test "watchtower rebuild removes backup after successful replacement" {
   run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     trace_file=$(mktemp)
     WATCHTOWER_CONFIG_INTERVAL="300"
@@ -211,7 +215,7 @@
 @test "watchtower rebuild avoids clobbering an existing backup container name" {
   run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     trace_file=$(mktemp)
     WATCHTOWER_CONFIG_INTERVAL="300"
@@ -245,7 +249,7 @@
 @test "watchtower backup name resolver skips repeated rebuild suffix collisions" {
   run bash -c '
     set -euo pipefail
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
 
     run_with_sudo() {
       if [ "$1" = "docker" ] && [ "$2" = "ps" ] && [ "$3" = "-a" ] && [ "$4" = "--format" ]; then
@@ -270,7 +274,7 @@
     set -euo pipefail
     tmp_home=$(mktemp -d)
     HOME="$tmp_home"
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
     docker() { return 0; }
     _get_ip_address() { printf "%s\n" ""; }
 
@@ -345,7 +349,7 @@ EOF
     set -euo pipefail
     tmp_home=$(mktemp -d)
     HOME="$tmp_home"
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
     docker() { return 0; }
     _get_ip_address() { printf "%s\n" ""; }
 
@@ -419,7 +423,7 @@ EOF
     set -euo pipefail
     tmp_home=$(mktemp -d)
     HOME="$tmp_home"
-    source /root/aa/vps-kit-mcp/tools/Watchtower.sh
+    source $REPO_ROOT/tools/Watchtower.sh
     docker() { return 0; }
 
     backup_last_run=""

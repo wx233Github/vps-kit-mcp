@@ -1,12 +1,16 @@
 #!/usr/bin/env bats
 
+setup() {
+	export REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
+}
+
 @test "nginx main_menu 在 retro-launcher 下输出分区式菜单" {
 	tmp_script=$(mktemp /tmp/nginx.theme.menu.exec.XXXXXX.sh)
 	cat >"$tmp_script" <<'EOF'
 set -euo pipefail
-source "/root/aa/vps-kit-mcp/utils.sh"
-source "/root/aa/vps-kit-mcp/lib/nginx_core.sh"
-source "/root/aa/vps-kit-mcp/lib/nginx_flow.sh"
+source "$REPO_ROOT/utils.sh"
+source "$REPO_ROOT/lib/nginx_core.sh"
+source "$REPO_ROOT/lib/nginx_flow.sh"
 
 JB_UI_THEME="retro-launcher"
 PURPLE=""
@@ -29,6 +33,7 @@ _generate_op_id() { :; }
 _ensure_menu_interactive() { return 0; }
 _draw_dashboard() { :; }
 prompt_menu_choice() { printf '%s\n' ""; return 0; }
+_nginx_config_health_status() { printf '%s' "正常"; }
 _render_menu() {
   printf '%s\n' "$1"
   shift
@@ -41,11 +46,11 @@ EOF
 	rm -f "$tmp_script"
 	[ "$status" -eq 10 ]
 	[[ "$output" == *"Nginx 管理"* ]]
-	[[ "$output" == *"Coordinate edge routing, certificate ops and traffic defense for web entrypoints"* ]]
-	[[ "$output" == *"Theme: Retro Launcher   |   Focus: Plane: Edge Gateway"* ]]
-	[[ "$output" == *"Configure sites, TCP forwarding, defense posture and lifecycle operations."* ]]
-	[[ "$output" == *"HTTP(S) Workloads"* ]]
-	[[ "$output" == *"Transport Routing"* ]]
-	[[ "$output" == *"Operations & Policy"* ]]
-	[[ "$output" == *"Cloudflare 防御中心"* ]]
+	[[ "$output" == *"当前状态"* ]]
+	[[ "$output" == *"常用操作"* ]]
+	[[ "$output" == *"诊断与策略"* ]]
+	[[ "$output" == *"配置新网站"* ]]
+	[[ "$output" == *"Cloudflare 防御"* ]]
+	[[ "$output" == *"修复多实例冲突"* ]]
+	[[ "$output" == *"共享组 + pid 隔离"* ]]
 }

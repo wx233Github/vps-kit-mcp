@@ -1,5 +1,9 @@
 #!/usr/bin/env bats
 
+setup() {
+	export REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
+}
+
 @test "main menu item returning 10 exits script with code 10" {
 	tmp_script=$(mktemp /tmp/install.menu.exit.exec.XXXXXX.sh)
 	cat >"$tmp_script" <<"EOF"
@@ -26,7 +30,7 @@ JSON
 readlink() { printf "%s\n" "/opt/vps_install_modules/install.sh"; }
 source() {
   if [ "${1}" = "/opt/vps_install_modules/utils.sh" ]; then
-    builtin source "/root/aa/vps-kit-mcp/utils.sh"
+    builtin source "$REPO_ROOT/utils.sh"
     return 0
   fi
   builtin source "${1}"
@@ -49,7 +53,7 @@ run_module() { return 10; }
 CURRENT_MENU_NAME="MAIN_MENU"
 display_and_process_menu
 EOF
-	run env -i PATH="/usr/local/bin:/usr/bin:/bin" /bin/bash "$tmp_script" /root/aa/vps-kit-mcp
+	run env -i PATH="/usr/local/bin:/usr/bin:/bin" /bin/bash "$tmp_script" $REPO_ROOT
 	rm -f "$tmp_script"
 	[ "$status" -eq 10 ]
 }

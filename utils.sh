@@ -454,6 +454,84 @@ ui_repeat_char() {
 	generate_line "$len" "$char"
 }
 
+# 终端列数：优先 COLUMNS，其次 tput / stty；取不到按 80，下限 24
+ui_term_cols() {
+	local cols="${COLUMNS:-0}"
+	if [ -t 1 ] && command -v tput >/dev/null 2>&1; then
+		cols=$(tput cols 2>/dev/null || printf '%s' "$cols")
+	fi
+	case "$cols" in
+	'' | *[!0-9]*) cols=0 ;;
+	esac
+	if [ "$cols" -le 0 ]; then
+		cols=$(stty size 2>/dev/null | awk '{print $2}' || true)
+	fi
+	case "$cols" in
+	'' | *[!0-9]*) cols=0 ;;
+	esac
+	if [ "$cols" -le 0 ]; then
+		cols=80
+	fi
+	if [ "$cols" -lt 24 ]; then
+		cols=24
+	fi
+	printf '%s\n' "$cols"
+}
+
+# 分隔线宽度：跟随终端列数并限制在 40-80 列
+# 窄屏取满宽不折行，宽屏封顶避免拉成一整行
+ui_rule_width() {
+	local cols
+	cols=$(ui_term_cols)
+	if [ "$cols" -lt 40 ]; then
+		cols=40
+	fi
+	if [ "$cols" -gt 80 ]; then
+		cols=80
+	fi
+	printf '%s' "$cols"
+}
+
+# 输出一条分隔线；$1 颜色（默认青色，传空串则不着色），$2 字符（默认 ─）
+ui_rule() {
+	local color="${1-$CYAN}"
+	local char="${2:-─}"
+	local line
+	line=$(generate_line "$(ui_rule_width)" "$char")
+	if [ -n "$color" ]; then
+		printf '%b%s%b\n' "$color" "$line" "$NC"
+	else
+		printf '%s\n' "$line"
+	fi
+}
+
+# 输出带居中标题的分隔线；$1 标题，$2 颜色（默认青色）
+ui_rule_titled() {
+	local title="${1:-}"
+	local color="${2-$CYAN}"
+	local width title_width left right line
+	if [ -z "$title" ]; then
+		ui_rule "$color"
+		return 0
+	fi
+	width=$(ui_rule_width)
+	title_width=$(_get_visual_width "$title")
+	left=$(((width - title_width - 2) / 2))
+	if [ "$left" -lt 1 ]; then
+		left=1
+	fi
+	right=$((width - title_width - 2 - left))
+	if [ "$right" -lt 1 ]; then
+		right=1
+	fi
+	line="$(generate_line "$left" "─") ${title} $(generate_line "$right" "─")"
+	if [ -n "$color" ]; then
+		printf '%b%s%b\n' "$color" "$line" "$NC"
+	else
+		printf '%s\n' "$line"
+	fi
+}
+
 ui_pad_right() {
 	local text="${1:-}"
 	local width="${2:-0}"

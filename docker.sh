@@ -33,9 +33,23 @@ else
 	_render_menu() {
 		local title="$1"
 		shift
+		local line
+		# utils.sh 不可用时无法探测终端宽度，按规范下限 40 列输出
+		printf -v line '%*s' 40 ''
 		echo "$title"
-		echo "────────────────────────────────────────"
+		echo "${line// /─}"
 		printf " %s\n" "$@"
+	}
+	ui_rule() {
+		local line
+		printf -v line '%*s' 40 ''
+		echo "${line// /─}"
+	}
+	ui_rule_titled() {
+		local title="$1"
+		local line
+		printf -v line '%*s' 16 ''
+		printf '%s %s %s\n' "${line// /─}" "$title" "${line// /─}"
 	}
 	press_enter_to_continue() {
 		if [ "${JB_NONINTERACTIVE:-false}" = "true" ]; then
@@ -444,9 +458,9 @@ execute_with_spinner() {
 		else
 			printf '%b\n' "${RED}✗ 失败${NC}"
 		fi
-		echo "──────────────────── 错误日志 ────────────────────"
+		ui_rule_titled "错误日志" ""
 		cat "$LOG_FILE"
-		echo "──────────────────────────────────────────────────"
+		ui_rule ""
 		if [ "$timed_out" = "true" ] || [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
 			log_err "步骤超时（>${spinner_timeout}s）已被终止，常见原因：网络过慢或 apt/dpkg 被其他进程占用。"
 		fi

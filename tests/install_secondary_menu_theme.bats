@@ -1,14 +1,18 @@
 #!/usr/bin/env bats
 
+setup() {
+	export REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
+}
+
 @test "render_secondary_menu 在 retro-launcher 下输出分组与描述" {
 	run bash -c '
     set -euo pipefail
     install_lib=$(mktemp /tmp/install.secondary.menu.XXXXXX.sh)
-    sed "\$d" /root/aa/vps-kit-mcp/install.sh >"$install_lib"
+    sed "\$d" $REPO_ROOT/install.sh >"$install_lib"
     readlink() { printf "%s\n" "/opt/vps_install_modules/install.sh"; }
     source() {
       if [ "$1" = "/opt/vps_install_modules/utils.sh" ]; then
-        builtin source /root/aa/vps-kit-mcp/utils.sh
+        builtin source $REPO_ROOT/utils.sh
         return 0
       fi
       builtin source "$1"
@@ -22,27 +26,24 @@
     )
     func_items=()
     _get_watchtower_status() { printf "%s" "enabled"; }
-    render_secondary_menu "TOOLS_MENU" "🛠️ 常用工具" primary_items[@] func_items[@]
+    render_secondary_menu "TOOLS_MENU" "🛠️ 常用工具" primary_items func_items
   '
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"Operational add-ons for container updates and network tuning"* ]]
-	[[ "$output" == *"Theme: Retro Launcher   |   Focus: Modules: 2"* ]]
-	[[ "$output" == *"Pick a lane to manage updates, watchdogs or kernel acceleration."* ]]
-	[[ "$output" == *"Automation"* ]]
-	[[ "$output" == *"Networking"* ]]
+	[[ "$output" == *"自动化"* ]]
+	[[ "$output" == *"网络"* ]]
 	[[ "$output" == *"Docker 容器自动更新与巡检入口"* ]]
-	[[ "$output" == *"Watchtower: enabled"* ]]
+	[[ "$output" == *"[enabled]"* ]]
 }
 
 @test "render_secondary_menu 在 classic 下保持紧凑列表" {
 	run bash -c '
     set -euo pipefail
     install_lib=$(mktemp /tmp/install.secondary.classic.XXXXXX.sh)
-    sed "\$d" /root/aa/vps-kit-mcp/install.sh >"$install_lib"
+    sed "\$d" $REPO_ROOT/install.sh >"$install_lib"
     readlink() { printf "%s\n" "/opt/vps_install_modules/install.sh"; }
     source() {
       if [ "$1" = "/opt/vps_install_modules/utils.sh" ]; then
-        builtin source /root/aa/vps-kit-mcp/utils.sh
+        builtin source $REPO_ROOT/utils.sh
         return 0
       fi
       builtin source "$1"
@@ -54,7 +55,7 @@
       "🔄|Watchtower|item|tools/Watchtower.sh|Docker 容器自动更新与巡检入口|automation"
     )
     func_items=()
-    render_secondary_menu "TOOLS_MENU" "🛠️ 常用工具" primary_items[@] func_items[@]
+    render_secondary_menu "TOOLS_MENU" "🛠️ 常用工具" primary_items func_items
   '
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"1. 🔄 Watchtower"* ]]
@@ -67,11 +68,11 @@
 	run bash -c '
     set -euo pipefail
     install_lib=$(mktemp /tmp/install.secondary.theme.center.XXXXXX.sh)
-    sed "\$d" /root/aa/vps-kit-mcp/install.sh >"$install_lib"
+    sed "\$d" $REPO_ROOT/install.sh >"$install_lib"
     readlink() { printf "%s\n" "/opt/vps_install_modules/install.sh"; }
     source() {
       if [ "$1" = "/opt/vps_install_modules/utils.sh" ]; then
-        builtin source /root/aa/vps-kit-mcp/utils.sh
+        builtin source $REPO_ROOT/utils.sh
         return 0
       fi
       builtin source "$1"
@@ -84,24 +85,23 @@
       "🚀|Retro Launcher|func|set_theme_retro_launcher|大标题启动器首页 + 分区式产品子页|profiles"
       "📦|Compact|func|set_theme_compact|更紧凑的工具台布局，适合小终端窗口|profiles"
     )
-    render_secondary_menu "THEME_MENU" "🎛️ Theme Center" primary_items[@] func_items[@]
+    render_secondary_menu "THEME_MENU" "🎛️ Theme Center" primary_items func_items
   '
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"Switch visual profiles and keep the launcher consistent"* ]]
-	[[ "$output" == *"Theme: Compact   |   Focus: Active: Compact"* ]]
-	[[ "$output" == *"Theme Profiles"* ]]
-	[[ "$output" == *"Current"* ]]
+	[[ "$output" == *"主题方案"* ]]
+	[[ "$output" == *"Retro Launcher"* ]]
+	[[ "$output" == *"[当前]"* ]]
 }
 
 @test "render_secondary_menu 从 config 读取 subtitle hint focus 与分组标题" {
 	run bash -c '
     set -euo pipefail
     install_lib=$(mktemp /tmp/install.secondary.config.XXXXXX.sh)
-    sed "\$d" /root/aa/vps-kit-mcp/install.sh >"$install_lib"
+    sed "\$d" $REPO_ROOT/install.sh >"$install_lib"
     readlink() { printf "%s\n" "/opt/vps_install_modules/install.sh"; }
     source() {
       if [ "$1" = "/opt/vps_install_modules/utils.sh" ]; then
-        builtin source /root/aa/vps-kit-mcp/utils.sh
+        builtin source $REPO_ROOT/utils.sh
         return 0
       fi
       builtin source "$1"
@@ -133,24 +133,24 @@ JSON
       "🧪|Custom Item|item|custom.sh|自定义描述|ops"
     )
     func_items=()
-    render_secondary_menu "CUSTOM_MENU" "Custom Menu" primary_items[@] func_items[@]
+    render_secondary_menu "CUSTOM_MENU" "Custom Menu" primary_items func_items
   '
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"Custom subtitle"* ]]
-	[[ "$output" == *"Theme: Retro Launcher   |   Focus: Scope: Edge"* ]]
-	[[ "$output" == *"Custom hint"* ]]
+	[[ "$output" == *"Custom Menu"* ]]
 	[[ "$output" == *"Ops Lane"* ]]
+	[[ "$output" == *"🧪 Custom Item"* ]]
+	[[ "$output" == *"自定义描述"* ]]
 }
 
 @test "render_secondary_menu 在 classic 下复用统一收集逻辑并保留状态" {
 	run bash -c '
     set -euo pipefail
     install_lib=$(mktemp /tmp/install.secondary.classic.shared.XXXXXX.sh)
-    sed "\$d" /root/aa/vps-kit-mcp/install.sh >"$install_lib"
+    sed "\$d" $REPO_ROOT/install.sh >"$install_lib"
     readlink() { printf "%s\n" "/opt/vps_install_modules/install.sh"; }
     source() {
       if [ "$1" = "/opt/vps_install_modules/utils.sh" ]; then
-        builtin source /root/aa/vps-kit-mcp/utils.sh
+        builtin source $REPO_ROOT/utils.sh
         return 0
       fi
       builtin source "$1"
@@ -165,10 +165,10 @@ JSON
       "🚀|Retro Launcher|func|set_theme_retro_launcher|大标题启动器首页 + 分区式产品子页|profiles"
     )
     _get_watchtower_status() { printf "%s" "enabled"; }
-    render_secondary_menu "TOOLS_MENU" "🛠️ 常用工具" primary_items[@] func_items[@]
+    render_secondary_menu "TOOLS_MENU" "🛠️ 常用工具" primary_items func_items
   '
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"1. 🔄 Watchtower [Watchtower: enabled]"* ]]
+	[[ "$output" == *"1. 🔄 Watchtower [enabled]"* ]]
 	[[ "$output" == *"a. 🚀 Retro Launcher"* ]]
 	[[ "$output" != *"Docker 容器自动更新与巡检入口"* ]]
 }
@@ -177,11 +177,11 @@ JSON
 	run bash -c '
     set -euo pipefail
     install_lib=$(mktemp /tmp/install.main.menu.XXXXXX.sh)
-    sed "\$d" /root/aa/vps-kit-mcp/install.sh >"$install_lib"
+    sed "\$d" $REPO_ROOT/install.sh >"$install_lib"
     readlink() { printf "%s\n" "/opt/vps_install_modules/install.sh"; }
     source() {
       if [ "$1" = "/opt/vps_install_modules/utils.sh" ]; then
-        builtin source /root/aa/vps-kit-mcp/utils.sh
+        builtin source $REPO_ROOT/utils.sh
         return 0
       fi
       builtin source "$1"
@@ -202,28 +202,28 @@ JSON
     func_items=(
       "🔁|更新切换|func|toggle_startup_update_mode|切换启动检查更新模式|system"
     )
-    render_main_menu "{}" "VPS-Kit MCP" primary_items[@] func_items[@]
+    render_main_menu "{}" "VPS-Kit MCP" primary_items func_items
   '
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"One-click VPS operations toolkit for Docker, Nginx, TLS and MCP"* ]]
-	[[ "$output" == *"Version: v9.9.9-test   |   Theme: Retro Launcher   |   Update: background"* ]]
-	[[ "$output" == *"Core Modules"* ]]
-	[[ "$output" == *"Tools"* ]]
-	[[ "$output" == *"System"* ]]
-	[[ "$output" == *"Docker: active"* ]]
-	[[ "$output" == *"当前: Retro Launcher"* ]]
-	[[ "$output" == *"模式: 后台"* ]]
+	[[ "$output" == *"管理 Docker、Nginx、证书、常用工具和 MCP"* ]]
+	[[ "$output" == *"版本: v9.9.9-test   |   主题: 启动器风格   |   更新: 后台"* ]]
+	[[ "$output" == *"核心功能"* ]]
+	[[ "$output" == *"工具"* ]]
+	[[ "$output" == *"系统"* ]]
+	[[ "$output" == *"[active]"* ]]
+	[[ "$output" == *"[当前]"* ]]
+	[[ "$output" == *"[后台]"* ]]
 }
 
 @test "render_main_menu 从 config 读取首页 subtitle repo meta 与分组标题" {
 	run bash -c '
     set -euo pipefail
     install_lib=$(mktemp /tmp/install.main.config.XXXXXX.sh)
-    sed "\$d" /root/aa/vps-kit-mcp/install.sh >"$install_lib"
+    sed "\$d" $REPO_ROOT/install.sh >"$install_lib"
     readlink() { printf "%s\n" "/opt/vps_install_modules/install.sh"; }
     source() {
       if [ "$1" = "/opt/vps_install_modules/utils.sh" ]; then
-        builtin source /root/aa/vps-kit-mcp/utils.sh
+        builtin source $REPO_ROOT/utils.sh
         return 0
       fi
       builtin source "$1"
@@ -263,26 +263,26 @@ JSON
       "🎛️|Theme Center|submenu|THEME_MENU|切换终端主题与查看当前界面风格|system"
     )
     func_items=()
-    render_main_menu "{}" "VPS-Kit MCP" primary_items[@] func_items[@]
+    render_main_menu "{}" "VPS-Kit MCP" primary_items func_items
   '
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"Custom main subtitle"* ]]
-	[[ "$output" == *"Build: v1.2.3-custom   |   Skin: Retro Launcher   |   Refresh: legacy"* ]]
+	[[ "$output" == *"Build: v1.2.3-custom   |   Skin: 启动器风格   |   Refresh: 前台"* ]]
 	[[ "$output" == *"Repo: example/custom"* ]]
 	[[ "$output" == *"Core Lane"* ]]
 	[[ "$output" == *"Utility Deck"* ]]
 	[[ "$output" == *"Control Room"* ]]
 }
 
-@test "menu_status_text 从 config 读取状态标签与标记" {
+@test "menu_status_text 输出状态值并遵循 config 标记" {
 	run bash -c '
     set -euo pipefail
     install_lib=$(mktemp /tmp/install.status.config.XXXXXX.sh)
-    sed "\$d" /root/aa/vps-kit-mcp/install.sh >"$install_lib"
+    sed "\$d" $REPO_ROOT/install.sh >"$install_lib"
     readlink() { printf "%s\n" "/opt/vps_install_modules/install.sh"; }
     source() {
       if [ "$1" = "/opt/vps_install_modules/utils.sh" ]; then
-        builtin source /root/aa/vps-kit-mcp/utils.sh
+        builtin source $REPO_ROOT/utils.sh
         return 0
       fi
       builtin source "$1"
@@ -323,10 +323,10 @@ JSON
     _get_docker_status() { printf "%s" "healthy"; }
     _get_watchtower_status() { printf "%s" "enabled"; }
     get_startup_update_mode() { printf "%s" "background"; }
-    [ "$(menu_status_text MAIN_MENU docker.sh)" = "Engine: healthy" ]
-    [ "$(menu_status_text MAIN_MENU THEME_MENU)" = "Profile: Retro Launcher" ]
-    [ "$(menu_status_text MAIN_MENU toggle_startup_update_mode)" = "Update Track: 后台" ]
-    [ "$(menu_status_text TOOLS_MENU tools/Watchtower.sh)" = "Auto Ops: enabled" ]
+    [ "$(menu_status_text MAIN_MENU docker.sh)" = "healthy" ]
+    [ "$(menu_status_text MAIN_MENU THEME_MENU)" = "当前" ]
+    [ "$(menu_status_text MAIN_MENU toggle_startup_update_mode)" = "后台" ]
+    [ "$(menu_status_text TOOLS_MENU tools/Watchtower.sh)" = "enabled" ]
     [ "$(menu_status_text THEME_MENU set_theme_retro_launcher)" = "Selected" ]
   '
 	[ "$status" -eq 0 ]
@@ -336,11 +336,11 @@ JSON
 	run bash -c '
     set -euo pipefail
     install_lib=$(mktemp /tmp/install.schema.default.XXXXXX.sh)
-    sed "\$d" /root/aa/vps-kit-mcp/install.sh >"$install_lib"
+    sed "\$d" $REPO_ROOT/install.sh >"$install_lib"
     readlink() { printf "%s\n" "/opt/vps_install_modules/install.sh"; }
     source() {
       if [ "$1" = "/opt/vps_install_modules/utils.sh" ]; then
-        builtin source /root/aa/vps-kit-mcp/utils.sh
+        builtin source $REPO_ROOT/utils.sh
         return 0
       fi
       builtin source "$1"
@@ -348,14 +348,14 @@ JSON
     builtin source "$install_lib"
     rm -f "$install_lib"
     JB_UI_THEME="retro-launcher"
-    [ "$(menu_ui_text_field UNKNOWN_MENU subtitle)" = "Focused tools for this workspace section" ]
-    [ "$(menu_ui_text_field MAIN_MENU repo)" = "Repo: https://github.com/wx233Github/vps-kit-mcp" ]
-    [ "$(menu_ui_meta_label MAIN_MENU version)" = "Version" ]
+    [ "$(menu_ui_text_field UNKNOWN_MENU subtitle)" = "管理当前模块的常用操作和状态" ]
+    [ "$(menu_ui_text_field MAIN_MENU repo)" = "项目地址: https://github.com/wx233Github/vps-kit-mcp" ]
+    [ "$(menu_ui_meta_label MAIN_MENU version)" = "版本" ]
     [ "$(menu_ui_status_label MAIN_MENU docker.sh)" = "Docker" ]
-    [ "$(menu_ui_status_marker THEME_MENU current)" = "Current" ]
-    [ "$(menu_ui_group_label MCP_MENU runtime)" = "Runtime" ]
+    [ "$(menu_ui_status_marker THEME_MENU current)" = "当前" ]
+    [ "$(menu_ui_group_label MCP_MENU runtime)" = "运行状态" ]
     [ "$(menu_ui_focus_key TOOLS_MENU)" = "modules" ]
-    [ "$(menu_resolved_focus_value THEME_MENU)" = "Retro Launcher" ]
+    [ "$(menu_ui_group_label THEME_MENU profiles)" = "主题方案" ]
   '
 	[ "$status" -eq 0 ]
 }

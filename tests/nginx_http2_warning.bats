@@ -1,16 +1,20 @@
 #!/usr/bin/env bats
 
+setup() {
+	export REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
+}
+
 @test "http2 warn line appears on unsupported version" {
   tmp_script=$(mktemp /tmp/nginx.http2.warn.XXXXXX.sh)
   cat >"$tmp_script" <<"EOF"
 set -euo pipefail
 export PATH="/usr/local/bin:/usr/bin:/bin"
 
-SCRIPT_PATH="/root/aa/vps-kit-mcp/nginx.sh"
+SCRIPT_PATH="$REPO_ROOT/nginx.sh"
 LIB_PATH=$(mktemp /tmp/nginx.http2.warn.lib.XXXXXX.sh)
 sed '$d' "$SCRIPT_PATH" >"$LIB_PATH"
 
-realpath() { printf '%s\n' "/root/aa/vps-kit-mcp/nginx.sh"; }
+realpath() { printf '%s\n' "$REPO_ROOT/nginx.sh"; }
 
 source "$LIB_PATH"
 
@@ -31,11 +35,11 @@ EOF
 set -euo pipefail
 export PATH="/usr/local/bin:/usr/bin:/bin"
 
-SCRIPT_PATH="/root/aa/vps-kit-mcp/nginx.sh"
+SCRIPT_PATH="$REPO_ROOT/nginx.sh"
 LIB_PATH=$(mktemp /tmp/nginx.http2.warn.lib.XXXXXX.sh)
 sed '$d' "$SCRIPT_PATH" >"$LIB_PATH"
 
-realpath() { printf '%s\n' "/root/aa/vps-kit-mcp/nginx.sh"; }
+realpath() { printf '%s\n' "$REPO_ROOT/nginx.sh"; }
 
 source "$LIB_PATH"
 
