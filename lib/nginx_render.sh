@@ -381,7 +381,8 @@ $(_render_proxy_location_block "/" "$proxy_pass_target" "" "$proxy_host_override
 }
 EOF
 	local skip_test="false"
-	local rollback_owner="${RENDER_ROLLBACK_OWNER:-render}"
+	# 回滚归属由调用方显式传入（第 3 参），默认 render；不再依赖动态作用域
+	local rollback_owner="${3:-render}"
 	if [ "${SKIP_NGINX_TEST_IN_APPLY:-false}" = "true" ]; then skip_test="true"; fi
 	_apply_nginx_conf_with_validation "$temp_conf" "$conf" "$domain" "http" "$skip_test" "$rollback_owner"
 	local apply_ret=$?

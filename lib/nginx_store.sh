@@ -4,6 +4,17 @@ _get_project_json() {
   jq -c --arg d "${1:-}" 'map(select(.domain == $d)) | .[0] // empty' "$PROJECTS_METADATA_FILE" 2>/dev/null || printf '%s' ""
 }
 
+# 事务 → 配置写入/删除 的具名适配层。
+# 事务状态机只与这两个函数打交道；回滚归属通过参数显式声明，
+# 不再依赖动态作用域变量在两个模块间隐式传递回滚归属。
+_tx_write_nginx_config() {
+  _write_and_enable_nginx_config "$1" "$2" "transaction"
+}
+
+_tx_remove_nginx_config() {
+  _remove_and_disable_nginx_config "$1"
+}
+
 _mcp_token_file_for_domain() {
   local domain="${1:-}"
   if ! _is_valid_domain "$domain"; then return 1; fi
@@ -246,9 +257,9 @@ _rollback_project_transaction() {
 
   if [ "$mode" != "cert_only" ]; then
     if [ -n "$old_json" ]; then
-      if ! _write_and_enable_nginx_config "$domain" "$old_json"; then rc=1; fi
+      if ! _tx_write_nginx_config "$domain" "$old_json"; then rc=1; fi
     else
-      if ! _remove_and_disable_nginx_config "$domain"; then rc=1; fi
+      if ! _tx_remove_nginx_config "$domain"; then rc=1; fi
     fi
   fi
 
@@ -347,9 +358,7 @@ _apply_project_transaction() {
   fi
 
   if [ "$rc" -eq 0 ] && [ "$mode" != "cert_only" ]; then
-    # shellcheck disable=SC2034
-    local RENDER_ROLLBACK_OWNER="transaction"
-    if ! _write_and_enable_nginx_config "$domain" "$new_json"; then
+    if ! _tx_write_nginx_config "$domain" "$new_json"; then
       fail_message="站点配置写入失败，开始回滚"
       # shellcheck disable=SC2034
       TX_LAST_FAIL_REASON="$fail_message"
